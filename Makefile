@@ -3,10 +3,14 @@
 # every rebuild. Create a self-signed certificate once and pass it here to make
 # grants persist -- see README "Keeping permissions across rebuilds".
 SIGN_IDENTITY ?= -
+# ~/Applications needs no sudo, and TCC grants and login items behave identically
+# there. Override with INSTALL_DIR=/Applications if you prefer (needs admin).
+INSTALL_DIR   ?= $(HOME)/Applications
 APP           := build/WhisperFlow.app
+INSTALLED     := $(INSTALL_DIR)/WhisperFlow.app
 BIN           := .build/release/WhisperFlow
 
-.PHONY: all build bundle install uninstall run test clean warm
+.PHONY: all build bundle install uninstall run test clean warm doctor
 
 all: bundle
 
@@ -27,16 +31,18 @@ install: bundle
 		echo "Quitting the running instance..."; \
 		pkill -x WhisperFlow || true; sleep 1; \
 	fi
-	rm -rf /Applications/WhisperFlow.app
-	cp -R $(APP) /Applications/
+	mkdir -p $(INSTALL_DIR)
+	rm -rf $(INSTALLED)
+	cp -R $(APP) $(INSTALL_DIR)/
 	@echo ""
-	@echo "Installed to /Applications/WhisperFlow.app"
-	@echo "Launch it with:  open -a WhisperFlow"
-	@echo "Then grant Input Monitoring and Accessibility -- see README."
+	@echo "Installed to $(INSTALLED)"
+	@echo "Launch it with:  open $(INSTALLED)"
+	@echo "Check setup with: $(INSTALLED)/Contents/MacOS/WhisperFlow --doctor"
+	@echo "Then grant Input Monitoring and Accessibility -- see README section 2."
 
 uninstall:
 	-pkill -x WhisperFlow
-	rm -rf /Applications/WhisperFlow.app
+	rm -rf $(INSTALLED)
 	@echo "Removed. Config and models were left in place:"
 	@echo "  ~/.config/whisperflow/"
 	@echo "  ~/Library/Application Support/WhisperFlow/"
@@ -47,6 +53,9 @@ run: bundle
 
 test:
 	swift test
+
+doctor: bundle
+	@$(APP)/Contents/MacOS/WhisperFlow --doctor
 
 # whisper.cpp compiles Metal shaders on its first run (~30s). Doing it here means
 # the first real dictation is not mistaken for a hang.

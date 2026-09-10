@@ -41,6 +41,9 @@ Build and install the app:
 make install
 ```
 
+That installs to `~/Applications/WhisperFlow.app` — no admin password needed. Pass
+`INSTALL_DIR=/Applications` if you would rather put it there (that one needs sudo).
+
 Warm the Metal shader cache once. whisper.cpp compiles GPU shaders on its very
 first run, which takes about 30 seconds — do it now so your first real dictation
 isn't mistaken for a hang:
@@ -52,7 +55,7 @@ make warm
 Launch it:
 
 ```bash
-open -a WhisperFlow
+open ~/Applications/WhisperFlow.app
 ```
 
 A microphone icon appears in your menu bar. There is no Dock icon and no app
@@ -68,7 +71,7 @@ be added by hand.
 Run this at any time to see exactly where you stand:
 
 ```bash
-/Applications/WhisperFlow.app/Contents/MacOS/WhisperFlow --doctor
+~/Applications/WhisperFlow.app/Contents/MacOS/WhisperFlow --doctor
 ```
 
 ### Microphone — prompted automatically
@@ -81,7 +84,7 @@ allow it. Without it, nothing can be recorded.
 ### Input Monitoring — you must add this by hand
 
 **System Settings → Privacy & Security → Input Monitoring** → press **+** → choose
-`/Applications/WhisperFlow.app`
+`~/Applications/WhisperFlow.app`
 
 Needed for the keyboard event tap that watches for your hotkey and for `Esc`.
 **Without it the hotkey does nothing at all** — no pill, no recording, no error.
@@ -94,7 +97,7 @@ Needed for the keyboard event tap that watches for your hotkey and for `Esc`.
 ### Accessibility — you must add this by hand
 
 **System Settings → Privacy & Security → Accessibility** → press **+** → choose
-`/Applications/WhisperFlow.app`
+`~/Applications/WhisperFlow.app`
 
 Needed to synthesize the ⌘V that pastes at your cursor. Without it, dictation
 still works and the text still lands on your clipboard — the pill will say
@@ -300,6 +303,7 @@ whether audio was actually captured.
 make test        # 111 tests
 make run         # run from build/ with verbose logging to stderr
 make bundle      # build the .app without installing
+make doctor      # print permission and provider status
 make uninstall   # remove the app, keep config and models
 ```
 
