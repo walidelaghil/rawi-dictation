@@ -68,10 +68,10 @@ recording(pushToTalk)
  ├─ release (<250ms) ───► pendingDoubleTap
  └─ esc ────────────────► idle (audio discarded)
 pendingDoubleTap
- ├─ press within 350ms ─► recording(handsFree)
+ ├─ press within 350ms ─► recording(handsFree)   (window measured from FIRST press)
  └─ timeout ────────────► idle (discarded, too short for speech)
 recording(handsFree)
- ├─ tap ────────────────► transcribing
+ ├─ any press ──────────► transcribing  (hold duration irrelevant)
  ├─ 5min elapsed ───────► transcribing
  └─ esc ────────────────► idle (audio discarded)
 transcribing ─► cleaning ─► inserting ─► idle
@@ -93,6 +93,10 @@ the focused app for free, and an app hang can never leave the keyboard unrespons
   match (`fn`, `rightOption`) or a keycode + modifier mask.
 - `TapPattern` — pure logic resolving press/release timestamps into
   `.hold`, `.doubleTap`, or `.tooShort`. No AppKit dependency, fully unit-tested.
+  `doubleTapWindowMs` is measured from the *first press*, not from its release, so the
+  window does not stretch with how long the first tap was held. While in
+  `recording(handsFree)`, any press stops the session regardless of how long it is held —
+  hold-to-talk semantics do not apply inside a hands-free session.
 
 `fn` is observed via `.flagsChanged` events carrying `.maskSecondaryFn`.
 `Esc` is keycode 53, matched on `.keyDown`, and dispatched to the controller only when
@@ -201,8 +205,15 @@ and hot-reloaded on change.
   "minHoldMs": 250,
   "maxSessionSeconds": 300,
   "engine": "whispercpp",
-  "whispercpp": { "binary": "whisper-cli", "model": "~/.../ggml-small.en.bin" },
-  "cleanup": { "provider": "ollama", "model": "qwen2.5:3b", "prompt": "..." },
+  "whispercpp": {
+    "binary": "whisper-cli",
+    "model": "~/Library/Application Support/WhisperFlow/models/ggml-small.en.bin"
+  },
+  "cleanup": {
+    "provider": "ollama",
+    "model": "qwen2.5:3b",
+    "prompt": "<default cleanup prompt, written out in full by FirstRunSetup>"
+  },
   "output": { "restorePreviousClipboard": false }
 }
 ```
