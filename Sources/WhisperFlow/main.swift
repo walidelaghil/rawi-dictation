@@ -1,4 +1,7 @@
-import WhisperFlowCore
+import AppKit
 
-// Replaced in Task 14 by the full AppKit application.
-print("WhisperFlow \(Config.default.hotkey)")
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.setActivationPolicy(.accessory)
+app.run()
