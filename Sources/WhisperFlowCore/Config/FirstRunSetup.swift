@@ -54,7 +54,7 @@ public enum FirstRunSetup {
                       whisperModelFound: model)
     }
 
-    static func isOllamaReachable(timeout: TimeInterval = 0.5) async -> Bool {
+    public static func isOllamaReachable(timeout: TimeInterval = 0.5) async -> Bool {
         var request = URLRequest(url: URL(string: "http://localhost:11434/api/tags")!)
         request.timeoutInterval = timeout
         let configuration = URLSessionConfiguration.ephemeral
