@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.buildGraph()
             self.startMonitoring()
             self.startWatchingConfig()
+            self.watchSystemAppearance()
             self.startRemoteTriggers()
             _ = await Permissions.requestMicrophone()
             self.logPermissions()
@@ -78,6 +79,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Applies the configured appearance. `system` deliberately assigns nil, which
+    /// is AppKit's "inherit" — pinning a concrete appearance there would stop the
+    /// app following the OS.
+    private func applyAppearance() {
+        NSApp.appearance = config.appearance.nsAppearanceName.map { NSAppearance(named: $0) } ?? nil
+        menuBar?.setAppearance(config.appearance.resolved(systemIsDark: Appearance.systemIsDark))
+    }
+
+    /// Follow a live OS light/dark switch without a restart, when set to `system`.
+    private func watchSystemAppearance() {
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.config.appearance == .system else { return }
+                self.applyAppearance()
+            }
+        }
+    }
+
     // MARK: - Graph
 
     private func buildGraph() {
@@ -96,6 +118,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.stateChanged(state)
         }
         menuBar = MenuBarController(controller: controller, log: log)
+        menuBar.onAppearanceChange = { [weak self] appearance in
+            guard let self else { return }
+            self.config.appearance = appearance
+            try? self.config.save()
+            self.applyAppearance()
+        }
+        menuBar.onAction = { [weak self] id in
+            guard let self else { return }
+            switch id {
+            case "dictate": Task { @MainActor in await self.controller.handle(.beganHold) }
+            case "transform": self.log.info("Transform is Phase 6; the hotkey is reserved")
+            default: break
+            }
+        }
+        applyAppearance()
         tapPattern = TapPattern(doubleTapWindow: .milliseconds(config.doubleTapWindowMs),
                                 minHold: .milliseconds(config.minHoldMs))
     }
@@ -237,6 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stateChanged(_ state: DictationState) {
         menuBar.refresh(state: state, permissions: Permissions.current())
+        menuBar.setRecent(controller.recent)
 
         if state.recordingMode != nil {
             if recordingStart == nil { recordingStart = .now }
@@ -302,6 +340,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             remaining = limit - elapsed
         }
         pill.show(state: state, level: recorder.level, elapsed: elapsed, remaining: remaining)
+        menuBar?.updateLive(level: recorder.level, elapsed: elapsed,
+                            detectedLanguage: controller.lastDetectedLanguage)
     }
 
     // MARK: - Config reload
@@ -332,6 +372,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tapPattern = TapPattern(doubleTapWindow: .milliseconds(config.doubleTapWindowMs),
                                 minHold: .milliseconds(config.minHoldMs))
         if hotkeyChanged { startMonitoring() }
+        applyAppearance()
         log.info("Config reloaded (engine=\(config.engine.rawValue), "
                  + "cleanup=\(config.cleanup.provider.rawValue), hotkey=\(config.hotkey))")
     }

@@ -1,17 +1,27 @@
 import AppKit
 import ServiceManagement
+import SwiftUI
 
-/// The status-bar item: the only always-visible surface, since the app has no Dock
-/// icon and no settings window.
+/// The status item and its dropdown.
+///
+/// The dropdown is a SwiftUI panel in an `NSPopover` rather than an `NSMenu`,
+/// because the design is a custom surface — a live state block, an action strip
+/// and a disclosure — none of which an `NSMenu` can express. The utility items
+/// that would clutter that panel live behind the gear instead.
 @MainActor
-public final class MenuBarController: NSObject, NSMenuDelegate {
+public final class MenuBarController: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
     private let controller: DictationController
     private let log: any Logging
 
+    private let panel = MenuPanelModel()
+    private let popover = NSPopover()
+
     private var permissions: PermissionStatus = Permissions.current()
     private var state: DictationState = .idle
 
+    public var onAction: ((String) -> Void)?
+    public var onAppearanceChange: ((Appearance) -> Void)?
     public var onQuit: (() -> Void)?
 
     public init(controller: DictationController, log: any Logging) {
@@ -20,64 +30,101 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
-        let menu = NSMenu()
-        menu.delegate = self
-        statusItem.menu = menu
+        popover.behavior = .transient
+        popover.animates = true
+        popover.delegate = self
+        popover.contentViewController = NSHostingController(rootView: MenuPanelView(model: panel))
+
+        panel.onAction = { [weak self] id in
+            self?.popover.performClose(nil)
+            self?.onAction?(id)
+        }
+        panel.onCopy = { [weak self] item in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(item.text, forType: .string)
+            self?.log.info("Re-copied a recent dictation")
+        }
+        panel.onSettings = { [weak self] in self?.showSettingsMenu() }
+        panel.onQuit = { [weak self] in
+            self?.onQuit?()
+            NSApp.terminate(nil)
+        }
+
+        statusItem.button?.action = #selector(togglePopover)
+        statusItem.button?.target = self
         refresh(state: .idle, permissions: Permissions.current())
     }
+
+    // MARK: - Live state
 
     public func refresh(state: DictationState, permissions: PermissionStatus) {
         self.state = state
         self.permissions = permissions
+        panel.state = state
 
         guard let button = statusItem.button else { return }
         let name: String
-        if !controller.isEnabled {
-            name = "mic.slash"
-        } else if !permissions.allGranted {
-            name = "exclamationmark.triangle"
-        } else if state.recordingMode != nil {
-            name = "mic.fill"
-        } else if state.isBusy {
-            name = "waveform"
-        } else {
-            name = "mic"
-        }
+        if !controller.isEnabled { name = "mic.slash" }
+        else if !permissions.microphone { name = "exclamationmark.triangle" }
+        else if state.recordingMode != nil { name = "mic.fill" }
+        else if state.isBusy { name = "waveform" }
+        else { name = "mic" }
         button.image = NSImage(systemSymbolName: name, accessibilityDescription: "Rawi")
         button.image?.isTemplate = true
         button.toolTip = "Rawi — \(PillLabel.text(for: state))"
     }
 
-    /// Rebuilt on open so permission rows and the login-item checkbox are current.
-    public func menuNeedsUpdate(_ menu: NSMenu) {
-        permissions = Permissions.current()
-        menu.removeAllItems()
+    public func updateLive(level: Double, elapsed: Duration, detectedLanguage: String?) {
+        panel.level = level
+        panel.elapsed = elapsed
+        panel.detectedLanguage = detectedLanguage
+    }
 
-        let status = NSMenuItem(title: "Rawi — \(PillLabel.text(for: state))",
-                                action: nil, keyEquivalent: "")
-        status.isEnabled = false
-        menu.addItem(status)
+    public func setRecent(_ recent: [RecentDictation]) { panel.recent = recent }
 
-        let hotkey = NSMenuItem(
-            title: "Hotkey: \(controller.currentConfig.hotkey)  ·  hold to talk, double-tap for hands-free",
-            action: nil, keyEquivalent: "")
-        hotkey.isEnabled = false
-        menu.addItem(hotkey)
+    public func setAppearance(_ appearance: ResolvedAppearance) { panel.appearance = appearance }
 
-        menu.addItem(.separator())
+    // MARK: - Popover
 
-        let enabled = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled),
-                                 keyEquivalent: "")
+    @objc private func togglePopover() {
+        if popover.isShown {
+            popover.performClose(nil)
+        } else if let button = statusItem.button {
+            permissions = Permissions.current()
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
+        }
+    }
+
+    // MARK: - Settings, behind the gear so the panel stays as designed
+
+    private func showSettingsMenu() {
+        let menu = NSMenu()
+
+        let enabled = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
         enabled.target = self
         enabled.state = controller.isEnabled ? .on : .off
         menu.addItem(enabled)
 
+        menu.addItem(.separator())
+        let appearanceItem = NSMenuItem(title: "Appearance", action: nil, keyEquivalent: "")
+        let appearanceMenu = NSMenu()
+        for option in Appearance.allCases {
+            let item = NSMenuItem(title: option.displayName,
+                                  action: #selector(pickAppearance(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = option.rawValue
+            item.state = controller.currentConfig.appearance == option ? .on : .off
+            appearanceMenu.addItem(item)
+        }
+        appearanceItem.submenu = appearanceMenu
+        menu.addItem(appearanceItem)
+
         if !permissions.allGranted {
             menu.addItem(.separator())
-            let header = NSMenuItem(title: "Permissions needed", action: nil, keyEquivalent: "")
+            let header = NSMenuItem(title: "Permissions", action: nil, keyEquivalent: "")
             header.isEnabled = false
             menu.addItem(header)
-
             for pane in Permissions.SettingsPane.allCases where isMissing(pane) {
                 let item = NSMenuItem(title: "  Grant \(pane.title) — \(pane.rationale)",
                                       action: #selector(openPane(_:)), keyEquivalent: "")
@@ -88,29 +135,23 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-
         let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLoginItem),
                                keyEquivalent: "")
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
 
-        let config = NSMenuItem(title: "Open Config File…", action: #selector(openConfig),
-                                keyEquivalent: "")
-        config.target = self
-        menu.addItem(config)
+        for (title, selector) in [("Open Config File…", #selector(openConfig)),
+                                  ("Reveal Logs…", #selector(revealLogs))] {
+            let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
 
-        let logs = NSMenuItem(title: "Reveal Logs…", action: #selector(revealLogs),
-                              keyEquivalent: "")
-        logs.target = self
-        menu.addItem(logs)
-
-        menu.addItem(.separator())
-
-        let quit = NSMenuItem(title: "Quit Rawi", action: #selector(quit),
-                              keyEquivalent: "q")
-        quit.target = self
-        menu.addItem(quit)
+        if let button = statusItem.button {
+            menu.popUp(positioning: nil,
+                       at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
+        }
     }
 
     private func isMissing(_ pane: Permissions.SettingsPane) -> Bool {
@@ -127,6 +168,13 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         controller.isEnabled.toggle()
         log.info("Dictation \(controller.isEnabled ? "enabled" : "disabled")")
         refresh(state: state, permissions: permissions)
+    }
+
+    @objc private func pickAppearance(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let appearance = Appearance(rawValue: raw) else { return }
+        log.info("Appearance set to \(appearance.rawValue)")
+        onAppearanceChange?(appearance)
     }
 
     @objc private func openPane(_ sender: NSMenuItem) {
@@ -162,10 +210,5 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         NSWorkspace.shared.selectFile(FileLogger.defaultURL.path,
                                       inFileViewerRootedAtPath: FileLogger.defaultURL
                                           .deletingLastPathComponent().path)
-    }
-
-    @objc private func quit() {
-        onQuit?()
-        NSApp.terminate(nil)
     }
 }

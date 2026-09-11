@@ -40,6 +40,14 @@ public final class DictationController {
     /// Exposed so the pill can show elapsed time and the timeout can be scheduled.
     public private(set) var recordingStartedAt: ContinuousClock.Instant?
 
+    /// The last few dictations, newest first. In memory only — Phase 3 replaces
+    /// this with the persisted, searchable history.
+    public private(set) var recent: [RecentDictation] = []
+    private let recentLimit = 5
+
+    /// The language whisper detected on the last transcript, for the menu.
+    public private(set) var lastDetectedLanguage: String?
+
     private var currentRecordingURL: URL?
     private var cancelled = false
 
@@ -231,6 +239,7 @@ public final class DictationController {
                                      restoringClipboard: config.output.restorePreviousClipboard)
         if pasted {
             log.info("Inserted \(text.count) characters")
+            remember(text)
             try? FileManager.default.removeItem(at: recording.url)
             state = .idle
         } else {
@@ -242,6 +251,13 @@ public final class DictationController {
             scheduleErrorClear()
         }
         currentRecordingURL = nil
+    }
+
+    private func remember(_ text: String) {
+        let script = ScriptDetector.detect(text)
+        lastDetectedLanguage = script == .arabic ? "AR" : "EN"
+        recent.insert(RecentDictation(text: text, script: script), at: 0)
+        if recent.count > recentLimit { recent.removeLast(recent.count - recentLimit) }
     }
 
     // MARK: - Errors

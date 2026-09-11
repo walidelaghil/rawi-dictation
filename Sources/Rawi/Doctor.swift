@@ -31,6 +31,7 @@ enum Doctor {
         let config = (try? Config.load()) ?? .default
         let backend = config.hotkeyBackend.resolved(
             inputMonitoringGranted: status.inputMonitoring)
+        print("  appearance        \(config.appearance.rawValue)")
         print("  hotkey            \(config.hotkey)")
         print("  hotkey backend    \(backend.rawValue)"
               + (backend == .carbon ? "  (no permissions needed)" : ""))

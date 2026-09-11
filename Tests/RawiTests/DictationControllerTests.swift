@@ -176,3 +176,62 @@ import Foundation
         #expect(g.log.lines.contains { $0.lowercased().contains("microphone") })
     }
 }
+
+@MainActor
+@Suite("Recent dictations") struct RecentDictationRingTests {
+    func make() -> (DictationController, FakeInserter) {
+        let r = FakeRecorder(), e = FakeEngine(), c = FakeCleanup()
+        let i = FakeInserter(), l = FakeLog()
+        c.result = .success("Cleaned text.")
+        return (DictationController(config: .default, recorder: r, engine: e,
+                                    cleanup: c, inserter: i, log: l), i)
+    }
+
+    @Test("an inserted dictation is remembered") func remembers() async {
+        let (ctl, _) = make()
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        #expect(ctl.recent.count == 1)
+        #expect(ctl.recent.first?.text == "Cleaned text.")
+        #expect(ctl.recent.first?.script == .latin)
+    }
+
+    @Test("a dictation that was never pasted is not remembered") func notPasted() async {
+        let (ctl, inserter) = make()
+        inserter.succeed = false
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        // It is on the clipboard, but it never reached a document — Recent is a
+        // record of what landed, not of what was attempted.
+        #expect(ctl.recent.isEmpty)
+    }
+
+    @Test("the ring holds five and drops the oldest") func ring() async {
+        let (ctl, _) = make()
+        for _ in 0..<7 {
+            await ctl.handle(.beganHold)
+            await ctl.handle(.endedHold)
+        }
+        #expect(ctl.recent.count == 5)
+    }
+
+    @Test("newest is first") func order() async {
+        let (ctl, _) = make()
+        await ctl.handle(.beganHold); await ctl.handle(.endedHold)
+        let first = ctl.recent.first?.id
+        await ctl.handle(.beganHold); await ctl.handle(.endedHold)
+        #expect(ctl.recent.first?.id != first)
+        #expect(ctl.recent.last?.id == first)
+    }
+
+    @Test("the detected language is exposed for the menu") func language() async {
+        let r = FakeRecorder(), e = FakeEngine(), c = FakeCleanup()
+        c.result = .success("يعني تمام كذا")
+        let ctl = DictationController(config: .default, recorder: r, engine: e,
+                                      cleanup: c, inserter: FakeInserter(), log: FakeLog())
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        #expect(ctl.lastDetectedLanguage == "AR")
+        #expect(ctl.recent.first?.script == .arabic)
+    }
+}
