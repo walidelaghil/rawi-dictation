@@ -7,13 +7,18 @@ public struct Probes: Sendable, Equatable {
     public var ollamaReachable: Bool
     public var whisperBinaryFound: Bool
     public var whisperModelFound: Bool
+    /// A *multilingual* model specifically. `whisperModelFound` can be true for an
+    /// English-only model, which cannot serve Arabic at all.
+    public var multilingualModelFound: Bool
 
     public init(envKeys: Set<String>, ollamaReachable: Bool,
-                whisperBinaryFound: Bool, whisperModelFound: Bool) {
+                whisperBinaryFound: Bool, whisperModelFound: Bool,
+                multilingualModelFound: Bool = false) {
         self.envKeys = envKeys
         self.ollamaReachable = ollamaReachable
         self.whisperBinaryFound = whisperBinaryFound
         self.whisperModelFound = whisperModelFound
+        self.multilingualModelFound = multilingualModelFound
     }
 }
 
@@ -23,8 +28,10 @@ public enum FirstRunSetup {
     public static func detect(_ p: Probes) -> Config {
         var config = Config.default
 
+        // Only a multilingual model qualifies for the local path: one hotkey means
+        // one model, and an English-only model cannot serve Arabic at all.
         config.engine =
-            if p.whisperBinaryFound && p.whisperModelFound { .whispercpp }
+            if p.whisperBinaryFound && p.multilingualModelFound { .whispercpp }
             else if p.envKeys.contains("GROQ_API_KEY") { .groq }
             else if p.envKeys.contains("OPENAI_API_KEY") { .openai }
             else { .whispercpp }          // menu bar will flag the missing model
@@ -46,12 +53,12 @@ public enum FirstRunSetup {
     /// first launch is never held up by a service that is not running.
     public static func liveProbes(env: DotEnv) async -> Probes {
         let binary = WhisperCppEngine.resolveBinary(Config.defaultWhisperCpp.binary) != nil
-        let model = FileManager.default.fileExists(
-            atPath: Config.expand(Config.defaultWhisperCpp.model))
+        let installed = ModelStore.installed()
         return Probes(envKeys: env.keys,
                       ollamaReachable: await isOllamaReachable(),
                       whisperBinaryFound: binary,
-                      whisperModelFound: model)
+                      whisperModelFound: !installed.isEmpty,
+                      multilingualModelFound: installed.contains { $0.multilingual })
     }
 
     public static func isOllamaReachable(timeout: TimeInterval = 0.5) async -> Bool {

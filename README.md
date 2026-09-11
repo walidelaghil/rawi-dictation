@@ -26,14 +26,17 @@ network calls at all unless you explicitly configure a hosted provider.
 brew install whisper-cpp
 ```
 
-Download a model (`small.en` is the sweet spot — ~465 MB, ~0.6 s per dictation on
-an M-series Mac; `base.en` is ~150 MB and nearly as good for clear speech):
+Download the model. **It must be a multilingual one** — the `.en` models do not
+degrade on Arabic, they fail outright:
 
 ```bash
 mkdir -p ~/Library/Application\ Support/Rawi/models
-curl -L -o ~/Library/Application\ Support/Rawi/models/ggml-small.en.bin \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin
+curl -L -o ~/Library/Application\ Support/Rawi/models/ggml-large-v3-turbo-q5_0.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
 ```
+
+~547 MB, ~2 s per dictation on an M-series Mac. `make doctor` will tell you if the
+configured model is English-only.
 
 Build and install the app:
 
@@ -301,8 +304,10 @@ in `.env`, else an `ANTHROPIC_API_KEY`, else a running Ollama, else `off`.
 | `anthropic` (Haiku) | ~$2/mo at the same rate | ~0.7 s | ❌ |
 | `off` | free | none | ✅ |
 
-End-to-end on an M4, local throughout: ~0.6 s transcription + ~0.8–1.3 s cleanup,
-so roughly **1.5–2 seconds** from releasing the key to text appearing.
+End-to-end on an M4, local throughout: ~2 s transcription + ~0.8 s cleanup, so
+roughly **2.8 seconds** from releasing the key to text appearing. That is ~1.4 s
+slower than an English-only setup, and it buys one hotkey plus genuine Arabic and
+mixed speech — a trade taken deliberately.
 
 > **A ChatGPT or Claude subscription does not include API access.** ChatGPT
 > Plus/Go and Claude Pro/Max are consumer chat products; the OpenAI and Anthropic
@@ -318,6 +323,30 @@ ollama pull qwen2.5:1.5b
 ```
 
 then set `"cleanup": { "provider": "ollama", "model": "qwen2.5:1.5b" }`.
+
+### One hotkey, two languages
+
+Rawi runs a single multilingual model with `-l auto`, so the language is detected
+as part of transcribing — there is no mode to switch and no second hotkey.
+
+Cleanup is then routed by the **script of the transcript**, invisibly:
+
+| Transcript | Cleanup model |
+|---|---|
+| Latin | `qwen2.5:1.5b` |
+| Arabic, or Arabic mixed with English | `qwen2.5:3b` |
+
+This is not a preference, it is a correctness requirement. Measured: the 1.5b
+*translates Arabic into English* and cannot be instructed out of it — it was told
+explicitly and ignored the instruction. The 3b holds Arabic and mixed speech
+correctly but leaves fillers in English. So each script gets the model that does
+not break it, and you configure nothing.
+
+Both models need to be present:
+
+```bash
+ollama pull qwen2.5:1.5b && ollama pull qwen2.5:3b
+```
 
 ### Why the 1.5b and not something bigger
 

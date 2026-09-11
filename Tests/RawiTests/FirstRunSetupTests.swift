@@ -3,9 +3,10 @@ import Testing
 
 @Suite("FirstRunSetup") struct FirstRunSetupTests {
     func probes(env: Set<String> = [], ollama: Bool = false,
-                bin: Bool = true, model: Bool = true) -> Probes {
+                bin: Bool = true, model: Bool = true, multi: Bool? = nil) -> Probes {
         Probes(envKeys: env, ollamaReachable: ollama,
-               whisperBinaryFound: bin, whisperModelFound: model)
+               whisperBinaryFound: bin, whisperModelFound: model,
+               multilingualModelFound: multi ?? model)
     }
 
     @Test("local whisper wins when binary and model are present") func localEngine() {
@@ -57,6 +58,29 @@ import Testing
         #expect(local.arabic == "qwen2.5:3b")
         #expect(FirstRunSetup.detect(probes(env: ["ANTHROPIC_API_KEY"])).cleanup.models.arabic
                 == "claude-haiku-4-5-20251001")
+    }
+
+    @Test("an English-only model is not enough for the local path") func needsMultilingual() {
+        // small.en present but no multilingual model: Arabic would fail outright,
+        // so the local engine must not be chosen on that basis alone.
+        let p = probes(env: ["GROQ_API_KEY"], model: true, multi: false)
+        #expect(FirstRunSetup.detect(p).engine == .groq)
+    }
+
+    @Test("a multilingual model selects the local path with auto language") func multilingual() {
+        let c = FirstRunSetup.detect(probes(ollama: true, multi: true))
+        #expect(c.engine == .whispercpp)
+        #expect(c.whispercpp.language == "auto")
+        #expect(c.whispercpp.model.contains("large-v3-turbo"))
+    }
+
+    @Test("a config pointing at a missing model asks for a download") func needsDownload() {
+        var c = Config.default
+        c.engine = .whispercpp
+        c.whispercpp.model = "/nowhere/ggml-medium.bin"
+        #expect(c.needsModelDownload)
+        c.engine = .groq
+        #expect(!c.needsModelDownload)   // hosted engines need no local model
     }
 
     @Test("detection never leaves the hotkey unset") func hotkey() {

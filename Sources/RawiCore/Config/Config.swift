@@ -278,6 +278,14 @@ public struct Config: Codable, Sendable, Equatable {
         try encoder.encode(self).write(to: url, options: .atomic)
     }
 
+    /// True when the local engine is selected but its model is not on disk.
+    /// An unknown path counts as missing — we cannot vouch for a file we do not know.
+    public var needsModelDownload: Bool {
+        guard engine == .whispercpp else { return false }
+        guard let model = ModelStore.model(forPath: whispercpp.model) else { return true }
+        return !ModelStore.isInstalled(model)
+    }
+
     /// Expands a leading `~` in a configured path.
     public static func expand(_ path: String) -> String {
         (path as NSString).expandingTildeInPath

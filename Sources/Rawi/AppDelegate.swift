@@ -42,6 +42,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     (engine=\(loaded.engine.rawValue), cleanup=\(loaded.cleanup.provider.rawValue))
                     """)
             }
+            if self.config.needsModelDownload {
+                self.log.warn("""
+                    Transcription model missing: \(self.config.whispercpp.model). \
+                    Download \(ModelStore.recommended.id) (\(ModelStore.recommended.approxSize)) \
+                    to enable dictation.
+                    """)
+            }
             self.buildGraph()
             self.startMonitoring()
             self.startWatchingConfig()
@@ -78,6 +85,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let engine = makeEngine(env: env)
         let cleanup = makeCleanup(env: env)
 
+        if let routed = cleanup as? RoutedCleanup {
+            log.info("Cleanup routed by script — latin: \(config.cleanup.models.latin), "
+                     + "arabic: \(config.cleanup.models.arabic)")
+            _ = routed
+        }
         controller = DictationController(config: config, recorder: recorder, engine: engine,
                                          cleanup: cleanup, inserter: inserter, log: log)
         controller.onStateChange = { [weak self] state in

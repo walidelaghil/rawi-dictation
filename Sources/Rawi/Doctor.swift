@@ -57,8 +57,17 @@ enum Doctor {
              fix: "brew install whisper-cpp")
         let modelPath = Config.expand(config.whispercpp.model)
         let modelExists = FileManager.default.fileExists(atPath: modelPath)
-        line("model", modelExists, detail: modelPath,
-             fix: "see README → Install → download a model")
+        let known = ModelStore.model(forPath: config.whispercpp.model)
+        let detail = known.map {
+            "\($0.id) · \($0.multilingual ? "multilingual" : "ENGLISH ONLY") · \($0.approxSize)"
+        } ?? modelPath
+        line("model", modelExists, detail: detail,
+             fix: "run: rawi --download-model \(ModelStore.recommended.id)")
+        print("  language          \(config.whispercpp.language)")
+        if let known, !known.multilingual {
+            print("           ↳ this model cannot transcribe Arabic at all.")
+            print("             Switch to \(ModelStore.recommended.id) for one hotkey in both languages.")
+        }
 
         print("\nCleanup provider")
         if config.cleanup.provider == .ollama {
