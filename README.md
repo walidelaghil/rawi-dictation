@@ -113,6 +113,79 @@ leave your keyboard unresponsive.
 
 ---
 
+## 2a. If you can't grant permissions (managed / company Mac)
+
+On a Mac managed by MDM (Jamf, Kandji, Intune…) you may not be in the `admin`
+group. Privacy & Security then demands an administrator password you do not have,
+and **no amount of retrying will work**. Check with:
+
+```bash
+id -Gn "$USER" | tr ' ' '\n' | grep -x admin || echo "not an admin"
+```
+
+WhisperFlow still works. It detects this at launch and switches itself over —
+you do not have to configure anything.
+
+| Feature | Without any permission | Notes |
+|---|---|---|
+| Global hotkey | ✅ | Carbon `RegisterEventHotKey`, which predates TCC |
+| Record, transcribe, clean | ✅ | Microphone is prompted normally, not admin-gated |
+| Hands-free double-tap, 5-min auto-stop | ✅ | unchanged |
+| Bare `fn` as the hotkey | ⚠️ | needs a combination instead — or Karabiner, below |
+| Esc to cancel (passthrough) | ⚠️ | becomes `⌃⌥Esc`, which *is* consumed |
+| **Auto-paste at the cursor** | ❌ | no workaround exists — see below |
+
+### What you get instead
+
+The hotkey becomes **`⌃⌥Space`** (configurable via `fallbackHotkey`), and cancel
+becomes **`⌃⌥Esc`**. Hold to talk, double-tap for hands-free — all identical.
+
+The transcript is placed on your clipboard and the pill says `Copied — press ⌘V`.
+**Press ⌘V to insert it.** That one keystroke is the entire cost.
+
+### Why auto-paste genuinely cannot work
+
+Pasting means synthesizing a ⌘V into another application, and every macOS API that
+does so — `CGEventPost`, System Events via AppleScript, the Accessibility API —
+requires the Accessibility permission by design. This is the security boundary that
+stops arbitrary programs typing into your banking app, and there is no legitimate
+way around it. Anything claiming otherwise is either asking for Accessibility under
+another name or is malware. Clipboard + ⌘V is the honest answer.
+
+### Getting the `fn` key back with Karabiner
+
+If **Karabiner-Elements** is installed, your admin has almost certainly already
+granted it Input Monitoring — that is the only way it can function. Karabiner can
+run a shell command on key-down and key-up, so it can drive WhisperFlow with the
+real `fn` key using its permission rather than one you cannot get.
+
+```bash
+~/Applications/WhisperFlow.app/Contents/MacOS/WhisperFlow --install-karabiner-rule
+```
+
+That writes a rule file into Karabiner's assets folder. It **enables nothing** and
+touches no existing configuration. Open **Karabiner-Elements → Complex
+Modifications → Add rule** and enable whichever you want:
+
+- *hold fn to dictate* — `fn` is re-sent first, so `fn`+arrows and the function row
+  keep working
+- *hold right-command to dictate* — if you would rather leave `fn` alone
+- *Esc cancels dictation* — Esc still reaches your app; costs one process spawn per
+  Esc press, so skip it if that bothers you
+
+With the Karabiner route you can set `"hotkeyBackend": "carbon"` and simply not
+press `⌃⌥Space`, or leave both active.
+
+### Asking IT instead
+
+If you would rather have the real thing, the request is specific and small: add
+`~/Applications/WhisperFlow.app` to **Accessibility** and **Input Monitoring**. In
+Kandji that is a PPPC (Privacy Preferences Policy Control) profile. Bundle ID is
+`com.welaghil.whisperflow`. Only Accessibility buys you anything you cannot
+otherwise have — auto-paste.
+
+---
+
 ## 3. Required macOS keyboard setting
 
 **System Settings → Keyboard → "Press 🌐 fn key to" → `Do Nothing`**
@@ -162,6 +235,10 @@ An *invalid* value is reported rather than silently ignored.
 | Key | Default | What it does |
 |---|---|---|
 | `hotkey` | `"fn"` | `fn`, `rightOption`, `rightCommand`, `rightControl`, `rightShift`, or a combo like `cmd+shift+d` |
+| `hotkeyBackend` | `"auto"` | `auto`, `eventTap` (needs Input Monitoring, supports bare `fn`), `carbon` (no permission, needs a combo) |
+| `fallbackHotkey` | `"ctrl+option+space"` | Used when the Carbon backend is active and `hotkey` is a bare modifier |
+| `cancelHotkey` | `"ctrl+option+escape"` | Cancel key in Carbon mode. Consumed, unlike Esc in event-tap mode |
+| `maxPushToTalkSeconds` | `120` | Safety stop if a Carbon key-release event is missed |
 | `doubleTapWindowMs` | `350` | How long after the first press a second tap still counts as a double-tap |
 | `minHoldMs` | `250` | Holds shorter than this are treated as taps, not speech |
 | `maxSessionSeconds` | `300` | Hands-free auto-stop. 5 minutes |
@@ -288,7 +365,8 @@ Work through these once after granting permissions:
 ## 8. Troubleshooting
 
 **The hotkey does nothing.**
-Run `--doctor`. Almost always missing Input Monitoring. Remember that a running
+Run `make doctor`. If it says the Carbon backend is active, the key is
+`⌃⌥Space`, not `fn` — see §2a. Otherwise it is almost always missing Input Monitoring. Remember that a running
 app and a clean log prove nothing here — macOS creates the tap and then delivers
 no events. If it is granted and still dead, remove the app from the Input
 Monitoring list with **−**, re-add it, and relaunch.
@@ -318,6 +396,12 @@ whisper.cpp is compiling Metal shaders. One time only. `make warm`.
 Check `--doctor`. Either the key is missing from `.env`, or Ollama is not running.
 Cleanup failure is deliberately non-fatal — the raw transcript is inserted rather
 than losing your dictation — so this shows up as unpolished text, not an error.
+
+**I get a single odd word like "You" instead of what I said.**
+That is whisper hallucinating from silence. The log records the peak input level
+after every recording — `peak level 0.001` means nothing was captured. Check
+System Settings → Sound → Input: the right device selected, input volume up, and
+the mic's own hardware mute switch off.
 
 **Nothing gets transcribed but I definitely spoke.**
 Check the log at `~/Library/Logs/WhisperFlow/whisperflow.log`. On a transcription
