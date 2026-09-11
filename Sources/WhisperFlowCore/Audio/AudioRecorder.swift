@@ -4,7 +4,19 @@ import Foundation
 public struct RecordingResult: Sendable {
     public let url: URL
     public let duration: Duration
-    public init(url: URL, duration: Duration) { self.url = url; self.duration = duration }
+    /// Loudest sample seen, 0...1. Distinguishes "captured silence" from "captured
+    /// nothing", which is the first thing worth knowing when a dictation comes back
+    /// empty or as a whisper hallucination like "You".
+    public let peakLevel: Double
+
+    public init(url: URL, duration: Duration, peakLevel: Double = 0) {
+        self.url = url
+        self.duration = duration
+        self.peakLevel = peakLevel
+    }
+
+    /// Below this, whisper reliably hallucinates rather than returning nothing.
+    public var isProbablySilent: Bool { peakLevel < 0.02 }
 }
 
 public protocol AudioRecording: AnyObject, Sendable {
@@ -58,6 +70,7 @@ public final class AudioRecorder: AudioRecording, @unchecked Sendable {
     private var converter: AVAudioConverter?
     private var writer: WAVWriter?
     private var _level: Double = 0
+    private var _peak: Double = 0
     private var _isRecording = false
 
     public init() {}
@@ -87,6 +100,7 @@ public final class AudioRecorder: AudioRecording, @unchecked Sendable {
             self.converter = converter
             self.writer = writer
             self._level = 0
+            self._peak = 0
             self._isRecording = true
         }
 
@@ -110,7 +124,9 @@ public final class AudioRecorder: AudioRecording, @unchecked Sendable {
         lock.withLock {
             guard _isRecording, let writer else { return }
             try? writer.append(samples)
-            _level = smoothLevel(previous: _level, sample: rmsLevel(samples))
+            let rms = rmsLevel(samples)
+            _level = smoothLevel(previous: _level, sample: rms)
+            _peak = max(_peak, rms)
         }
     }
 
@@ -153,8 +169,9 @@ public final class AudioRecorder: AudioRecording, @unchecked Sendable {
         lock.withLock { self._isRecording = false; self._level = 0 }
 
         try writer.finalize()
+        let peak = lock.withLock { self._peak }
         lock.withLock { self.engine = nil; self.converter = nil; self.writer = nil }
-        return RecordingResult(url: writer.url, duration: writer.duration)
+        return RecordingResult(url: writer.url, duration: writer.duration, peakLevel: peak)
     }
 
     public func cancel() {

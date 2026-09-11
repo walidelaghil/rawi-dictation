@@ -162,6 +162,18 @@ public final class DictationController {
             return
         }
 
+        log.info(String(format: "Recorded %.1fs, peak level %.3f",
+                        Double(recording.duration.components.seconds)
+                            + Double(recording.duration.components.attoseconds) / 1e18,
+                        recording.peakLevel))
+        if recording.isProbablySilent {
+            log.warn("""
+                Almost no audio was captured (peak \(String(format: "%.3f", recording.peakLevel))). \
+                Check the input device in System Settings → Sound → Input, and that it \
+                is not muted. Whisper invents words from silence.
+                """)
+        }
+
         // 1. Transcribe. On failure the WAV is retained and its path logged, so a
         //    dictation is never silently lost.
         let raw: String

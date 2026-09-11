@@ -17,6 +17,21 @@ if let i = CommandLine.arguments.firstIndex(of: "--trigger"),
     exit(0)
 }
 
+if CommandLine.arguments.contains("--install-karabiner-rule") {
+    let executable = Bundle.main.executablePath ?? CommandLine.arguments[0]
+    do {
+        let path = try KarabinerRule.install(executable: executable)
+        print("Wrote \(path.path)")
+        print("")
+        print("Nothing is enabled yet. Open Karabiner-Elements → Complex Modifications")
+        print("→ Add rule → enable the WhisperFlow rule you want.")
+    } catch {
+        FileHandle.standardError.write(Data("Failed: \(error.localizedDescription)\n".utf8))
+        exit(1)
+    }
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--doctor") {
     let finished = DispatchSemaphore(value: 0)
     Task.detached {

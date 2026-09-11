@@ -3,10 +3,21 @@ import Foundation
 
 public enum HotkeyError: Error, LocalizedError {
     case tapCreationFailed
+    case carbonRegistrationFailed(OSStatus)
+    case carbonNeedsCombination(String)
 
     public var errorDescription: String? {
-        "Could not create the keyboard event tap. Grant Input Monitoring in "
-        + "System Settings → Privacy & Security → Input Monitoring."
+        switch self {
+        case .tapCreationFailed:
+            "Could not create the keyboard event tap. Grant Input Monitoring in "
+            + "System Settings → Privacy & Security → Input Monitoring."
+        case .carbonRegistrationFailed(let status):
+            "Could not register the global hotkey (OSStatus \(status)). Another app "
+            + "is probably already using that combination — pick a different one."
+        case .carbonNeedsCombination(let hotkey):
+            "“\(hotkey)” cannot be used without Input Monitoring. The permission-free "
+            + "hotkey backend needs a modifier combination such as ctrl+option+space."
+        }
     }
 }
 
@@ -15,7 +26,7 @@ public enum HotkeyError: Error, LocalizedError {
 /// The tap is created with `.listenOnly`, which is not an optimisation but a safety
 /// property: this app never consumes a keystroke. Esc therefore still reaches the
 /// focused app, and a hang here can never leave the keyboard unresponsive.
-public final class HotkeyMonitor {
+public final class HotkeyMonitor: HotkeyBackend {
     private let matcher: HotkeyMatcher
     private let onPress: () -> Void
     private let onRelease: () -> Void
@@ -37,6 +48,8 @@ public final class HotkeyMonitor {
     }
 
     public var isRunning: Bool { tap != nil }
+
+    public var describeBackend: String { "event tap (listen-only, needs Input Monitoring)" }
 
     public func start() throws {
         guard tap == nil else { return }

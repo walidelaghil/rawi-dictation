@@ -29,7 +29,20 @@ enum Doctor {
              fix: "optional — only needed for API providers")
 
         let config = (try? Config.load()) ?? .default
+        let backend = config.hotkeyBackend.resolved(
+            inputMonitoringGranted: status.inputMonitoring)
         print("  hotkey            \(config.hotkey)")
+        print("  hotkey backend    \(backend.rawValue)"
+              + (backend == .carbon ? "  (no permissions needed)" : ""))
+        if backend == .carbon {
+            let effective = HotkeyConfig.isCarbonCompatible(config.hotkey)
+                ? config.hotkey : config.fallbackHotkey
+            print("  → press           \(effective)")
+            print("  → cancel with     \(config.cancelHotkey)")
+            if effective != config.hotkey {
+                print("     (“\(config.hotkey)” needs Input Monitoring, so the fallback is used)")
+            }
+        }
         print("  engine            \(config.engine.rawValue)")
         print("  cleanup           \(config.cleanup.provider.rawValue)"
               + (config.cleanup.provider == .off ? "" : " (\(config.cleanup.model))"))
@@ -60,12 +73,26 @@ enum Doctor {
         print("")
         if status.allGranted {
             print("All permissions granted.")
+        } else if !status.microphone {
+            print("Microphone is required and not granted — nothing can be recorded.")
         } else {
-            print("Missing: \(status.missing.joined(separator: ", "))")
-            print("The app runs without them, but:")
-            if !status.inputMonitoring { print("  · the hotkey will not respond") }
-            if !status.accessibility { print("  · text is copied but not pasted") }
-            if !status.microphone { print("  · nothing can be recorded") }
+            print("Running without: \(status.missing.joined(separator: ", "))")
+            print("This is workable. What it means:")
+            if !status.inputMonitoring {
+                print("  · hotkey uses the permission-free Carbon backend")
+                print("    (a modifier combination rather than a bare fn key)")
+                if KarabinerRule.isKarabinerInstalled {
+                    let installed = FileManager.default.fileExists(atPath: KarabinerRule.ruleFile.path)
+                    print("  · Karabiner-Elements is installed — it can give you back the")
+                    print("    fn key, since it already has Input Monitoring."
+                          + (installed ? " Rule already written." : ""))
+                    if !installed { print("    Run: WhisperFlow --install-karabiner-rule") }
+                }
+            }
+            if !status.accessibility {
+                print("  · text is placed on the clipboard; press Cmd-V to paste it")
+                print("    (auto-paste needs Accessibility and has no workaround)")
+            }
         }
     }
 

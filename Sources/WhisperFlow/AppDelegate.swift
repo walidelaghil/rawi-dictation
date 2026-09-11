@@ -13,12 +13,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var config = Config.default
     private var controller: DictationController!
     private var menuBar: MenuBarController!
-    private var monitor: HotkeyMonitor?
+    private var monitor: (any HotkeyBackend)?
     private var watcher: ConfigWatcher?
     private var tapPattern = TapPattern(doubleTapWindow: .milliseconds(350),
                                         minHold: .milliseconds(250))
 
     private var pendingTapTimer: Timer?
+    private var pushToTalkSafetyTimer: Timer?
     private var sessionTimer: Timer?
     private var pillTimer: Timer?
     private var recordingStart: ContinuousClock.Instant?
@@ -129,29 +130,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Input
 
     private func startMonitoring() {
-        guard let matcher = HotkeyConfig.parse(config.hotkey) else {
-            log.error("Unrecognised hotkey “\(config.hotkey)”; falling back to fn")
-            startMonitoring(matcher: .modifierFlag(.maskSecondaryFn))
-            return
+        monitor?.stop()
+        let granted = Permissions.current().inputMonitoring
+        let backend = config.hotkeyBackend.resolved(inputMonitoringGranted: granted)
+
+        do {
+            switch backend {
+            case .eventTap, .auto:
+                try startEventTap()
+            case .carbon:
+                try startCarbon()
+            }
+            log.info("Hotkey: \(monitor?.describeBackend ?? "none")")
+        } catch {
+            log.error("Hotkey setup failed: \(error.localizedDescription)")
         }
-        startMonitoring(matcher: matcher)
     }
 
-    private func startMonitoring(matcher: HotkeyMatcher) {
-        monitor?.stop()
-        // These fire on the main run loop, which is where the tap source is attached.
+    private func startEventTap() throws {
+        guard let matcher = HotkeyConfig.parse(config.hotkey) else {
+            throw HotkeyError.carbonNeedsCombination(config.hotkey)
+        }
         let monitor = HotkeyMonitor(
             matcher: matcher,
             onPress: { MainActor.assumeIsolated { self.feed(self.tapPattern.press(at: .now)) } },
             onRelease: { MainActor.assumeIsolated { self.feed(self.tapPattern.release(at: .now)) } },
             onEscape: { MainActor.assumeIsolated { self.escapePressed() } })
-        do {
-            try monitor.start()
-            self.monitor = monitor
-            log.info("Listening for \(config.hotkey) (listen-only tap)")
-        } catch {
-            log.error(error.localizedDescription)
+        try monitor.start()
+        self.monitor = monitor
+        log.info("Listening for \(config.hotkey) (listen-only tap)")
+    }
+
+    /// Used when Input Monitoring cannot be granted — on a managed Mac the user may
+    /// not be a local admin at all. Carbon hotkeys need no permission, but cannot
+    /// bind a bare modifier, so a combination is substituted and said out loud.
+    private func startCarbon() throws {
+        var hotkey = config.hotkey
+        if !HotkeyConfig.isCarbonCompatible(hotkey) {
+            log.warn("""
+                “\(config.hotkey)” needs Input Monitoring, which is not granted. \
+                Falling back to “\(config.fallbackHotkey)”, which needs no permission.
+                """)
+            hotkey = config.fallbackHotkey
         }
+        guard case .keyCode(let code, let mods)? = HotkeyConfig.parse(hotkey) else {
+            throw HotkeyError.carbonNeedsCombination(hotkey)
+        }
+
+        var cancelCode: UInt16?
+        var cancelMods = CGEventFlags()
+        if case .keyCode(let cc, let cm)? = HotkeyConfig.parse(config.cancelHotkey) {
+            cancelCode = cc
+            cancelMods = cm
+        }
+
+        let monitor = CarbonHotkeyMonitor(
+            keyCode: code, modifiers: mods,
+            cancelKeyCode: cancelCode, cancelModifiers: cancelMods,
+            onPress: { MainActor.assumeIsolated { self.feed(self.tapPattern.press(at: .now)) } },
+            onRelease: { MainActor.assumeIsolated { self.feed(self.tapPattern.release(at: .now)) } },
+            onCancel: { MainActor.assumeIsolated { self.escapePressed() } })
+        try monitor.start()
+        self.monitor = monitor
+        log.info("Listening for \(hotkey); cancel with \(config.cancelHotkey)")
     }
 
     private func feed(_ outcome: TapOutcome) {
@@ -188,13 +229,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if state.recordingMode != nil {
             if recordingStart == nil { recordingStart = .now }
             startPillUpdates()
-            if state.recordingMode == .handsFree { scheduleSessionTimeout() } 
+            if state.recordingMode == .handsFree {
+                scheduleSessionTimeout()
+            } else {
+                schedulePushToTalkSafety()
+            }
         } else if state.isBusy {
+            pushToTalkSafetyTimer?.invalidate()
             startPillUpdates()
             sessionTimer?.invalidate()
         } else {
             recordingStart = nil
             sessionTimer?.invalidate()
+            pushToTalkSafetyTimer?.invalidate()
             pillTimer?.invalidate()
             pillTimer = nil
             pill.hide()
@@ -208,6 +255,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 await self.controller.sessionTimedOut()
+            }
+        }
+    }
+
+    /// A Carbon hotkey can miss its release event if the modifiers are lifted before
+    /// the key, which would otherwise leave the mic recording indefinitely.
+    private func schedulePushToTalkSafety() {
+        pushToTalkSafetyTimer?.invalidate()
+        let limit = Double(config.maxPushToTalkSeconds)
+        pushToTalkSafetyTimer = Timer.scheduledTimer(withTimeInterval: limit, repeats: false) { _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.controller.state.recordingMode == .pushToTalk else { return }
+                self.log.warn("Push-to-talk ran \(Int(limit))s with no key release; stopping")
+                await self.controller.handle(.endedHold)
             }
         }
     }

@@ -86,6 +86,10 @@ public struct Config: Codable, Sendable, Equatable {
     public var doubleTapWindowMs: Int
     public var minHoldMs: Int
     public var maxSessionSeconds: Int
+    public var maxPushToTalkSeconds: Int
+    public var hotkeyBackend: HotkeyBackendKind
+    public var fallbackHotkey: String
+    public var cancelHotkey: String
     public var engine: EngineKind
     public var whispercpp: WhisperCppSettings
     public var api: APISettings
@@ -93,13 +97,21 @@ public struct Config: Codable, Sendable, Equatable {
     public var output: OutputSettings
 
     public init(hotkey: String, doubleTapWindowMs: Int, minHoldMs: Int,
-                maxSessionSeconds: Int, engine: EngineKind,
+                maxSessionSeconds: Int, maxPushToTalkSeconds: Int = 120,
+                hotkeyBackend: HotkeyBackendKind = .auto,
+                fallbackHotkey: String = "ctrl+option+space",
+                cancelHotkey: String = "ctrl+option+escape",
+                engine: EngineKind,
                 whispercpp: WhisperCppSettings, api: APISettings,
                 cleanup: CleanupSettings, output: OutputSettings) {
         self.hotkey = hotkey
         self.doubleTapWindowMs = doubleTapWindowMs
         self.minHoldMs = minHoldMs
         self.maxSessionSeconds = maxSessionSeconds
+        self.maxPushToTalkSeconds = maxPushToTalkSeconds
+        self.hotkeyBackend = hotkeyBackend
+        self.fallbackHotkey = fallbackHotkey
+        self.cancelHotkey = cancelHotkey
         self.engine = engine
         self.whispercpp = whispercpp
         self.api = api
@@ -118,6 +130,13 @@ public struct Config: Codable, Sendable, Equatable {
         minHoldMs = try c.decodeIfPresent(Int.self, forKey: .minHoldMs) ?? d.minHoldMs
         maxSessionSeconds = try c.decodeIfPresent(Int.self, forKey: .maxSessionSeconds)
             ?? d.maxSessionSeconds
+        maxPushToTalkSeconds = try c.decodeIfPresent(Int.self, forKey: .maxPushToTalkSeconds)
+            ?? d.maxPushToTalkSeconds
+        hotkeyBackend = try c.decodeIfPresent(HotkeyBackendKind.self, forKey: .hotkeyBackend)
+            ?? d.hotkeyBackend
+        fallbackHotkey = try c.decodeIfPresent(String.self, forKey: .fallbackHotkey)
+            ?? d.fallbackHotkey
+        cancelHotkey = try c.decodeIfPresent(String.self, forKey: .cancelHotkey) ?? d.cancelHotkey
         engine = try c.decodeIfPresent(EngineKind.self, forKey: .engine) ?? d.engine
         whispercpp = try c.decodeIfPresent(WhisperCppSettings.self, forKey: .whispercpp)
             ?? d.whispercpp
@@ -153,6 +172,10 @@ public struct Config: Codable, Sendable, Equatable {
         doubleTapWindowMs: 350,
         minHoldMs: 250,
         maxSessionSeconds: 300,
+        maxPushToTalkSeconds: 120,
+        hotkeyBackend: .auto,
+        fallbackHotkey: "ctrl+option+space",
+        cancelHotkey: "ctrl+option+escape",
         engine: .whispercpp,
         whispercpp: defaultWhisperCpp,
         api: defaultAPI,

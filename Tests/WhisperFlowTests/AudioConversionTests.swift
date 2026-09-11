@@ -41,3 +41,21 @@ import AVFoundation
         #expect(throws: AudioError.self) { _ = try AudioRecorder().stop() }
     }
 }
+
+@Suite("Recording result") struct RecordingResultTests {
+    let url = URL(fileURLWithPath: "/tmp/x.wav")
+
+    @Test("a near-silent recording is flagged") func silent() {
+        #expect(RecordingResult(url: url, duration: .seconds(3), peakLevel: 0.001)
+                .isProbablySilent)
+        #expect(RecordingResult(url: url, duration: .seconds(3), peakLevel: 0.0)
+                .isProbablySilent)
+    }
+
+    @Test("a recording with real speech is not flagged") func speech() {
+        #expect(!RecordingResult(url: url, duration: .seconds(3), peakLevel: 0.25)
+                .isProbablySilent)
+        #expect(!RecordingResult(url: url, duration: .seconds(3), peakLevel: 0.03)
+                .isProbablySilent)
+    }
+}

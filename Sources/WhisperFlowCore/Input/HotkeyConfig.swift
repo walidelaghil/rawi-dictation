@@ -40,6 +40,8 @@ public enum HotkeyConfig {
         "o": 31, "u": 32, "i": 34, "p": 35, "l": 37, "j": 38, "k": 40,
         "n": 45, "m": 46,
         "space": 49, "tab": 48, "return": 36, "enter": 36,
+        "escape": 53, "esc": 53, "delete": 51, "backslash": 42, "slash": 44,
+        "comma": 43, "period": 47, "semicolon": 41, "quote": 39, "grave": 50,
         "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97,
         "f7": 98, "f8": 100, "f9": 101, "f10": 109, "f11": 103, "f12": 111,
     ]
@@ -65,6 +67,12 @@ public enum HotkeyConfig {
         }
         guard !modifiers.isEmpty else { return nil }
         return .keyCode(code, modifiers: modifiers)
+    }
+
+    /// Carbon can only bind a modifier+key combination, never a bare modifier.
+    public static func isCarbonCompatible(_ raw: String) -> Bool {
+        if case .keyCode = parse(raw) { return true }
+        return false
     }
 
     /// Human-readable form for the menu bar.
