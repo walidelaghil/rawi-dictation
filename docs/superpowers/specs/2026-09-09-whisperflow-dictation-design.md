@@ -1,4 +1,4 @@
-# WhisperFlow — System-Wide AI Dictation for macOS
+# Rawi — System-Wide AI Dictation for macOS
 
 **Date:** 2026-09-09
 **Status:** Approved
@@ -24,7 +24,7 @@ Single-user personal tool. No authentication, no multi-user concerns, no sync.
 
 ## 3. Stack Decision
 
-Native Swift 6 + AppKit, built with SwiftPM, bundled as `WhisperFlow.app` with
+Native Swift 6 + AppKit, built with SwiftPM, bundled as `Rawi.app` with
 `LSUIElement = true`.
 
 Rationale: every hard requirement maps to an AppKit/CoreGraphics API — `CGEventTap`
@@ -113,7 +113,7 @@ behaviour. Setup requires System Settings → Keyboard → "Press fn key to" →
   Publishes a smoothed RMS level for the pill's meter.
 - `WAVWriter` — incremental RIFF/WAVE writer; header lengths patched on close.
 
-Recordings live in `~/Library/Application Support/WhisperFlow/recordings/` and are
+Recordings live in `~/Library/Application Support/Rawi/recordings/` and are
 deleted on successful insertion.
 
 ### 5.3 Transcription — `Transcribe/`
@@ -195,7 +195,7 @@ app can lose the paste. Off by default for this reason.
 
 ### 5.8 Config — `Config/`
 
-`~/.config/whisperflow/config.json`, with a sibling `.env`. Watched via `DispatchSource`
+`~/.config/rawi/config.json`, with a sibling `.env`. Watched via `DispatchSource`
 and hot-reloaded on change.
 
 ```json
@@ -207,7 +207,7 @@ and hot-reloaded on change.
   "engine": "whispercpp",
   "whispercpp": {
     "binary": "whisper-cli",
-    "model": "~/Library/Application Support/WhisperFlow/models/ggml-small.en.bin"
+    "model": "~/Library/Application Support/Rawi/models/ggml-small.en.bin"
   },
   "cleanup": {
     "provider": "ollama",
@@ -239,7 +239,7 @@ the relevant System Settings pane.
 | Empty transcript | Silently return to idle |
 
 Audio is never silently discarded on a downstream failure.
-Logs: `~/Library/Logs/WhisperFlow/whisperflow.log`, rotated at 5 MB.
+Logs: `~/Library/Logs/Rawi/rawi.log`, rotated at 5 MB.
 
 ## 7. Testing
 
@@ -258,7 +258,7 @@ they cannot run meaningfully in CI or without TCC grants.
 ## 8. Build and Install
 
 `make build` → `swift build -c release` → assemble bundle → codesign → `make install`
-copies to `/Applications/WhisperFlow.app`.
+copies to `/Applications/Rawi.app`.
 
 **Code signing:** TCC grants bind to the code signature. Ad-hoc signatures change on
 every rebuild, forcing re-grant of Accessibility and Input Monitoring each time. The
@@ -270,7 +270,7 @@ setting `SIGN_IDENTITY` so grants persist across rebuilds.
 ```
 Package.swift
 Makefile
-Sources/WhisperFlow/
+Sources/Rawi/
   main.swift
   App/{AppDelegate,DictationController}.swift
   Input/{HotkeyMonitor,HotkeyConfig,TapPattern}.swift
@@ -281,7 +281,7 @@ Sources/WhisperFlow/
   UI/{PillWindow,PillView,MenuBarController}.swift
   Config/{Config,DotEnv,FirstRunSetup,ConfigWatcher}.swift
   System/{Permissions,Logger}.swift
-Tests/WhisperFlowTests/
+Tests/RawiTests/
 Resources/Info.plist
 README.md
 ```

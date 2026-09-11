@@ -1,10 +1,10 @@
-# WhisperFlow Implementation Plan
+# Rawi Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a background macOS menu-bar app that records mic audio while a global hotkey is held, transcribes it locally or via API, cleans it with an LLM, and pastes the result at the cursor of whatever app has focus.
 
-**Architecture:** A Swift 6 SwiftPM executable bundled as `WhisperFlow.app` (`LSUIElement`). A single listen-only `CGEventTap` feeds a `DictationController` state machine, which drives `AudioRecorder → TranscriptionEngine → CleanupProvider → TextInserter`. Every stage sits behind a protocol so it is swappable and unit-testable with fakes. UI is an `NSStatusItem` plus a non-activating `NSPanel` pill.
+**Architecture:** A Swift 6 SwiftPM executable bundled as `Rawi.app` (`LSUIElement`). A single listen-only `CGEventTap` feeds a `DictationController` state machine, which drives `AudioRecorder → TranscriptionEngine → CleanupProvider → TextInserter`. Every stage sits behind a protocol so it is swappable and unit-testable with fakes. UI is an `NSStatusItem` plus a non-activating `NSPanel` pill.
 
 **Tech Stack:** Swift 6.3, AppKit, AVFoundation, CoreGraphics, SwiftUI (pill only), Swift Testing, `whisper-cli` from Homebrew `whisper-cpp`.
 
@@ -16,9 +16,9 @@
 - **No telemetry, no analytics, no crash reporting, no account system.** The only outbound network calls permitted are to the explicitly configured transcription/cleanup provider.
 - Must remain fully functional with no network when `engine: whispercpp` and `cleanup.provider` is `ollama` or `off`.
 - The event tap is **listen-only** (`CGEventTapOptions.listenOnly`). Never consume a keystroke, under any circumstance.
-- Config lives at `~/.config/whisperflow/config.json`; secrets at `~/.config/whisperflow/.env`. Secrets are never logged, never written to config, never included in an error message.
+- Config lives at `~/.config/rawi/config.json`; secrets at `~/.config/rawi/.env`. Secrets are never logged, never written to config, never included in an error message.
 - Audio is never silently discarded when a downstream stage fails — retain the WAV and log its path.
-- Bundle identifier: `com.welaghil.whisperflow` (stable — TCC grants bind to it).
+- Bundle identifier: `com.welaghil.rawi` (stable — TCC grants bind to it).
 - Every task ends green: `swift build` and `swift test` both succeed before the commit.
 
 ---
@@ -28,30 +28,30 @@
 | Path | Responsibility |
 |---|---|
 | `Package.swift` | SwiftPM manifest, two targets |
-| `Sources/WhisperFlow/main.swift` | Entry point; builds object graph, starts run loop |
-| `Sources/WhisperFlow/App/AppDelegate.swift` | NSApplication lifecycle, wiring |
-| `Sources/WhisperFlow/App/DictationController.swift` | The state machine; the only component that knows the whole flow |
-| `Sources/WhisperFlow/Input/TapPattern.swift` | Pure press/release → hold / doubleTap / tooShort resolver |
-| `Sources/WhisperFlow/Input/HotkeyConfig.swift` | Parses hotkey strings into flag or keycode matchers |
-| `Sources/WhisperFlow/Input/HotkeyMonitor.swift` | Owns the CGEventTap, re-arms it, emits events |
-| `Sources/WhisperFlow/Audio/WAVWriter.swift` | Incremental RIFF/WAVE writer |
-| `Sources/WhisperFlow/Audio/AudioRecorder.swift` | AVAudioEngine capture + 16 kHz mono conversion |
-| `Sources/WhisperFlow/Transcribe/TranscriptionEngine.swift` | Protocol + factory |
-| `Sources/WhisperFlow/Transcribe/WhisperCppEngine.swift` | Spawns `whisper-cli` |
-| `Sources/WhisperFlow/Transcribe/WhisperAPIEngine.swift` | Groq / OpenAI multipart upload |
-| `Sources/WhisperFlow/Cleanup/CleanupProvider.swift` | Protocol + factory + shared prompt building |
-| `Sources/WhisperFlow/Cleanup/ChatCleanup.swift` | OpenAI / Anthropic / Ollama HTTP implementations |
-| `Sources/WhisperFlow/Output/PasteboardStash.swift` | Snapshot/restore all pasteboard types |
-| `Sources/WhisperFlow/Output/TextInserter.swift` | Set pasteboard, synthesize Cmd-V |
-| `Sources/WhisperFlow/UI/PillView.swift` | SwiftUI pill contents |
-| `Sources/WhisperFlow/UI/PillWindow.swift` | Non-activating NSPanel host |
-| `Sources/WhisperFlow/UI/MenuBarController.swift` | NSStatusItem and menu |
-| `Sources/WhisperFlow/Config/Config.swift` | Codable config model + defaults + load/save |
-| `Sources/WhisperFlow/Config/DotEnv.swift` | `.env` parser |
-| `Sources/WhisperFlow/Config/FirstRunSetup.swift` | Provider detection on first launch |
-| `Sources/WhisperFlow/System/Permissions.swift` | TCC status checks + Settings deep links |
-| `Sources/WhisperFlow/System/Log.swift` | File logger with rotation |
-| `Tests/WhisperFlowTests/*.swift` | Swift Testing suites for all pure logic |
+| `Sources/Rawi/main.swift` | Entry point; builds object graph, starts run loop |
+| `Sources/Rawi/App/AppDelegate.swift` | NSApplication lifecycle, wiring |
+| `Sources/Rawi/App/DictationController.swift` | The state machine; the only component that knows the whole flow |
+| `Sources/Rawi/Input/TapPattern.swift` | Pure press/release → hold / doubleTap / tooShort resolver |
+| `Sources/Rawi/Input/HotkeyConfig.swift` | Parses hotkey strings into flag or keycode matchers |
+| `Sources/Rawi/Input/HotkeyMonitor.swift` | Owns the CGEventTap, re-arms it, emits events |
+| `Sources/Rawi/Audio/WAVWriter.swift` | Incremental RIFF/WAVE writer |
+| `Sources/Rawi/Audio/AudioRecorder.swift` | AVAudioEngine capture + 16 kHz mono conversion |
+| `Sources/Rawi/Transcribe/TranscriptionEngine.swift` | Protocol + factory |
+| `Sources/Rawi/Transcribe/WhisperCppEngine.swift` | Spawns `whisper-cli` |
+| `Sources/Rawi/Transcribe/WhisperAPIEngine.swift` | Groq / OpenAI multipart upload |
+| `Sources/Rawi/Cleanup/CleanupProvider.swift` | Protocol + factory + shared prompt building |
+| `Sources/Rawi/Cleanup/ChatCleanup.swift` | OpenAI / Anthropic / Ollama HTTP implementations |
+| `Sources/Rawi/Output/PasteboardStash.swift` | Snapshot/restore all pasteboard types |
+| `Sources/Rawi/Output/TextInserter.swift` | Set pasteboard, synthesize Cmd-V |
+| `Sources/Rawi/UI/PillView.swift` | SwiftUI pill contents |
+| `Sources/Rawi/UI/PillWindow.swift` | Non-activating NSPanel host |
+| `Sources/Rawi/UI/MenuBarController.swift` | NSStatusItem and menu |
+| `Sources/Rawi/Config/Config.swift` | Codable config model + defaults + load/save |
+| `Sources/Rawi/Config/DotEnv.swift` | `.env` parser |
+| `Sources/Rawi/Config/FirstRunSetup.swift` | Provider detection on first launch |
+| `Sources/Rawi/System/Permissions.swift` | TCC status checks + Settings deep links |
+| `Sources/Rawi/System/Log.swift` | File logger with rotation |
+| `Tests/RawiTests/*.swift` | Swift Testing suites for all pure logic |
 | `Resources/Info.plist` | Bundle metadata, LSUIElement, usage strings |
 | `Makefile` | build / bundle / sign / install |
 | `README.md` | Permissions setup, config reference, manual verification checklist |
@@ -62,10 +62,10 @@
 
 **Files:**
 - Create: `Package.swift`, `.gitignore`
-- Create: `Sources/WhisperFlow/Config/Config.swift`
-- Create: `Sources/WhisperFlow/Config/DotEnv.swift`
-- Create: `Sources/WhisperFlow/main.swift` (temporary stub)
-- Test: `Tests/WhisperFlowTests/ConfigTests.swift`, `Tests/WhisperFlowTests/DotEnvTests.swift`
+- Create: `Sources/Rawi/Config/Config.swift`
+- Create: `Sources/Rawi/Config/DotEnv.swift`
+- Create: `Sources/Rawi/main.swift` (temporary stub)
+- Test: `Tests/RawiTests/ConfigTests.swift`, `Tests/RawiTests/DotEnvTests.swift`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -76,7 +76,7 @@
   - `static Config.default: Config`
   - `static Config.load(from: URL) throws -> Config`
   - `func Config.save(to: URL) throws`
-  - `static Config.configDirectory: URL` → `~/.config/whisperflow`
+  - `static Config.configDirectory: URL` → `~/.config/rawi`
   - `struct DotEnv { init(contents: String); subscript(_ key: String) -> String? ; static func load(from: URL) -> DotEnv }`
 
 **Key decisions to honor:**
@@ -86,9 +86,9 @@
 - [ ] **Step 1: Write the failing tests**
 
 ```swift
-// Tests/WhisperFlowTests/DotEnvTests.swift
+// Tests/RawiTests/DotEnvTests.swift
 import Testing
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("DotEnv") struct DotEnvTests {
     @Test("parses plain, quoted, exported and commented lines") func parses() {
@@ -115,10 +115,10 @@ import Testing
 ```
 
 ```swift
-// Tests/WhisperFlowTests/ConfigTests.swift
+// Tests/RawiTests/ConfigTests.swift
 import Testing
 import Foundation
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("Config") struct ConfigTests {
     @Test("defaults match the spec") func defaults() {
@@ -162,32 +162,32 @@ import Foundation
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `swift test`
-Expected: FAIL — no such module `WhisperFlowCore`.
+Expected: FAIL — no such module `RawiCore`.
 
 - [ ] **Step 3: Write `Package.swift`**
 
-Two targets: a `WhisperFlowCore` library holding all testable logic, and a thin `WhisperFlow` executable. This split exists because an executable target cannot be imported by a test target.
+Two targets: a `RawiCore` library holding all testable logic, and a thin `Rawi` executable. This split exists because an executable target cannot be imported by a test target.
 
 ```swift
 // swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
-    name: "WhisperFlow",
+    name: "Rawi",
     platforms: [.macOS(.v14)],
     targets: [
-        .target(name: "WhisperFlowCore"),
-        .executableTarget(name: "WhisperFlow", dependencies: ["WhisperFlowCore"]),
-        .testTarget(name: "WhisperFlowTests", dependencies: ["WhisperFlowCore"]),
+        .target(name: "RawiCore"),
+        .executableTarget(name: "Rawi", dependencies: ["RawiCore"]),
+        .testTarget(name: "RawiTests", dependencies: ["RawiCore"]),
     ]
 )
 ```
 
-Move the file layout accordingly: everything except `main.swift` and `AppDelegate.swift` lives under `Sources/WhisperFlowCore/`.
+Move the file layout accordingly: everything except `main.swift` and `AppDelegate.swift` lives under `Sources/RawiCore/`.
 
 - [ ] **Step 4: Implement `DotEnv` and `Config`**
 
-Write both files to satisfy the Produces block above. `Config.configDirectory` resolves `~/.config/whisperflow` via `FileManager.default.homeDirectoryForCurrentUser`. `save` creates intermediate directories and writes with `.sortedKeys, .prettyPrinted`.
+Write both files to satisfy the Produces block above. `Config.configDirectory` resolves `~/.config/rawi` via `FileManager.default.homeDirectoryForCurrentUser`. `save` creates intermediate directories and writes with `.sortedKeys, .prettyPrinted`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -208,8 +208,8 @@ git commit -m "feat: package skeleton, config model, and .env parsing"
 This is the subtlest logic in the app and has no system dependencies, so it gets the most thorough tests.
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/Input/TapPattern.swift`
-- Test: `Tests/WhisperFlowTests/TapPatternTests.swift`
+- Create: `Sources/RawiCore/Input/TapPattern.swift`
+- Test: `Tests/RawiTests/TapPatternTests.swift`
 
 **Interfaces:**
 - Consumes: `Config.doubleTapWindowMs`, `Config.minHoldMs`.
@@ -244,7 +244,7 @@ public struct TapPattern: Sendable {
 
 ```swift
 import Testing
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("TapPattern") struct TapPatternTests {
     let clock = ContinuousClock()
@@ -337,7 +337,7 @@ Expected: PASS, 10 tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/Input/TapPattern.swift Tests/WhisperFlowTests/TapPatternTests.swift
+git add Sources/RawiCore/Input/TapPattern.swift Tests/RawiTests/TapPatternTests.swift
 git commit -m "feat: hold vs double-tap resolution logic"
 ```
 
@@ -346,8 +346,8 @@ git commit -m "feat: hold vs double-tap resolution logic"
 ## Task 3: `WAVWriter` — incremental 16 kHz mono PCM
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/Audio/WAVWriter.swift`
-- Test: `Tests/WhisperFlowTests/WAVWriterTests.swift`
+- Create: `Sources/RawiCore/Audio/WAVWriter.swift`
+- Test: `Tests/RawiTests/WAVWriterTests.swift`
 
 **Interfaces:**
 - Produces:
@@ -368,7 +368,7 @@ public final class WAVWriter {
 ```swift
 import Testing
 import Foundation
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("WAVWriter") struct WAVWriterTests {
     func tmp() -> URL {
@@ -443,7 +443,7 @@ Expected: PASS, 3 tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/Audio/WAVWriter.swift Tests/WhisperFlowTests/WAVWriterTests.swift
+git add Sources/RawiCore/Audio/WAVWriter.swift Tests/RawiTests/WAVWriterTests.swift
 git commit -m "feat: incremental 16kHz mono WAV writer"
 ```
 
@@ -452,8 +452,8 @@ git commit -m "feat: incremental 16kHz mono WAV writer"
 ## Task 4: `AudioRecorder` — capture and 16 kHz conversion
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/Audio/AudioRecorder.swift`
-- Test: `Tests/WhisperFlowTests/AudioConversionTests.swift`
+- Create: `Sources/RawiCore/Audio/AudioRecorder.swift`
+- Test: `Tests/RawiTests/AudioConversionTests.swift`
 
 **Interfaces:**
 - Consumes: `WAVWriter`.
@@ -495,7 +495,7 @@ The AVAudioEngine path itself needs a live microphone, so it is covered by the R
 ```swift
 import Testing
 import AVFoundation
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("Audio conversion") struct AudioConversionTests {
     @Test("rms of silence is zero, of full-scale is one") func rms() {
@@ -533,7 +533,7 @@ import AVFoundation
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/Audio/AudioRecorder.swift Tests/WhisperFlowTests/AudioConversionTests.swift
+git add Sources/RawiCore/Audio/AudioRecorder.swift Tests/RawiTests/AudioConversionTests.swift
 git commit -m "feat: microphone capture with 16kHz mono conversion"
 ```
 
@@ -542,9 +542,9 @@ git commit -m "feat: microphone capture with 16kHz mono conversion"
 ## Task 5: `WhisperCppEngine` — local transcription
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/Transcribe/TranscriptionEngine.swift`
-- Create: `Sources/WhisperFlowCore/Transcribe/WhisperCppEngine.swift`
-- Test: `Tests/WhisperFlowTests/WhisperCppEngineTests.swift`
+- Create: `Sources/RawiCore/Transcribe/TranscriptionEngine.swift`
+- Create: `Sources/RawiCore/Transcribe/WhisperCppEngine.swift`
+- Test: `Tests/RawiTests/WhisperCppEngineTests.swift`
 
 **Interfaces:**
 ```swift
@@ -587,7 +587,7 @@ whisper-cli -m <model> -f <wav> -nt -np -sns -l <lang> -t <threads>
 ```swift
 import Testing
 import Foundation
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("WhisperCppEngine") struct WhisperCppEngineTests {
     @Test("strips residual bracket tokens and collapses whitespace") func clean() {
@@ -631,11 +631,11 @@ import Foundation
 - [ ] **Step 5: Download a model and verify end-to-end by hand**
 
 ```bash
-mkdir -p ~/Library/Application\ Support/WhisperFlow/models
-curl -L -o ~/Library/Application\ Support/WhisperFlow/models/ggml-small.en.bin \
+mkdir -p ~/Library/Application\ Support/Rawi/models
+curl -L -o ~/Library/Application\ Support/Rawi/models/ggml-small.en.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin
 say -o /tmp/wf-test.wav --data-format=LEI16@16000 "This is a test of the dictation system"
-whisper-cli -m ~/Library/Application\ Support/WhisperFlow/models/ggml-small.en.bin \
+whisper-cli -m ~/Library/Application\ Support/Rawi/models/ggml-small.en.bin \
   -f /tmp/wf-test.wav -nt -np -sns -l en 2>/dev/null
 ```
 Expected: the spoken sentence printed on stdout with nothing else.
@@ -643,7 +643,7 @@ Expected: the spoken sentence printed on stdout with nothing else.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/Transcribe Tests/WhisperFlowTests/WhisperCppEngineTests.swift
+git add Sources/RawiCore/Transcribe Tests/RawiTests/WhisperCppEngineTests.swift
 git commit -m "feat: local whisper.cpp transcription engine"
 ```
 
@@ -652,8 +652,8 @@ git commit -m "feat: local whisper.cpp transcription engine"
 ## Task 6: `WhisperAPIEngine` — Groq and OpenAI
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/Transcribe/WhisperAPIEngine.swift`
-- Test: `Tests/WhisperFlowTests/WhisperAPIEngineTests.swift`
+- Create: `Sources/RawiCore/Transcribe/WhisperAPIEngine.swift`
+- Test: `Tests/RawiTests/WhisperAPIEngineTests.swift`
 
 **Interfaces:**
 ```swift
@@ -677,7 +677,7 @@ public final class WhisperAPIEngine: TranscriptionEngine {
 ```swift
 import Testing
 import Foundation
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("WhisperAPIEngine") struct WhisperAPIEngineTests {
     @Test("multipart body carries both parts with correct boundaries") func body() {
@@ -715,7 +715,7 @@ import Foundation
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/Transcribe/WhisperAPIEngine.swift Tests/WhisperFlowTests/WhisperAPIEngineTests.swift
+git add Sources/RawiCore/Transcribe/WhisperAPIEngine.swift Tests/RawiTests/WhisperAPIEngineTests.swift
 git commit -m "feat: Groq and OpenAI whisper API transcription engine"
 ```
 
@@ -724,9 +724,9 @@ git commit -m "feat: Groq and OpenAI whisper API transcription engine"
 ## Task 7: `CleanupProvider` — all four implementations
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/Cleanup/CleanupProvider.swift`
-- Create: `Sources/WhisperFlowCore/Cleanup/ChatCleanup.swift`
-- Test: `Tests/WhisperFlowTests/CleanupTests.swift`
+- Create: `Sources/RawiCore/Cleanup/CleanupProvider.swift`
+- Create: `Sources/RawiCore/Cleanup/ChatCleanup.swift`
+- Test: `Tests/RawiTests/CleanupTests.swift`
 
 **Interfaces:**
 ```swift
@@ -774,7 +774,7 @@ Anthropic puts the instruction in a top-level `system` field, not a system messa
 ```swift
 import Testing
 import Foundation
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("Cleanup") struct CleanupTests {
     @Test("noop returns its input unchanged") func noop() async throws {
@@ -839,7 +839,7 @@ import Foundation
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/Cleanup Tests/WhisperFlowTests/CleanupTests.swift
+git add Sources/RawiCore/Cleanup Tests/RawiTests/CleanupTests.swift
 git commit -m "feat: LLM cleanup providers for openai, anthropic, ollama, and off"
 ```
 
@@ -848,8 +848,8 @@ git commit -m "feat: LLM cleanup providers for openai, anthropic, ollama, and of
 ## Task 8: `FirstRunSetup` — provider detection
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/Config/FirstRunSetup.swift`
-- Test: `Tests/WhisperFlowTests/FirstRunSetupTests.swift`
+- Create: `Sources/RawiCore/Config/FirstRunSetup.swift`
+- Test: `Tests/RawiTests/FirstRunSetupTests.swift`
 
 **Interfaces:**
 ```swift
@@ -877,7 +877,7 @@ public enum FirstRunSetup {
 
 ```swift
 import Testing
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("FirstRunSetup") struct FirstRunSetupTests {
     func probes(env: Set<String> = [], ollama: Bool = false,
@@ -928,7 +928,7 @@ import Testing
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/Config/FirstRunSetup.swift Tests/WhisperFlowTests/FirstRunSetupTests.swift
+git add Sources/RawiCore/Config/FirstRunSetup.swift Tests/RawiTests/FirstRunSetupTests.swift
 git commit -m "feat: first-run provider detection"
 ```
 
@@ -937,9 +937,9 @@ git commit -m "feat: first-run provider detection"
 ## Task 9: `TextInserter` and `PasteboardStash`
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/Output/PasteboardStash.swift`
-- Create: `Sources/WhisperFlowCore/Output/TextInserter.swift`
-- Test: `Tests/WhisperFlowTests/PasteboardTests.swift`
+- Create: `Sources/RawiCore/Output/PasteboardStash.swift`
+- Create: `Sources/RawiCore/Output/TextInserter.swift`
+- Test: `Tests/RawiTests/PasteboardTests.swift`
 
 **Interfaces:**
 ```swift
@@ -971,7 +971,7 @@ public struct PasteboardStash: Sendable {
 ```swift
 import Testing
 import AppKit
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("Pasteboard", .serialized) struct PasteboardTests {
     @Test("captures and restores a string") func roundTrip() {
@@ -1019,7 +1019,7 @@ import AppKit
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/Output Tests/WhisperFlowTests/PasteboardTests.swift
+git add Sources/RawiCore/Output Tests/RawiTests/PasteboardTests.swift
 git commit -m "feat: clipboard stash and cursor text insertion"
 ```
 
@@ -1030,8 +1030,8 @@ git commit -m "feat: clipboard stash and cursor text insertion"
 The heart of the app. Because every dependency is a protocol, this task is fully testable with fakes and gets the second-most thorough test suite after `TapPattern`.
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/App/DictationController.swift`
-- Test: `Tests/WhisperFlowTests/DictationControllerTests.swift`
+- Create: `Sources/RawiCore/App/DictationController.swift`
+- Test: `Tests/RawiTests/DictationControllerTests.swift`
 
 **Interfaces:**
 ```swift
@@ -1077,9 +1077,9 @@ public enum RecordingMode: Equatable, Sendable { case pushToTalk, handsFree }
 - [ ] **Step 1: Write the fakes**
 
 ```swift
-// Tests/WhisperFlowTests/Fakes.swift
+// Tests/RawiTests/Fakes.swift
 import Foundation
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 final class FakeRecorder: AudioRecording, @unchecked Sendable {
     var isRecording = false
@@ -1131,7 +1131,7 @@ final class FakeLog: Logging, @unchecked Sendable {
 
 ```swift
 import Testing
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @MainActor @Suite("DictationController") struct DictationControllerTests {
     func make(cleanupFails: Bool = false, transcript: String = "raw transcript")
@@ -1257,7 +1257,7 @@ import Testing
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/App Sources/WhisperFlowCore/System/Log.swift Tests/WhisperFlowTests
+git add Sources/RawiCore/App Sources/RawiCore/System/Log.swift Tests/RawiTests
 git commit -m "feat: dictation state machine with cancellation and failure fallbacks"
 ```
 
@@ -1266,9 +1266,9 @@ git commit -m "feat: dictation state machine with cancellation and failure fallb
 ## Task 11: `HotkeyMonitor` and `HotkeyConfig` — the event tap
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/Input/HotkeyConfig.swift`
-- Create: `Sources/WhisperFlowCore/Input/HotkeyMonitor.swift`
-- Test: `Tests/WhisperFlowTests/HotkeyConfigTests.swift`
+- Create: `Sources/RawiCore/Input/HotkeyConfig.swift`
+- Create: `Sources/RawiCore/Input/HotkeyMonitor.swift`
+- Test: `Tests/RawiTests/HotkeyConfigTests.swift`
 
 **Interfaces:**
 ```swift
@@ -1308,7 +1308,7 @@ Tap creation needs Input Monitoring, so `HotkeyMonitor` itself is on the README 
 ```swift
 import Testing
 import CoreGraphics
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("HotkeyConfig") struct HotkeyConfigTests {
     @Test("parses fn") func fn() {
@@ -1338,7 +1338,7 @@ import CoreGraphics
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/Input Tests/WhisperFlowTests/HotkeyConfigTests.swift
+git add Sources/RawiCore/Input Tests/RawiTests/HotkeyConfigTests.swift
 git commit -m "feat: listen-only event tap and hotkey parsing"
 ```
 
@@ -1347,9 +1347,9 @@ git commit -m "feat: listen-only event tap and hotkey parsing"
 ## Task 12: The floating pill
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/UI/PillView.swift`
-- Create: `Sources/WhisperFlowCore/UI/PillWindow.swift`
-- Test: `Tests/WhisperFlowTests/PillLabelTests.swift`
+- Create: `Sources/RawiCore/UI/PillView.swift`
+- Create: `Sources/RawiCore/UI/PillWindow.swift`
+- Test: `Tests/RawiTests/PillLabelTests.swift`
 
 **Interfaces:**
 ```swift
@@ -1387,7 +1387,7 @@ Plus an `NSPanel` subclass overriding `canBecomeKey` and `canBecomeMain` to `fal
 
 ```swift
 import Testing
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("PillLabel") struct PillLabelTests {
     let t0 = ContinuousClock().now
@@ -1415,7 +1415,7 @@ import Testing
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/UI Tests/WhisperFlowTests/PillLabelTests.swift
+git add Sources/RawiCore/UI Tests/RawiTests/PillLabelTests.swift
 git commit -m "feat: non-activating floating recording pill"
 ```
 
@@ -1424,9 +1424,9 @@ git commit -m "feat: non-activating floating recording pill"
 ## Task 13: Menu bar, permissions, and launch at login
 
 **Files:**
-- Create: `Sources/WhisperFlowCore/UI/MenuBarController.swift`
-- Create: `Sources/WhisperFlowCore/System/Permissions.swift`
-- Test: `Tests/WhisperFlowTests/PermissionsTests.swift`
+- Create: `Sources/RawiCore/UI/MenuBarController.swift`
+- Create: `Sources/RawiCore/System/Permissions.swift`
+- Test: `Tests/RawiTests/PermissionsTests.swift`
 
 **Interfaces:**
 ```swift
@@ -1463,7 +1463,7 @@ Menu items: **Enabled** (checkbox), current state, a warning row per missing per
 
 ```swift
 import Testing
-@testable import WhisperFlowCore
+@testable import RawiCore
 
 @Suite("Permissions") struct PermissionsTests {
     @Test("missing lists exactly what is not granted") func missing() {
@@ -1494,7 +1494,7 @@ import Testing
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/WhisperFlowCore/UI/MenuBarController.swift Sources/WhisperFlowCore/System/Permissions.swift Tests/WhisperFlowTests/PermissionsTests.swift
+git add Sources/RawiCore/UI/MenuBarController.swift Sources/RawiCore/System/Permissions.swift Tests/RawiTests/PermissionsTests.swift
 git commit -m "feat: menu bar, permission checks, and launch at login"
 ```
 
@@ -1503,9 +1503,9 @@ git commit -m "feat: menu bar, permission checks, and launch at login"
 ## Task 14: App bundle, wiring, and the Makefile
 
 **Files:**
-- Create: `Sources/WhisperFlow/main.swift`, `Sources/WhisperFlow/AppDelegate.swift`
+- Create: `Sources/Rawi/main.swift`, `Sources/Rawi/AppDelegate.swift`
 - Create: `Resources/Info.plist`, `Makefile`
-- Create: `Sources/WhisperFlowCore/Config/ConfigWatcher.swift`
+- Create: `Sources/RawiCore/Config/ConfigWatcher.swift`
 
 **`AppDelegate` responsibilities, in order:**
 1. Load `.env`, then config — running `FirstRunSetup` and writing a config if none exists.
@@ -1517,22 +1517,22 @@ git commit -m "feat: menu bar, permission checks, and launch at login"
 
 **`Info.plist` required keys:**
 ```xml
-<key>CFBundleIdentifier</key><string>com.welaghil.whisperflow</string>
-<key>CFBundleName</key><string>WhisperFlow</string>
-<key>CFBundleExecutable</key><string>WhisperFlow</string>
+<key>CFBundleIdentifier</key><string>com.welaghil.rawi</string>
+<key>CFBundleName</key><string>Rawi</string>
+<key>CFBundleExecutable</key><string>Rawi</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>1.0</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 <key>NSMicrophoneUsageDescription</key>
-<string>WhisperFlow records your voice while you hold the dictation hotkey.</string>
+<string>Rawi records your voice while you hold the dictation hotkey.</string>
 ```
 `LSUIElement` keeps it out of the Dock and the app switcher.
 
 **Makefile targets:**
 ```make
 SIGN_IDENTITY ?= -
-APP = build/WhisperFlow.app
+APP = build/Rawi.app
 
 build:
 	swift build -c release
@@ -1540,15 +1540,15 @@ build:
 bundle: build
 	rm -rf $(APP)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
-	cp .build/release/WhisperFlow $(APP)/Contents/MacOS/
+	cp .build/release/Rawi $(APP)/Contents/MacOS/
 	cp Resources/Info.plist $(APP)/Contents/
 	codesign --force --deep --sign "$(SIGN_IDENTITY)" \
-	  --options runtime --entitlements Resources/WhisperFlow.entitlements $(APP)
+	  --options runtime --entitlements Resources/Rawi.entitlements $(APP)
 
 install: bundle
-	rm -rf /Applications/WhisperFlow.app
+	rm -rf /Applications/Rawi.app
 	cp -R $(APP) /Applications/
-	@echo "Installed. Launch with: open /Applications/WhisperFlow.app"
+	@echo "Installed. Launch with: open /Applications/Rawi.app"
 
 test:
 	swift test
@@ -1556,7 +1556,7 @@ test:
 .PHONY: build bundle install test
 ```
 
-**Code signing note that must land in the README:** TCC grants bind to the code signature. With the default ad-hoc identity (`-`) the signature changes on every rebuild, so Accessibility and Input Monitoring must be re-granted each time. Creating a self-signed certificate once and passing `SIGN_IDENTITY="WhisperFlow Dev"` makes grants persist.
+**Code signing note that must land in the README:** TCC grants bind to the code signature. With the default ad-hoc identity (`-`) the signature changes on every rebuild, so Accessibility and Input Monitoring must be re-granted each time. Creating a self-signed certificate once and passing `SIGN_IDENTITY="Rawi Dev"` makes grants persist.
 
 - [ ] **Step 1: Write `Info.plist`, entitlements, and the `Makefile`.**
 - [ ] **Step 2: Write `ConfigWatcher` plus a test that a write to the watched file fires the callback within 2 seconds.**
@@ -1564,17 +1564,17 @@ test:
 - [ ] **Step 4: Build and bundle**
 
 Run: `make bundle`
-Expected: `build/WhisperFlow.app` exists and `codesign -dv build/WhisperFlow.app` reports a valid signature.
+Expected: `build/Rawi.app` exists and `codesign -dv build/Rawi.app` reports a valid signature.
 
 - [ ] **Step 5: Verify it launches and shows a menu bar item**
 
-Run: `open build/WhisperFlow.app` then `pgrep -f WhisperFlow`
+Run: `open build/Rawi.app` then `pgrep -f Rawi`
 Expected: a PID, a menu bar icon, and **no Dock icon**.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Sources/WhisperFlow Resources Makefile Sources/WhisperFlowCore/Config/ConfigWatcher.swift
+git add Sources/Rawi Resources Makefile Sources/RawiCore/Config/ConfigWatcher.swift
 git commit -m "feat: app bundle, object graph wiring, and build tooling"
 ```
 

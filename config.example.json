@@ -24,7 +24,7 @@
   "whispercpp": {
     "binary": "whisper-cli",
     "language": "en",
-    "model": "~/Library/Application Support/WhisperFlow/models/ggml-small.en.bin",
+    "model": "~/Library/Application Support/Rawi/models/ggml-small.en.bin",
     "threads": 8
   }
 }
