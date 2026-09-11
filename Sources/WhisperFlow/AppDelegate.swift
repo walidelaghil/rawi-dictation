@@ -44,7 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.buildGraph()
             self.startMonitoring()
             self.startWatchingConfig()
+            self.startRemoteTriggers()
             _ = await Permissions.requestMicrophone()
+            self.logPermissions()
             self.menuBar.refresh(state: .idle, permissions: Permissions.current())
         }
     }
@@ -53,6 +55,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor?.stop()
         watcher?.stop()
         log.info("WhisperFlow stopping")
+    }
+
+    /// Logged from inside the running app, because `--doctor` spawned from a
+    /// terminal is attributed to that terminal by TCC and can under-report.
+    private func logPermissions() {
+        let p = Permissions.current()
+        log.info("""
+            Permissions — microphone: \(p.microphone), \
+            inputMonitoring: \(p.inputMonitoring), accessibility: \(p.accessibility)
+            """)
+        if !p.allGranted {
+            log.warn("Missing permissions: \(p.missing.joined(separator: ", "))")
+        }
     }
 
     // MARK: - Graph
@@ -91,6 +106,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             log.error("Cleanup disabled: \(error.localizedDescription)")
             return NoopCleanup()
+        }
+    }
+
+    /// Debug/verification path — see `RemoteTrigger`. Drives exactly the same
+    /// controller entry points the hotkey does.
+    private func startRemoteTriggers() {
+        RemoteTrigger.observe { action in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.log.info("Remote trigger: \(action.rawValue)")
+                switch action {
+                case .start: await self.controller.handle(.beganHold)
+                case .handsFree: await self.controller.handle(.beganDoubleTap)
+                case .stop: await self.controller.handle(.endedHold)
+                case .cancel: await self.controller.cancelRequested()
+                }
+            }
         }
     }
 
