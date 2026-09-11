@@ -137,6 +137,7 @@ public struct OutputSettings: Codable, Sendable, Equatable {
 }
 
 public struct Config: Codable, Sendable, Equatable {
+    public var appearance: Appearance
     public var hotkey: String
     public var doubleTapWindowMs: Int
     public var minHoldMs: Int
@@ -151,7 +152,8 @@ public struct Config: Codable, Sendable, Equatable {
     public var cleanup: CleanupSettings
     public var output: OutputSettings
 
-    public init(hotkey: String, doubleTapWindowMs: Int, minHoldMs: Int,
+    public init(appearance: Appearance = .system,
+                hotkey: String, doubleTapWindowMs: Int, minHoldMs: Int,
                 maxSessionSeconds: Int, maxPushToTalkSeconds: Int = 120,
                 hotkeyBackend: HotkeyBackendKind = .auto,
                 fallbackHotkey: String = "ctrl+option+space",
@@ -159,6 +161,7 @@ public struct Config: Codable, Sendable, Equatable {
                 engine: EngineKind,
                 whispercpp: WhisperCppSettings, api: APISettings,
                 cleanup: CleanupSettings, output: OutputSettings) {
+        self.appearance = appearance
         self.hotkey = hotkey
         self.doubleTapWindowMs = doubleTapWindowMs
         self.minHoldMs = minHoldMs
@@ -179,6 +182,7 @@ public struct Config: Codable, Sendable, Equatable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Config.default
+        appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? d.appearance
         hotkey = try c.decodeIfPresent(String.self, forKey: .hotkey) ?? d.hotkey
         doubleTapWindowMs = try c.decodeIfPresent(Int.self, forKey: .doubleTapWindowMs)
             ?? d.doubleTapWindowMs
@@ -225,6 +229,7 @@ public struct Config: Codable, Sendable, Equatable {
         restoreDelayMs: 300)
 
     public static let `default` = Config(
+        appearance: .system,
         hotkey: "fn",
         doubleTapWindowMs: 350,
         minHoldMs: 250,
