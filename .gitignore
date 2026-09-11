@@ -1,0 +1,9 @@
+.build/
+build/
+.swiftpm/
+*.xcodeproj
+.DS_Store
+.env
+config.json
+*.bin
+*.wav
