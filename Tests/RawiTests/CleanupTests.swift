@@ -91,6 +91,15 @@ import Foundation
         }
     }
 
+    @Test("a local model gets room for a cold start, a hosted API does not") func timeouts() {
+        // Observed: a cold Ollama load took ~20s and tripped the old flat timeout,
+        // silently dropping cleanup on the first dictation after an idle period.
+        #expect(ChatCleanup.timeout(for: .ollama) >= 60)
+        #expect(ChatCleanup.timeout(for: .openai) <= 30)
+        #expect(ChatCleanup.timeout(for: .anthropic) <= 30)
+        #expect(ChatCleanup.timeout(for: .ollama) > ChatCleanup.timeout(for: .openai))
+    }
+
     @Test("endpoints are correct per provider") func endpoints() {
         #expect(ChatCleanup.endpoint(kind: .ollama).absoluteString
                 == "http://localhost:11434/api/chat")

@@ -32,7 +32,7 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
         var request = URLRequest(url: Self.endpoint(kind: kind))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 20
+        request.timeoutInterval = Self.timeout(for: kind)
 
         switch kind {
         case .openai:
@@ -86,6 +86,18 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
         lock.withLock {
             currentTask?.cancel()
             currentTask = nil
+        }
+    }
+
+    /// A hosted API that has not answered in 20s is not going to. A *local* model
+    /// can legitimately take that long on a cold start — Ollama loads weights from
+    /// disk on the first call after an idle period, and routing two models by
+    /// script makes a cold start more likely, not less. Timing that out would lose
+    /// the cleanup on the first dictation of the day.
+    static func timeout(for kind: CleanupKind) -> TimeInterval {
+        switch kind {
+        case .ollama: 90
+        case .openai, .anthropic, .off: 20
         }
     }
 

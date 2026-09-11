@@ -5,12 +5,23 @@ import Testing
     let t0 = ContinuousClock.now
 
     @Test("labels name the mode and stage") func labels() {
-        #expect(PillLabel.text(for: .recording(mode: .pushToTalk, startedAt: t0)) == "Recording")
+        // "Listening" per the approved design — it reads as the app's state rather
+        // than as a recorder's, which matters when it sits over someone's document.
+        #expect(PillLabel.text(for: .recording(mode: .pushToTalk, startedAt: t0)) == "Listening")
         #expect(PillLabel.text(for: .recording(mode: .handsFree, startedAt: t0)) == "Hands-free")
         #expect(PillLabel.text(for: .transcribing) == "Transcribing…")
         #expect(PillLabel.text(for: .cleaning) == "Cleaning up…")
         #expect(PillLabel.text(for: .inserting) == "Inserting…")
         #expect(PillLabel.text(for: .error("no mic")) == "no mic")
+    }
+
+    @Test("state maps to the colour contract the design rests on") func tokens() {
+        #expect(PillLabel.token(for: .recording(mode: .pushToTalk, startedAt: t0)) == .saffron)
+        #expect(PillLabel.token(for: .recording(mode: .handsFree, startedAt: t0)) == .saffron)
+        #expect(PillLabel.token(for: .transcribing) == .lapis)
+        #expect(PillLabel.token(for: .cleaning) == .lapis)
+        #expect(PillLabel.token(for: .error("x")) == .clay)
+        #expect(PillLabel.token(for: .idle) == .verdigris)
     }
 
     @Test("countdown appears only under a minute") func countdown() {

@@ -4,7 +4,7 @@ public enum PillLabel {
     public static func text(for state: DictationState) -> String {
         switch state {
         case .idle: "Ready"
-        case .recording(.pushToTalk, _): "Recording"
+        case .recording(.pushToTalk, _): "Listening"
         case .recording(.handsFree, _): "Hands-free"
         case .transcribing: "Transcribing…"
         case .cleaning: "Cleaning up…"
@@ -13,8 +13,8 @@ public enum PillLabel {
         }
     }
 
-    /// Only shown in the last minute of a hands-free session, so the pill stays
-    /// quiet until the auto-stop is actually near.
+    /// Only in the last minute of a hands-free session — the pill stays quiet
+    /// until the auto-stop is genuinely near.
     public static func countdown(_ remaining: Duration) -> String? {
         let seconds = max(0, Int(remaining.components.seconds))
         guard seconds < 60 else { return nil }
@@ -25,88 +25,94 @@ public enum PillLabel {
         let total = max(0, Int(d.components.seconds))
         return String(format: "%d:%02d", total / 60, total % 60)
     }
+
+    /// The state colour. This is the contract the design rests on: saffron is live,
+    /// verdigris is finished, lapis is a detected language, clay is a problem.
+    public static func token(for state: DictationState) -> ColorToken {
+        switch state {
+        case .recording: .saffron
+        case .transcribing, .cleaning, .inserting: .lapis
+        case .error: .clay
+        case .idle: .verdigris
+        }
+    }
 }
 
-/// Observable state behind the pill. Updated at ~30 Hz while recording.
 @MainActor
 public final class PillModel: ObservableObject {
     @Published public var state: DictationState = .idle
     @Published public var level: Double = 0
     @Published public var elapsed: Duration = .zero
     @Published public var remaining: Duration?
-
+    /// True once the cursor has genuinely rested on the pill — see `PillProximity`.
+    @Published public var armed: Bool = false
     public init() {}
 }
 
 public struct PillView: View {
     @ObservedObject var model: PillModel
-
     public init(model: PillModel) { self.model = model }
 
     private var isRecording: Bool { model.state.recordingMode != nil }
-
-    private var accent: Color {
-        switch model.state {
-        case .recording(.handsFree, _): .orange
-        case .recording(.pushToTalk, _): .red
-        case .error: .yellow
-        default: .blue
-        }
-    }
+    private var accent: Color { RawiColors.pill(PillLabel.token(for: model.state)) }
 
     public var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: iconName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(accent)
-
+            mark
             Text(PillLabel.text(for: model.state))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(RawiColors.pill(.bone))
                 .fixedSize()
 
             if isRecording {
                 LevelMeter(level: model.level, accent: accent)
                 Text(PillLabel.elapsed(model.elapsed))
-                    .font(.system(size: 11, weight: .regular).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.65))
-
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(RawiColors.pill(.muted))
                 if let remaining = model.remaining,
                    let countdown = PillLabel.countdown(remaining) {
                     Text(countdown)
                         .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(RawiColors.pill(.saffron))
                 }
-            } else if model.state == .transcribing || model.state == .cleaning {
-                ProgressView()
-                    .controlSize(.small)
-                    .scaleEffect(0.7)
-                    .frame(width: 14, height: 14)
+            }
+
+            if model.armed {
+                Text("⌃⌥Esc to cancel")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(RawiColors.pill(.faint))
+                    .transition(.opacity)
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 15)
         .padding(.vertical, 9)
         .background(
-            Capsule().fill(.black.opacity(0.82))
-                .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 1))
+            Capsule()
+                .fill(RawiColors.pill(.ink).opacity(0.94))
+                .overlay(Capsule().strokeBorder(RawiColors.pill(.edge), lineWidth: 1))
         )
-        .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
-        .animation(.easeOut(duration: 0.15), value: model.state)
+        .shadow(color: .black.opacity(0.38), radius: 12, y: 4)
+        .scaleEffect(model.armed ? 1.03 : 1.0)
+        .animation(.easeOut(duration: 0.16), value: model.armed)
+        .animation(.easeOut(duration: 0.16), value: model.state)
     }
 
-    private var iconName: String {
+    @ViewBuilder private var mark: some View {
         switch model.state {
-        case .recording(.handsFree, _): "mic.badge.plus"
-        case .recording(.pushToTalk, _): "mic.fill"
-        case .transcribing, .cleaning, .inserting: "waveform"
-        case .error: "exclamationmark.triangle.fill"
-        case .idle: "mic"
+        case .recording:
+            Circle().fill(accent).frame(width: 8, height: 8)
+        case .transcribing, .cleaning, .inserting:
+            ProgressView().controlSize(.small).scaleEffect(0.62).frame(width: 13, height: 13)
+        case .error:
+            Circle().fill(accent).frame(width: 8, height: 8)
+        case .idle:
+            RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 8, height: 8)
         }
     }
 }
 
-/// 20-bar audio level meter. Bars light progressively with a mild curve so quiet
-/// speech still shows movement.
+/// Level meter. Bars light with a mild curve so quiet speech still shows movement —
+/// a flat mapping makes a normal speaking voice look like silence.
 struct LevelMeter: View {
     let level: Double
     let accent: Color
@@ -118,11 +124,11 @@ struct LevelMeter: View {
                 let threshold = Double(index) / Double(barCount)
                 let scaled = pow(min(max(level, 0), 1), 0.6)
                 Capsule()
-                    .fill(scaled > threshold ? accent : Color.white.opacity(0.18))
+                    .fill(scaled > threshold ? accent : RawiColors.pill(.edge))
                     .frame(width: 2, height: barHeight(index))
             }
         }
-        .frame(height: 14)
+        .frame(height: 15)
         .animation(.linear(duration: 0.05), value: level)
     }
 
