@@ -124,9 +124,13 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
                 "messages": [["role": "user", "content": transcript]],
             ]
         case .ollama:
+            // `keep_alive` holds the model in memory between dictations. Ollama's
+            // default unloads after 5 minutes idle, which would make the first
+            // dictation after a quiet spell pay a multi-second reload.
             payload = [
                 "model": model,
                 "stream": false,
+                "keep_alive": "30m",
                 "options": ["temperature": 0],
                 "messages": [
                     ["role": "system", "content": prompt],

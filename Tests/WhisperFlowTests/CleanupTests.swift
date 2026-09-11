@@ -37,6 +37,14 @@ import Foundation
         #expect(j["stream"] as? Bool == false)
     }
 
+    @Test("ollama keeps the model loaded between dictations") func ollamaKeepAlive() throws {
+        let d = try ChatCleanup.requestBody(kind: .ollama, model: "qwen2.5:3b",
+                                            prompt: "P", transcript: "T")
+        let j = try JSONSerialization.jsonObject(with: d) as! [String: Any]
+        // Without this, the first dictation after 5 idle minutes reloads the model.
+        #expect(j["keep_alive"] as? String == "30m")
+    }
+
     @Test("every provider asks for deterministic output") func temperature() throws {
         for kind in [CleanupKind.openai, .ollama] {
             let d = try ChatCleanup.requestBody(kind: kind, model: "m", prompt: "P", transcript: "T")
