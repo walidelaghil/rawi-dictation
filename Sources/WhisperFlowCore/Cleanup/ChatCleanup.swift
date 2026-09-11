@@ -102,6 +102,8 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
 
     static func requestBody(kind: CleanupKind, model: String,
                             prompt: String, transcript: String) throws -> Data {
+        // Delimited so the model can distinguish dictated content from instructions.
+        let user = wrapTranscript(transcript)
         let payload: [String: Any]
         switch kind {
         case .openai:
@@ -110,7 +112,7 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
                 "temperature": 0,
                 "messages": [
                     ["role": "system", "content": prompt],
-                    ["role": "user", "content": transcript],
+                    ["role": "user", "content": user],
                 ],
             ]
         case .anthropic:
@@ -121,7 +123,7 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
                 "max_tokens": 2048,
                 "temperature": 0,
                 "system": prompt,
-                "messages": [["role": "user", "content": transcript]],
+                "messages": [["role": "user", "content": user]],
             ]
         case .ollama:
             // `keep_alive` holds the model in memory between dictations. Ollama's
@@ -134,7 +136,7 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
                 "options": ["temperature": 0],
                 "messages": [
                     ["role": "system", "content": prompt],
-                    ["role": "user", "content": transcript],
+                    ["role": "user", "content": user],
                 ],
             ]
         case .off:

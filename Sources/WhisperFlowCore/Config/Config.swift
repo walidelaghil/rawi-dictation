@@ -141,7 +141,7 @@ public struct Config: Codable, Sendable, Equatable {
 
     public static let defaultCleanup = CleanupSettings(
         provider: .off,
-        model: "qwen2.5:3b",
+        model: "qwen2.5:1.5b",
         prompt: defaultCleanupPrompt)
 
     public static let defaultOutput = OutputSettings(

@@ -208,10 +208,13 @@ in `.env`, else an `ANTHROPIC_API_KEY`, else a running Ollama, else `off`.
 
 | Provider | Cost | Latency | Works offline |
 |---|---|---|---|
-| `ollama` (local 1.5–3B) | free | ~1–2 s | ✅ |
+| `ollama` (`qwen2.5:1.5b`) | free | **0.8–1.3 s measured** | ✅ |
 | `openai` (`gpt-4o-mini`) | ~$0.30/mo at 100 dictations/day | ~0.5 s | ❌ |
 | `anthropic` (Haiku) | ~$2/mo at the same rate | ~0.7 s | ❌ |
 | `off` | free | none | ✅ |
+
+End-to-end on an M4, local throughout: ~0.6 s transcription + ~0.8–1.3 s cleanup,
+so roughly **1.5–2 seconds** from releasing the key to text appearing.
 
 > **A ChatGPT or Claude subscription does not include API access.** ChatGPT
 > Plus/Go and Claude Pro/Max are consumer chat products; the OpenAI and Anthropic
@@ -222,11 +225,37 @@ For a free, fully offline setup:
 
 ```bash
 brew install ollama
-ollama serve          # or: brew services start ollama
-ollama pull qwen2.5:3b
+brew services start ollama
+ollama pull qwen2.5:1.5b
 ```
 
-then set `"cleanup": { "provider": "ollama", "model": "qwen2.5:3b" }`.
+then set `"cleanup": { "provider": "ollama", "model": "qwen2.5:1.5b" }`.
+
+### Why the 1.5b and not something bigger
+
+Counter-intuitively, bigger was worse here. Benchmarked on real whisper output:
+
+| Model | Latency | Behaviour |
+|---|---|---|
+| `qwen2.5:1.5b` | 0.8–1.3 s | faithful — removes fillers, changes nothing else |
+| `qwen2.5:3b` | 1.4–2.0 s | **rewrites**: dropped "we need to do three things", reworded "by end of day" |
+| `gemma3:4b` | ~2.0 s | left some fillers in, slower |
+
+A larger model is "smart" enough to want to *improve* your dictation, which is
+exactly wrong — you want your words, not its edit of them. Smaller and dumber is
+the right tool for this job.
+
+### The safety net
+
+Cleanup output is validated before it is typed. A local model will sometimes
+answer or obey your dictation rather than clean it — dictating *"what is the
+capital of France"* can come back as *"Paris"*. `CleanupGuard` checks that enough
+of your actual words survived; if not, the raw transcript is inserted instead and
+the reason is logged. The prompt is the first line of defence and the guard is the
+second, because no wording makes a 1.5B model reliable on its own.
+
+If you edit `cleanup.prompt`, keep the `<transcript>` framing — it is what stops
+the model treating your dictation as instructions addressed to it.
 
 ---
 

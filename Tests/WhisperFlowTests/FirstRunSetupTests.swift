@@ -50,7 +50,7 @@ import Testing
 
     @Test("the cleanup model matches the chosen provider") func cleanupModel() {
         #expect(FirstRunSetup.detect(probes(env: ["OPENAI_API_KEY"])).cleanup.model == "gpt-4o-mini")
-        #expect(FirstRunSetup.detect(probes(ollama: true)).cleanup.model == "qwen2.5:3b")
+        #expect(FirstRunSetup.detect(probes(ollama: true)).cleanup.model == "qwen2.5:1.5b")
         #expect(FirstRunSetup.detect(probes(env: ["ANTHROPIC_API_KEY"])).cleanup.model
                 == "claude-haiku-4-5-20251001")
     }

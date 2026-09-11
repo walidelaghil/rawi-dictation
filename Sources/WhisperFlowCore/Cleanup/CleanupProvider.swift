@@ -54,7 +54,11 @@ public enum CleanupProviderFactory {
         switch kind {
         case .openai: "gpt-4o-mini"
         case .anthropic: "claude-haiku-4-5-20251001"
-        case .ollama: "qwen2.5:3b"
+        // 1.5b rather than 3b deliberately: benchmarked on real whisper output,
+        // the 3b is "smart" enough to rewrite and summarise the dictation, which is
+        // precisely what the cleanup prompt forbids. The 1.5b stays faithful and is
+        // also ~40% faster.
+        case .ollama: "qwen2.5:1.5b"
         case .off: ""
         }
     }

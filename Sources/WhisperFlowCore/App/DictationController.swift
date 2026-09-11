@@ -197,7 +197,16 @@ public final class DictationController {
         var text = raw
         state = .cleaning
         do {
-            text = try await cleanup.clean(raw)
+            let candidate = try await cleanup.clean(raw)
+            // The model is not trusted blindly: a local model will sometimes answer
+            // or obey the dictation instead of cleaning it. Inserting the raw
+            // transcript is always better than inserting the model's invention.
+            switch CleanupGuard.check(raw: raw, cleaned: candidate) {
+            case .accept:
+                text = candidate
+            case .reject(let reason):
+                log.warn("Cleanup rejected (\(reason)); inserting raw transcript")
+            }
         } catch {
             if cancelled { state = .idle; return }
             log.warn("LLM cleanup failed (\(error.localizedDescription)); inserting raw transcript")
