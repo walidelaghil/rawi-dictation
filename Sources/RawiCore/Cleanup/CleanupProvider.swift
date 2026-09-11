@@ -32,34 +32,39 @@ public enum CleanupProviderFactory {
         case .off:
             return NoopCleanup()
         case .ollama:
-            return ChatCleanup(kind: .ollama, apiKey: nil,
-                               model: config.cleanup.model, prompt: config.cleanup.prompt)
+            return RoutedCleanup(kind: .ollama, apiKey: nil, models: config.cleanup.models,
+                                 prompt: config.cleanup.prompt)
         case .openai:
             guard let key = env["OPENAI_API_KEY"], !key.isEmpty else {
                 throw CleanupError.missingAPIKey("OPENAI_API_KEY")
             }
-            return ChatCleanup(kind: .openai, apiKey: key,
-                               model: config.cleanup.model, prompt: config.cleanup.prompt)
+            return RoutedCleanup(kind: .openai, apiKey: key, models: config.cleanup.models,
+                                 prompt: config.cleanup.prompt)
         case .anthropic:
             guard let key = env["ANTHROPIC_API_KEY"], !key.isEmpty else {
                 throw CleanupError.missingAPIKey("ANTHROPIC_API_KEY")
             }
-            return ChatCleanup(kind: .anthropic, apiKey: key,
-                               model: config.cleanup.model, prompt: config.cleanup.prompt)
+            return RoutedCleanup(kind: .anthropic, apiKey: key, models: config.cleanup.models,
+                                 prompt: config.cleanup.prompt)
         }
     }
 
-    /// A sensible default model per provider, used by first-run detection.
-    public static func defaultModel(for kind: CleanupKind) -> String {
+    /// Default model per script for a provider, used by first-run detection.
+    ///
+    /// The local pair is the benchmarked outcome: 1.5b is faithful and fast on
+    /// English but translates Arabic; 3b holds Arabic and mixed speech correctly.
+    /// Hosted providers are strong enough at both that one model serves each.
+    public static func defaultModels(for kind: CleanupKind) -> CleanupModels {
         switch kind {
-        case .openai: "gpt-4o-mini"
-        case .anthropic: "claude-haiku-4-5-20251001"
-        // 1.5b rather than 3b deliberately: benchmarked on real whisper output,
-        // the 3b is "smart" enough to rewrite and summarise the dictation, which is
-        // precisely what the cleanup prompt forbids. The 1.5b stays faithful and is
-        // also ~40% faster.
-        case .ollama: "qwen2.5:1.5b"
-        case .off: ""
+        case .openai:
+            CleanupModels(latin: "gpt-4o-mini", arabic: "gpt-4o-mini")
+        case .anthropic:
+            CleanupModels(latin: "claude-haiku-4-5-20251001",
+                          arabic: "claude-haiku-4-5-20251001")
+        case .ollama:
+            CleanupModels(latin: "qwen2.5:1.5b", arabic: "qwen2.5:3b")
+        case .off:
+            CleanupModels(latin: "", arabic: "")
         }
     }
 }

@@ -51,3 +51,46 @@ import Foundation
         #expect(Config.expand("/abs/x") == "/abs/x")
     }
 }
+
+@Suite("Cleanup models") struct CleanupModelsTests {
+    @Test("defaults are the measured winners per script") func defaults() {
+        let m = Config.default.cleanup.models
+        #expect(m.latin == "qwen2.5:1.5b")
+        #expect(m.arabic == "qwen2.5:3b")
+        #expect(m.model(for: .latin) == "qwen2.5:1.5b")
+        #expect(m.model(for: .arabic) == "qwen2.5:3b")
+    }
+
+    @Test("whisper now runs with automatic language detection") func autoLang() {
+        #expect(Config.default.whispercpp.language == "auto")
+        #expect(Config.default.whispercpp.model.contains("large-v3-turbo"))
+    }
+
+    @Test("a v1 config carrying cleanup.model still loads") func migratesOldKey() throws {
+        let json = #"{"cleanup":{"provider":"ollama","model":"qwen2.5:1.5b"}}"#
+        let c = try JSONDecoder().decode(Config.self, from: Data(json.utf8))
+        #expect(c.cleanup.models.latin == "qwen2.5:1.5b")
+        #expect(c.cleanup.models.arabic == "qwen2.5:3b")
+    }
+
+    @Test("an explicit models block wins over the legacy key") func explicitWins() throws {
+        let json = #"{"cleanup":{"model":"old","models":{"latin":"a","arabic":"b"}}}"#
+        let c = try JSONDecoder().decode(Config.self, from: Data(json.utf8))
+        #expect(c.cleanup.models.latin == "a")
+        #expect(c.cleanup.models.arabic == "b")
+    }
+
+    @Test("saving drops the legacy key") func saveDropsLegacy() throws {
+        let json = #"{"cleanup":{"model":"qwen2.5:1.5b"}}"#
+        let c = try JSONDecoder().decode(Config.self, from: Data(json.utf8))
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("rawi-\(UUID().uuidString).json")
+        try c.save(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        // Scoped to the cleanup object: whispercpp legitimately has its own `model` key.
+        let raw = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        let cleanup = raw["cleanup"] as! [String: Any]
+        #expect(cleanup["model"] == nil, "legacy key survived a save")
+        #expect(cleanup["models"] != nil)
+    }
+}

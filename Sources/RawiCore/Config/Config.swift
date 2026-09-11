@@ -45,21 +45,76 @@ public struct APISettings: Codable, Sendable, Equatable {
     }
 }
 
+/// Which cleanup model serves which script.
+///
+/// Not a preference — a correctness requirement. Measured on real transcripts:
+/// `qwen2.5:1.5b` is faithful on English but *translates Arabic into English*
+/// and cannot be instructed out of it; `qwen2.5:3b` is correct on Arabic and
+/// mixed speech but leaves fillers in English. So each script gets the model
+/// that does not break it.
+public struct CleanupModels: Codable, Sendable, Equatable {
+    public var latin: String
+    public var arabic: String
+
+    public init(latin: String, arabic: String) {
+        self.latin = latin
+        self.arabic = arabic
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Config.defaultCleanup.models
+        latin = try c.decodeIfPresent(String.self, forKey: .latin) ?? d.latin
+        arabic = try c.decodeIfPresent(String.self, forKey: .arabic) ?? d.arabic
+    }
+
+    public func model(for script: Script) -> String {
+        switch script {
+        case .latin: latin
+        case .arabic: arabic
+        }
+    }
+}
+
 public struct CleanupSettings: Codable, Sendable, Equatable {
     public var provider: CleanupKind
-    public var model: String
+    public var models: CleanupModels
     public var prompt: String
 
-    public init(provider: CleanupKind, model: String, prompt: String) {
-        self.provider = provider; self.model = model; self.prompt = prompt
+    public init(provider: CleanupKind, models: CleanupModels, prompt: String) {
+        self.provider = provider
+        self.models = models
+        self.prompt = prompt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case provider, models, prompt
+        case legacyModel = "model"     // v1 wrote a single model; read it, never write it
     }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Config.defaultCleanup
         provider = try c.decodeIfPresent(CleanupKind.self, forKey: .provider) ?? d.provider
-        model = try c.decodeIfPresent(String.self, forKey: .model) ?? d.model
         prompt = try c.decodeIfPresent(String.self, forKey: .prompt) ?? d.prompt
+
+        if let explicit = try c.decodeIfPresent(CleanupModels.self, forKey: .models) {
+            models = explicit
+        } else if let legacy = try c.decodeIfPresent(String.self, forKey: .legacyModel) {
+            // A v1 config only ever named an English-capable model, so it maps to latin.
+            models = CleanupModels(latin: legacy, arabic: d.models.arabic)
+        } else {
+            models = d.models
+        }
+    }
+
+    /// Explicit so the legacy `model` key is dropped on the next save rather than
+    /// lingering as a second source of truth.
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(provider, forKey: .provider)
+        try c.encode(models, forKey: .models)
+        try c.encode(prompt, forKey: .prompt)
     }
 }
 
@@ -149,9 +204,11 @@ public struct Config: Codable, Sendable, Equatable {
 
     public static let defaultWhisperCpp = WhisperCppSettings(
         binary: "whisper-cli",
+        // Multilingual, always. The v1 English-only model did not degrade on
+        // Arabic — it failed outright.
         model: Config.supportDirectory
-            .appendingPathComponent("models/ggml-small.en.bin").path,
-        language: "en",
+            .appendingPathComponent("models/ggml-large-v3-turbo-q5_0.bin").path,
+        language: "auto",
         threads: 8)
 
     public static let defaultAPI = APISettings(
@@ -160,7 +217,7 @@ public struct Config: Codable, Sendable, Equatable {
 
     public static let defaultCleanup = CleanupSettings(
         provider: .off,
-        model: "qwen2.5:1.5b",
+        models: CleanupModels(latin: "qwen2.5:1.5b", arabic: "qwen2.5:3b"),
         prompt: defaultCleanupPrompt)
 
     public static let defaultOutput = OutputSettings(

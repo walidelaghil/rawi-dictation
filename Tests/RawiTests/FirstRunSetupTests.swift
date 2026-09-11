@@ -48,10 +48,14 @@ import Testing
         #expect(FirstRunSetup.detect(probes()).cleanup.provider == .off)
     }
 
-    @Test("the cleanup model matches the chosen provider") func cleanupModel() {
-        #expect(FirstRunSetup.detect(probes(env: ["OPENAI_API_KEY"])).cleanup.model == "gpt-4o-mini")
-        #expect(FirstRunSetup.detect(probes(ollama: true)).cleanup.model == "qwen2.5:1.5b")
-        #expect(FirstRunSetup.detect(probes(env: ["ANTHROPIC_API_KEY"])).cleanup.model
+    @Test("the cleanup models match the chosen provider, per script") func cleanupModel() {
+        #expect(FirstRunSetup.detect(probes(env: ["OPENAI_API_KEY"])).cleanup.models.latin
+                == "gpt-4o-mini")
+        // Local cleanup needs a different model per script: the small one translates Arabic.
+        let local = FirstRunSetup.detect(probes(ollama: true)).cleanup.models
+        #expect(local.latin == "qwen2.5:1.5b")
+        #expect(local.arabic == "qwen2.5:3b")
+        #expect(FirstRunSetup.detect(probes(env: ["ANTHROPIC_API_KEY"])).cleanup.models.arabic
                 == "claude-haiku-4-5-20251001")
     }
 

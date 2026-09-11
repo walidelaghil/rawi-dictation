@@ -44,8 +44,11 @@ enum Doctor {
             }
         }
         print("  engine            \(config.engine.rawValue)")
-        print("  cleanup           \(config.cleanup.provider.rawValue)"
-              + (config.cleanup.provider == .off ? "" : " (\(config.cleanup.model))"))
+        print("  cleanup           \(config.cleanup.provider.rawValue)")
+        if config.cleanup.provider != .off {
+            print("    latin           \(config.cleanup.models.latin)")
+            print("    arabic          \(config.cleanup.models.arabic)")
+        }
         print("  restore clipboard \(config.output.restorePreviousClipboard)")
 
         print("\nLocal transcription")
@@ -61,7 +64,8 @@ enum Doctor {
         if config.cleanup.provider == .ollama {
             let reachable = await FirstRunSetup.isOllamaReachable(timeout: 1.0)
             line("ollama", reachable, detail: "http://localhost:11434",
-                 fix: "brew install ollama && ollama serve && ollama pull \(config.cleanup.model)")
+                 fix: "brew install ollama && ollama serve && ollama pull "
+                    + "\(config.cleanup.models.latin) && ollama pull \(config.cleanup.models.arabic)")
         } else if config.cleanup.provider == .off {
             print("  — disabled; the raw transcript is inserted as-is")
         } else {

@@ -109,7 +109,8 @@ import Foundation
     @Test("the factory builds ollama and off without any key") func factoryKeyless() throws {
         var config = Config.default
         config.cleanup.provider = .ollama
-        #expect(try CleanupProviderFactory.make(config: config, env: DotEnv(contents: "")) is ChatCleanup)
+        // Local cleanup is routed by script now, so the factory hands back the router.
+        #expect(try CleanupProviderFactory.make(config: config, env: DotEnv(contents: "")) is RoutedCleanup)
         config.cleanup.provider = .off
         #expect(try CleanupProviderFactory.make(config: config, env: DotEnv(contents: "")) is NoopCleanup)
     }

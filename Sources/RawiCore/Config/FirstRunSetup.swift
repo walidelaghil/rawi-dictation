@@ -37,7 +37,7 @@ public enum FirstRunSetup {
 
         config.cleanup.provider = cleanupKind
         if cleanupKind != .off {
-            config.cleanup.model = CleanupProviderFactory.defaultModel(for: cleanupKind)
+            config.cleanup.models = CleanupProviderFactory.defaultModels(for: cleanupKind)
         }
         return config
     }
