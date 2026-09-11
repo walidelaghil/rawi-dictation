@@ -263,6 +263,12 @@ An *invalid* value is reported rather than silently ignored.
 API keys never go in this file. They live in `~/.config/whisperflow/.env` — see
 [`.env.example`](.env.example).
 
+[`config.example.json`](config.example.json) is a known-good configuration, verified
+working on a managed Mac with **neither Accessibility nor Input Monitoring granted**:
+`⌥Space` push-to-talk via the permission-free Carbon backend, local whisper.cpp, and
+local Ollama cleanup. Copy it to `~/.config/whisperflow/config.json` to start from
+there.
+
 ### The cleanup prompt
 
 The default instructs the model to remove filler words and false starts, fix
