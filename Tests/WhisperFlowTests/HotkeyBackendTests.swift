@@ -18,6 +18,9 @@ import Carbon.HIToolbox
         #expect(!HotkeyConfig.isCarbonCompatible("fn"))
         #expect(!HotkeyConfig.isCarbonCompatible("rightOption"))
         #expect(HotkeyConfig.isCarbonCompatible("ctrl+option+space"))
+        #expect(HotkeyConfig.isCarbonCompatible("option+space"))
+        #expect(HotkeyConfig.parse("option+space") == .keyCode(49, modifiers: [.maskAlternate]))
+        #expect(HotkeyConfig.parse("alt+space") == HotkeyConfig.parse("option+space"))
         #expect(HotkeyConfig.isCarbonCompatible("cmd+shift+d"))
     }
 

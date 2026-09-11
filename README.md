@@ -140,6 +140,11 @@ you do not have to configure anything.
 The hotkey becomes **`⌃⌥Space`** (configurable via `fallbackHotkey`), and cancel
 becomes **`⌃⌥Esc`**. Hold to talk, double-tap for hands-free — all identical.
 
+`⌥Space` is a good alternative if nothing else claims it — set `"hotkey":
+"option+space"`. One trade-off: the Carbon backend *consumes* whatever it binds, and
+`⌥Space` normally types a non-breaking space (U+00A0), so you lose that. Almost
+nobody types one deliberately, but it is worth knowing if you work in typesetting.
+
 The transcript is placed on your clipboard and the pill says `Copied — press ⌘V`.
 **Press ⌘V to insert it.** That one keystroke is the entire cost.
 
