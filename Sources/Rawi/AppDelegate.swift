@@ -192,6 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .handsFree: await self.controller.handle(.beganDoubleTap)
                 case .stop: await self.controller.handle(.endedHold)
                 case .cancel: await self.controller.cancelRequested()
+                case .window: self.mainWindow.show()
                 }
             }
         }

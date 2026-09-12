@@ -13,7 +13,7 @@ import Foundation
 /// does, so it cannot do anything the hotkey could not.
 public enum RemoteTrigger {
     public enum Action: String, Sendable, CaseIterable {
-        case start, stop, cancel, handsFree
+        case start, stop, cancel, handsFree, window
     }
 
     private static let name = "com.welaghil.rawi.trigger"
