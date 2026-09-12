@@ -47,6 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        // Without this, an accessory app's own windows have no ⌘A, ⌘C or ⌘V:
+        // AppKit resolves those through the main menu, which an LSUIElement app
+        // does not get by default.
+        EditMenu.install()
         log.info("Rawi starting")
 
         Task { @MainActor in
@@ -76,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // state unlogged for as long as the prompt sat on screen.
             self.logPermissions()
             self.menuBar.refresh(state: .idle, permissions: Permissions.current())
+            self.menuBar.setRecent(self.recentFromHistory())
             Task { @MainActor [weak self] in
                 let granted = await Permissions.requestMicrophone()
                 guard let self else { return }
@@ -185,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             self.history.append(entry)
             self.mainWindow.reload()
+            self.menuBar.setRecent(self.recentFromHistory())
         }
         menuBar = MenuBarController(controller: controller, log: log)
         menuBar.onAppearanceChange = { [weak self] appearance in
@@ -213,6 +219,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyAppearance()
         tapPattern = TapPattern(doubleTapWindow: .milliseconds(config.doubleTapWindowMs),
                                 minHold: .milliseconds(config.minHoldMs))
+    }
+
+    /// What the menu's Recent shows. Read from history rather than from an
+    /// in-memory list: that list started empty on every launch, so a user with
+    /// hundreds of stored dictations still saw "Nothing yet today."
+    ///
+    /// Transform rows are left out. Recent is for re-copying something you said,
+    /// and a transform's row holds the clipboard text it started from.
+    private func recentFromHistory(limit: Int = 6) -> [RecentDictation] {
+        history.all()
+            .lazy
+            .filter { $0.kind == .dictation }
+            .prefix(limit)
+            .map { RecentDictation(text: $0.cleaned, script: $0.script, at: $0.at) }
     }
 
     /// Transforms need a model. With cleanup off there is nothing to ask, and the
@@ -280,6 +300,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .stop: await self.controller.handle(.endedHold)
                 case .cancel: await self.controller.cancelRequested()
                 case .window: self.mainWindow.show()
+                case .menu: self.menuBar.togglePanel()
                 }
             }
         }
@@ -437,7 +458,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stateChanged(_ state: DictationState) {
         menuBar.refresh(state: state, permissions: Permissions.current())
-        menuBar.setRecent(controller.recent)
+        menuBar.setRecent(recentFromHistory())
 
         if state.recordingMode != nil {
             if recordingStart == nil { recordingStart = .now }

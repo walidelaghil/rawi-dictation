@@ -17,6 +17,10 @@ public enum RemoteTrigger {
         /// Begins a recording whose transcript is an instruction for the clipboard,
         /// exactly as holding the transform key does. Ended with `stop`.
         case transform
+        /// Opens the menu bar panel, which is otherwise only reachable by clicking
+        /// the status item — and so was the one surface that could not be checked
+        /// from a terminal.
+        case menu
     }
 
     private static let name = "com.welaghil.rawi.trigger"

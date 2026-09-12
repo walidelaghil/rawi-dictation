@@ -85,14 +85,16 @@ public struct MenuPanelView: View {
         .padding(.bottom, 12)
     }
 
-    @ViewBuilder private var stateMark: some View {
-        let token = PillLabel.token(for: model.state)
-        if isLive {
-            Circle().fill(c(token)).frame(width: 8, height: 8)
-                .overlay(Circle().stroke(c(token).opacity(0.22), lineWidth: 4))
-        } else {
-            Circle().strokeBorder(c(.faint), lineWidth: 1.5).frame(width: 8, height: 8)
-        }
+    /// The Rawi mark, tinted by state — the same glyph and the same colours as the
+    /// menu bar icon this panel hangs from, so the panel is visibly part of it
+    /// rather than an anonymous dropdown. One glyph carries both the identity and
+    /// what is happening, which is why it replaced the plain status dot.
+    private var stateMark: some View {
+        let token = model.state == .idle ? ColorToken.faint : PillLabel.token(for: model.state)
+        return RawiMarkShape()
+            .stroke(c(token), style: RawiMarkShape.stroke(for: 18))
+            .frame(width: 18, height: 18)
+            .accessibilityHidden(true)
     }
 
     // MARK: - Actions
@@ -145,27 +147,47 @@ public struct MenuPanelView: View {
 
     // MARK: - Recent
 
+    /// The row that opens Recent.
+    ///
+    /// It used to be a 9pt label and a 10pt "▸", both in the faintest colour on the
+    /// palette — which made the one control in this panel that *hides* something
+    /// the least visible thing in it. It now carries the count, a real chevron, and
+    /// a hover ground, so it reads as a control rather than as a section label.
     private var recentDisclosure: some View {
         Button { model.recentOpen.toggle() } label: {
-            HStack(spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(c(.muted))
+                    .rotationEffect(.degrees(model.recentOpen ? 90 : 0))
                 Text("RECENT")
-                    .font(.system(size: 9, weight: .medium).monospaced())
+                    .font(.system(size: 9.5, weight: .medium).monospaced())
                     .tracking(1.4)
-                    .foregroundStyle(c(.faint))
+                    .foregroundStyle(c(.muted))
+                if !model.recent.isEmpty {
+                    Text("\(model.recent.count)")
+                        .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+                        .foregroundStyle(c(.bone))
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Capsule().fill(c(.raised)))
+                }
                 Spacer()
-                Text(model.recentOpen ? "▾" : "▸")
-                    .font(.system(size: 10))
+                Text(model.recentOpen ? "Hide" : "Show")
+                    .font(.system(size: 10.5))
                     .foregroundStyle(c(.faint))
             }
-            .padding(.horizontal, 15).padding(.vertical, 8)
+            .padding(.horizontal, 15).padding(.vertical, 9)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .background(hovered == "recent" ? c(.raised) : .clear)
+        .onHover { hovered = $0 ? "recent" : (hovered == "recent" ? nil : hovered) }
+        .animation(.easeOut(duration: 0.12), value: model.recentOpen)
     }
 
     @ViewBuilder private var recentList: some View {
         if model.recent.isEmpty {
-            Text("Nothing yet today.")
+            Text("Nothing dictated yet.")
                 .font(.system(size: 11.5))
                 .foregroundStyle(c(.faint))
                 .padding(.horizontal, 15).padding(.bottom, 9)

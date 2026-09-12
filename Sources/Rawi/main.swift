@@ -4,7 +4,7 @@ import Foundation
 import RawiCore
 
 // Drive the running app for verification:
-// --trigger start|stop|cancel|handsFree|transform|window
+// --trigger start|stop|cancel|handsFree|transform|window|menu
 if let i = CommandLine.arguments.firstIndex(of: "--trigger"),
    i + 1 < CommandLine.arguments.count {
     guard let action = RemoteTrigger.Action(rawValue: CommandLine.arguments[i + 1]) else {

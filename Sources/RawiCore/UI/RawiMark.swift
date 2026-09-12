@@ -11,7 +11,7 @@ import AppKit
 public enum RawiMark {
     /// The path from the design canvas, in a 24×24 box: `M2 12h4l2-5 3 10 3-8 2 3h6`.
     /// Points are y-down as SVG writes them; `path(in:)` flips them for AppKit.
-    private static let points: [CGPoint] = [
+    static let svgPoints: [CGPoint] = [
         CGPoint(x: 2, y: 12), CGPoint(x: 6, y: 12), CGPoint(x: 8, y: 7),
         CGPoint(x: 11, y: 17), CGPoint(x: 14, y: 9), CGPoint(x: 16, y: 12),
         CGPoint(x: 22, y: 12),
@@ -19,7 +19,7 @@ public enum RawiMark {
 
     /// Stroke width in the 24-unit space. The canvas draws 1.7 at 22px; this is the
     /// same optical weight at 18px, the menu-bar size.
-    private static let strokeWidth: CGFloat = 2.0
+    static let strokeWidthUnits: CGFloat = 2.0
 
     /// The mark as a path filling `rect`, preserving the 24×24 aspect.
     ///
@@ -31,13 +31,13 @@ public enum RawiMark {
         let offsetX = rect.minX + (rect.width - 24 * scale) / 2
         let offsetY = rect.minY + (rect.height - 24 * scale) / 2
         let path = NSBezierPath()
-        for (index, point) in points.enumerated() {
+        for (index, point) in svgPoints.enumerated() {
             // 24 - y: SVG counts down from the top, AppKit up from the bottom.
             let mapped = CGPoint(x: offsetX + point.x * scale,
                                  y: offsetY + (24 - point.y) * scale)
             if index == 0 { path.move(to: mapped) } else { path.line(to: mapped) }
         }
-        path.lineWidth = strokeWidth * scale * strokeScale
+        path.lineWidth = strokeWidthUnits * scale * strokeScale
         path.lineCapStyle = .round
         path.lineJoinStyle = .round
         return path
@@ -126,5 +126,31 @@ public enum RawiMark {
                 try png.write(to: directory.appendingPathComponent(name))
             }
         }
+    }
+}
+
+import SwiftUI
+
+/// The same mark for SwiftUI. Stroke it rather than fill it:
+/// `RawiMarkShape().stroke(color, style: RawiMarkShape.stroke(for: 22))`.
+public struct RawiMarkShape: Shape {
+    public init() {}
+
+    public func path(in rect: CGRect) -> Path {
+        let scale = min(rect.width, rect.height) / 24
+        let offsetX = rect.minX + (rect.width - 24 * scale) / 2
+        let offsetY = rect.minY + (rect.height - 24 * scale) / 2
+        var path = Path()
+        // SwiftUI counts y downward, exactly as the SVG does, so no flip here.
+        for (index, point) in RawiMark.svgPoints.enumerated() {
+            let mapped = CGPoint(x: offsetX + point.x * scale, y: offsetY + point.y * scale)
+            if index == 0 { path.move(to: mapped) } else { path.addLine(to: mapped) }
+        }
+        return path
+    }
+
+    public static func stroke(for size: CGFloat) -> StrokeStyle {
+        StrokeStyle(lineWidth: RawiMark.strokeWidthUnits * size / 24,
+                    lineCap: .round, lineJoin: .round)
     }
 }

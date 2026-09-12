@@ -130,6 +130,10 @@ struct MainWindowView: View {
     private var rail: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 8) {
+                RawiMarkShape()
+                    .stroke(c(.saffron), style: RawiMarkShape.stroke(for: 20))
+                    .frame(width: 20, height: 20)
+                    .accessibilityHidden(true)
                 Text("Rawi").font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(c(.bone))
                 Text("راوي").font(.system(size: 14))

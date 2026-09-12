@@ -34,7 +34,14 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
-        popover.contentViewController = NSHostingController(rootView: MenuPanelView(model: panel))
+        let hosting = NSHostingController(rootView: MenuPanelView(model: panel))
+        // Let SwiftUI drive the popover's size. Without this the popover opens at
+        // the hosting controller's un-laid-out size, anchors its *bottom* there,
+        // and then shrinks to fit — which left the panel hanging 148 points below
+        // the menu bar instead of under the status item. Measured, not guessed:
+        // the item sat at y=1050 and the panel's top landed at 902.
+        hosting.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = hosting
 
         panel.onAction = { [weak self] id in
             self?.popover.performClose(nil)
@@ -88,14 +95,44 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
 
     // MARK: - Popover
 
+    /// Same entry point as clicking the status item.
+    public func togglePanel() { togglePopover() }
+
     @objc private func togglePopover() {
         if popover.isShown {
             popover.performClose(nil)
         } else if let button = statusItem.button {
             permissions = Permissions.current()
+            // Measure before showing: a popover positions itself from the size it
+            // has at that moment, and a SwiftUI view that has never been laid out
+            // reports the wrong one.
+            if let view = popover.contentViewController?.view {
+                view.layoutSubtreeIfNeeded()
+                let fitting = view.fittingSize
+                if fitting.width > 0, fitting.height > 0 { popover.contentSize = fitting }
+            }
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
+            logAnchor(button)
         }
+    }
+
+    /// Where macOS actually put the status item, and where the panel landed.
+    ///
+    /// The popover is anchored to the button and nothing else, so when it opens far
+    /// from the menu bar the cause is outside this code — the item pushed into an
+    /// overflow, or sitting on another screen. Guessing at that from a screenshot
+    /// wastes a round trip; these three rectangles settle it.
+    private func logAnchor(_ button: NSStatusBarButton) {
+        func describe(_ rect: NSRect) -> String {
+            String(format: "%.0f,%.0f %.0fx%.0f",
+                   rect.origin.x, rect.origin.y, rect.width, rect.height)
+        }
+        let item = button.window?.frame ?? .zero
+        let screen = button.window?.screen ?? NSScreen.main
+        log.info("""
+            Menu panel — item \(describe(item)),             panel \(describe(popover.contentViewController?.view.window?.frame ?? .zero)),             screen \(describe(screen?.frame ?? .zero))             visible \(describe(screen?.visibleFrame ?? .zero)),             screens \(NSScreen.screens.count)
+            """)
     }
 
     // MARK: - Settings, behind the gear so the panel stays as designed
