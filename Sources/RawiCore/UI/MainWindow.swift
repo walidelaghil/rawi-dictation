@@ -11,21 +11,25 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let model: HistoryViewModel
     private let vocabulary: VocabularyViewModel
+    private let destinations: DestinationsViewModel
     private let store: HistoryStore
 
     public init(store: HistoryStore, vocabularyStore: VocabularyStore,
-                appearance: ResolvedAppearance) {
+                destinationStore: DestinationStore, appearance: ResolvedAppearance) {
         self.store = store
         self.model = HistoryViewModel(store: store)
         self.vocabulary = VocabularyViewModel(store: vocabularyStore, history: store)
+        self.destinations = DestinationsViewModel(store: destinationStore)
         super.init()
         model.appearance = appearance
         vocabulary.appearance = appearance
+        destinations.appearance = appearance
     }
 
     public func show() {
         model.reload()
         vocabulary.reload()
+        destinations.reload()
         let window = window ?? makeWindow()
         self.window = window
         window.makeKeyAndOrderFront(nil)
@@ -35,10 +39,11 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     public func setAppearance(_ appearance: ResolvedAppearance) {
         model.appearance = appearance
         vocabulary.appearance = appearance
+        destinations.appearance = appearance
         window?.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
     }
 
-    public func reload() { model.reload(); vocabulary.reload() }
+    public func reload() { model.reload(); vocabulary.reload(); destinations.reload() }
 
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
@@ -52,7 +57,8 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         window.minSize = NSSize(width: 760, height: 460)
         window.center()
         window.contentView = NSHostingView(
-            rootView: MainWindowView(history: model, vocabulary: vocabulary))
+            rootView: MainWindowView(history: model, vocabulary: vocabulary,
+                                     destinations: destinations))
         window.appearance = NSAppearance(
             named: model.appearance == .dark ? .darkAqua : .aqua)
         return window
@@ -63,12 +69,14 @@ enum Screen: String, CaseIterable {
     case history = "History"
     case dictionary = "Dictionary"
     case snippets = "Snippets"
+    case destinations = "Destinations"
 
     var symbol: String {
         switch self {
         case .history: "clock"
         case .dictionary: "character.book.closed"
         case .snippets: "scissors"
+        case .destinations: "scope"
         }
     }
 }
@@ -76,6 +84,7 @@ enum Screen: String, CaseIterable {
 struct MainWindowView: View {
     @ObservedObject var history: HistoryViewModel
     @ObservedObject var vocabulary: VocabularyViewModel
+    @ObservedObject var destinations: DestinationsViewModel
     @State private var screen: Screen = .history
 
     private func c(_ token: ColorToken) -> Color {
@@ -90,6 +99,7 @@ struct MainWindowView: View {
             case .history: HistoryView(model: history)
             case .dictionary: DictionaryScreen(model: vocabulary)
             case .snippets: SnippetsScreen(model: vocabulary)
+            case .destinations: DestinationsView(model: destinations)
             }
         }
         .background(c(.surface))

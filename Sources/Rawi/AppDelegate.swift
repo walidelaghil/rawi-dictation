@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let pill = PillWindow()
     private var history: HistoryStore!
     private var vocabulary: VocabularyStore!
+    private var destinations: DestinationStore!
     private var mainWindow: MainWindow!
 
     private var config = Config.default
@@ -121,8 +122,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let env = DotEnv.load(from: Config.envFile)
         history = HistoryStore(limit: config.history.limit)
         vocabulary = VocabularyStore()
+        destinations = DestinationStore()
         mainWindow = MainWindow(
-            store: history, vocabularyStore: vocabulary,
+            store: history, vocabularyStore: vocabulary, destinationStore: destinations,
             appearance: config.appearance.resolved(systemIsDark: Appearance.systemIsDark))
         let engine = makeEngine(env: env)
         let cleanup = makeCleanup(env: env)
@@ -138,6 +140,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.stateChanged(state)
         }
         controller.vocabulary = { [weak self] in self?.vocabulary.snapshot() ?? .empty }
+        controller.destination = { [weak self] bundleID in
+            guard let self else { return nil }
+            // Only ask a browser for its URL. Anything else pays nothing.
+            let url = BrowserContext.activeURL(bundleID: bundleID)
+            let rule = DestinationMatcher.match(bundleID: bundleID, url: url,
+                                                rules: self.destinations.rules)
+            if let rule { self.log.info("Destination: \(rule.name)") }
+            return rule
+        }
         controller.onRecord = { [weak self] entry in
             guard let self else { return }
             guard self.config.history.enabled else { return }
