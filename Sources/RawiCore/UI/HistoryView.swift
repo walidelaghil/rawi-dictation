@@ -91,7 +91,8 @@ public struct HistoryView: View {
                 }.buttonStyle(.plain)
             }
             Text("Both the cleaned text and what whisper actually heard. Search covers "
-               + "both — useful when you remember what you said, not what came out. "
+               + "both, which is what you need when you remember what you said rather "
+               + "than what came out. "
                + "Capped at \(model.entries.count > 0 ? "500" : "500") entries; password "
                + "managers and private messages are never recorded.")
                 .font(.system(size: 11.5))
@@ -170,7 +171,7 @@ public struct HistoryView: View {
                 .font(.system(size: 13)).foregroundStyle(c(.muted))
             Text(model.entries.isEmpty
                  ? "Hold ⌥Space anywhere and speak."
-                 : "Try a word you remember saying — search covers the raw transcript too.")
+                 : "Try a word you remember saying. Search covers the raw transcript too.")
                 .font(.system(size: 11.5)).foregroundStyle(c(.faint))
         }
         .padding(.top, 20)
@@ -206,7 +207,7 @@ public struct HistoryView: View {
                                  entry.script == .arabic ? .rightToLeft : .leftToRight)
                     .fixedSize(horizontal: false, vertical: true)
                 if entry.guardRejected {
-                    Text("cleanup rejected — your words were kept")
+                    Text("cleanup rejected, your words were kept")
                         .font(.system(size: 10.5).monospaced())
                         .foregroundStyle(c(.clay))
                 } else if entry.wasCleaned {

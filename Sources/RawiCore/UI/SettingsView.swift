@@ -147,7 +147,7 @@ public struct SettingsView: View {
                 ScreenHeader(title: "Settings", appearance: model.appearance,
                              showInfo: $model.showInfo,
                              info: "Everything here writes to ~/.config/rawi/config.json, "
-                                 + "which the running app watches — changes take effect as you "
+                                 + "which the running app watches, so changes take effect as you "
                                  + "make them, with no restart. The file stays hand-editable, "
                                  + "and it holds a few things this screen does not show, like "
                                  + "the cleanup prompt itself.")
@@ -272,7 +272,7 @@ public struct SettingsView: View {
 
     private func engineName(_ kind: EngineKind) -> String {
         switch kind {
-        case .whispercpp: "whisper.cpp — on this Mac"
+        case .whispercpp: "whisper.cpp, on this Mac"
         case .groq: "Groq API"
         case .openai: "OpenAI API"
         }
@@ -283,7 +283,7 @@ public struct SettingsView: View {
     private var cleanupSection: some View {
         section("Cleanup and transforms", "The language model that removes fillers, fixes "
                                         + "punctuation, and runs transforms. Transforms "
-                                        + "always use the Arabic-capable model — rewriting "
+                                        + "always use the Arabic-capable model, because rewriting "
                                         + "is harder than cleaning.") {
             VStack(alignment: .leading, spacing: 10) {
                 picker(CleanupKind.allCases.map { ($0.rawValue, cleanupName($0)) },
@@ -318,8 +318,8 @@ public struct SettingsView: View {
 
     private func cleanupName(_ kind: CleanupKind) -> String {
         switch kind {
-        case .off: "Off — insert exactly what was heard"
-        case .ollama: "Ollama — on this Mac"
+        case .off: "Off, insert exactly what was heard"
+        case .ollama: "Ollama, on this Mac"
         case .openai: "OpenAI API"
         case .anthropic: "Anthropic API"
         }
@@ -347,7 +347,7 @@ public struct SettingsView: View {
     // MARK: - The file itself
 
     private var fileSection: some View {
-        section("The file", "This screen does not cover everything — the cleanup prompt, "
+        section("The file", "This screen does not cover everything. The cleanup prompt, "
                           + "the history cap and the excluded apps live in the file.") {
             HStack(spacing: 9) {
                 Button {

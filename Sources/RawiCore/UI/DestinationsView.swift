@@ -28,7 +28,7 @@ public struct DestinationsView: View {
             ScreenHeader(title: "Destinations", appearance: model.appearance,
                          showInfo: $model.showInfo,
                          info: "Rawi reads which app you are in, and for a browser, which page. "
-                             + "Rules change structure and register only — they never add facts, "
+                             + "Rules change structure and register only. They never add facts, "
                              + "and the guard still protects your words. Page-level is as "
                              + "fine-grained as this can get: knowing which field you are in "
                              + "needs Accessibility, which this Mac cannot grant.")
@@ -86,7 +86,7 @@ public struct DestinationsView: View {
             signal("Which app", "free", .verdigris,
                    "Read from the system. No permission at all.")
             signal("Which page", "one click", .saffron,
-                   "The browser tab URL. You approve Brave once — no administrator.")
+                   "The browser tab URL. You approve Brave once, with no administrator.")
             signal("Which field", "blocked", .clay,
                    "Needs Accessibility, which this Mac will not grant.")
         }

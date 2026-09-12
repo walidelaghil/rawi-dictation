@@ -19,6 +19,10 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
 
     private var permissions: PermissionStatus = Permissions.current()
     private var state: DictationState = .idle
+    /// The level the status icon is currently drawn at. Held so the icon is only
+    /// redrawn when the shape would visibly change — the menu bar is not a place
+    /// to repaint sixty times a second.
+    private var drawnLevel: Double = 0
 
     public var onAction: ((String) -> Void)?
     public var onQuit: (() -> Void)?
@@ -80,12 +84,23 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
         // The Rawi mark, not an SF Symbol: the menu bar is where this app lives, so
         // it should be recognisable there rather than borrowing a generic mic. State
         // rides on colour instead of on a different glyph — see RawiMark.
+        drawnLevel = state.recordingMode == nil ? 0 : drawnLevel
         button.image = RawiMark.statusImage(state: state, enabled: controller.isEnabled,
-                                            microphoneGranted: permissions.microphone)
-        button.toolTip = "Rawi — \(PillLabel.text(for: state))"
+                                            microphoneGranted: permissions.microphone,
+                                            level: drawnLevel)
+        button.toolTip = "Rawi: \(PillLabel.text(for: state))"
     }
 
     public func updateLive(level: Double, elapsed: Duration, detectedLanguage: String?) {
+        // The icon follows your voice while you hold the key. Redrawn only when
+        // the change is large enough to see: at 30 updates a second, repainting
+        // the status item for a 0.01 difference is battery spent on nothing.
+        if state.recordingMode != nil, abs(level - drawnLevel) > 0.08 {
+            drawnLevel = level
+            statusItem.button?.image = RawiMark.statusImage(
+                state: state, enabled: controller.isEnabled,
+                microphoneGranted: permissions.microphone, level: level)
+        }
         panel.level = level
         panel.elapsed = elapsed
         panel.detectedLanguage = detectedLanguage
@@ -159,7 +174,7 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
             header.isEnabled = false
             menu.addItem(header)
             for pane in Permissions.SettingsPane.allCases where isMissing(pane) {
-                let item = NSMenuItem(title: "  Grant \(pane.title) — \(pane.rationale)",
+                let item = NSMenuItem(title: "  Grant \(pane.title): \(pane.rationale)",
                                       action: #selector(openPane(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = pane.rawValue

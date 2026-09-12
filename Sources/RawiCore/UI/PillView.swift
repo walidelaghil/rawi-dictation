@@ -15,6 +15,21 @@ public enum PillLabel {
         }
     }
 
+    /// The first words of what just landed, for the moment after a dictation.
+    ///
+    /// Rawi's last word used to be "Copied - press Command V", which answers a
+    /// question nobody has. What you want to know is whether it heard you.
+    public static func landed(_ text: String, limit: Int = 42) -> String {
+        let flat = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard !flat.isEmpty else { return "Copied" }
+        guard flat.count > limit else { return flat }
+        // Cut at a word: a pill ending mid-syllable reads as a rendering bug.
+        let head = flat.prefix(limit)
+        let cut = head.lastIndex(of: " ").map { String(head[head.startIndex..<$0]) }
+            ?? String(head)
+        return cut + "…"
+    }
+
     /// Only in the last minute of a hands-free session — the pill stays quiet
     /// until the auto-stop is genuinely near.
     public static func countdown(_ remaining: Duration) -> String? {
@@ -48,6 +63,9 @@ public final class PillModel: ObservableObject {
     @Published public var remaining: Duration?
     /// True once the cursor has genuinely rested on the pill — see `PillProximity`.
     @Published public var armed: Bool = false
+    /// Whether the text still needs pasting by hand, which is only true where
+    /// Accessibility was never granted.
+    @Published public var pasteHint: Bool = false
     public init() {}
 }
 
@@ -77,6 +95,17 @@ public struct PillView: View {
                         .font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(RawiColors.pill(.saffron))
                 }
+            }
+
+            // The paste hint is secondary now, and only appears where it is true:
+            // on a Mac that can auto-paste, there is nothing to press.
+            if model.pasteHint, case .notice = model.state {
+                Text("⌘V")
+                    .font(.system(size: 10.5, weight: .medium).monospaced())
+                    .foregroundStyle(RawiColors.pill(.saffron))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Capsule().fill(RawiColors.pill(.raised)))
+                    .transition(.opacity)
             }
 
             if model.armed {

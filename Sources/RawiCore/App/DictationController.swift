@@ -340,17 +340,18 @@ public final class DictationController {
             durationSeconds: Double(recording.duration.components.seconds),
             peakLevel: recording.peakLevel, guardRejected: rejected))
 
+        try? FileManager.default.removeItem(at: recording.url)
         if pasted {
             log.info("Inserted \(text.count) characters")
-            try? FileManager.default.removeItem(at: recording.url)
             state = .idle
         } else {
             log.warn("""
                 Could not paste: Accessibility permission is not granted. \
-                The text is on the clipboard — press Cmd-V to insert it.
+                The text is on the clipboard. Press Cmd-V to insert it.
                 """)
-            try? FileManager.default.removeItem(at: recording.url)
-            state = .error("Copied — press ⌘V")
+            // Ends on your words rather than on an instruction: what you want to
+            // know here is whether it heard you, not how to paste.
+            state = .notice(PillLabel.landed(text))
             scheduleErrorClear()
         }
         currentRecordingURL = nil
@@ -388,7 +389,7 @@ public final class DictationController {
                 """)
             remember(outcome.after)
             onTransform?(outcome)
-            state = .notice("Rewritten — press ⌘V")
+            state = .notice(PillLabel.landed(outcome.after))
             scheduleErrorClear()
         } catch {
             if cancelled { state = .idle; return }

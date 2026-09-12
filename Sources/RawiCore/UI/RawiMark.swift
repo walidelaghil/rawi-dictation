@@ -17,6 +17,28 @@ public enum RawiMark {
         CGPoint(x: 22, y: 12),
     ]
 
+    /// The mark with its two interior peaks driven by an audio level.
+    ///
+    /// The icon is a waveform, so while you are speaking it may as well be *your*
+    /// waveform. This is the only always-visible surface Rawi has, and it answers
+    /// the question you actually have while holding the key — is it hearing me —
+    /// without opening anything.
+    ///
+    /// Only the two interior points move. The ends are pinned so the silhouette
+    /// stays the same glyph rather than becoming an animation that happens to
+    /// start from the logo.
+    public static func svgPoints(level: Double) -> [CGPoint] {
+        let amount = min(max(level, 0), 1)
+        guard amount > 0 else { return svgPoints }
+        var points = svgPoints
+        // Point 2 is the trough at y=7, point 3 the crest at y=17. A loud frame
+        // pushes them apart; the travel is small on purpose, because a menu bar
+        // icon that flails is noise.
+        points[2].y = 7 - amount * 4
+        points[3].y = 17 + amount * 4
+        return points
+    }
+
     /// Stroke width in the 24-unit space. The canvas draws 1.7 at 22px; this is the
     /// same optical weight at 18px, the menu-bar size.
     static let strokeWidthUnits: CGFloat = 2.0
@@ -26,12 +48,13 @@ public enum RawiMark {
     /// `strokeScale` thickens the line for small renders. A stroke that scales
     /// purely with the box disappears at 16pt — the icon becomes a smudge — so the
     /// small sizes get a heavier line, which is what hinting does for type.
-    public static func path(in rect: CGRect, strokeScale: CGFloat = 1) -> NSBezierPath {
+    public static func path(in rect: CGRect, strokeScale: CGFloat = 1,
+                            level: Double = 0) -> NSBezierPath {
         let scale = min(rect.width, rect.height) / 24
         let offsetX = rect.minX + (rect.width - 24 * scale) / 2
         let offsetY = rect.minY + (rect.height - 24 * scale) / 2
         let path = NSBezierPath()
-        for (index, point) in svgPoints.enumerated() {
+        for (index, point) in svgPoints(level: level).enumerated() {
             // 24 - y: SVG counts down from the top, AppKit up from the bottom.
             let mapped = CGPoint(x: offsetX + point.x * scale,
                                  y: offsetY + (24 - point.y) * scale)
@@ -50,11 +73,11 @@ public enum RawiMark {
     /// the states where colour *is* the message — recording, or a missing
     /// permission — and those deliberately stop being templates.
     public static func image(size: CGFloat = 18, tint: NSColor? = nil,
-                             alpha: CGFloat = 1) -> NSImage {
+                             alpha: CGFloat = 1, level: Double = 0) -> NSImage {
         let image = NSImage(size: NSSize(width: size, height: size),
                             flipped: false) { rect in
             (tint ?? .black).withAlphaComponent(alpha).setStroke()
-            path(in: rect).stroke()
+            path(in: rect, level: level).stroke()
             return true
         }
         image.isTemplate = tint == nil
@@ -68,14 +91,17 @@ public enum RawiMark {
     /// Colour is not decoration here. An app that shows its logo unchanged while it
     /// cannot hear you is worse than one with no icon at all.
     public static func statusImage(state: DictationState, enabled: Bool,
-                                   microphoneGranted: Bool, size: CGFloat = 18) -> NSImage {
+                                   microphoneGranted: Bool, size: CGFloat = 18,
+                                   level: Double = 0) -> NSImage {
         guard enabled else { return image(size: size, alpha: 0.35) }
         guard microphoneGranted else {
             return image(size: size, tint: RawiColors.nsColor(.clay, .dark))
         }
         switch state {
         case .recording:
-            return image(size: size, tint: RawiColors.nsColor(.saffron, .dark))
+            // The level only reaches the icon here. An idle mark twitching with
+            // room noise would be a distraction rather than feedback.
+            return image(size: size, tint: RawiColors.nsColor(.saffron, .dark), level: level)
         case .transcribing, .cleaning, .inserting, .transforming:
             return image(size: size, tint: RawiColors.nsColor(.lapis, .dark))
         case .error:

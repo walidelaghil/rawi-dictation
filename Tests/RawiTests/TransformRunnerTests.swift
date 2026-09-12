@@ -226,7 +226,7 @@ private final class SlowRewriter: CleanupProvider, @unchecked Sendable {
         #expect(seen.contains(.transforming))
         #expect(!seen.contains(.cleaning))          // a transform is not a cleanup
         #expect(!seen.contains(.inserting))
-        #expect(ctl.state == .notice("Rewritten — press ⌘V"))
+        #expect(ctl.state == .notice("rewritten"))   // the rewrite itself, not a hint
     }
 
     @Test("a double-tapped transform key is still a transform") func doubleTapKeepsIntent() async {

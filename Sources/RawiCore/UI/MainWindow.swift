@@ -178,10 +178,10 @@ struct MainWindowView: View {
             Spacer()
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("Everything on device")
+                Text("Stays on this Mac")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(c(.verdigris))
-                Text("No account · no upload · no sync")
+                Text("No account, no upload, no sync")
                     .font(.system(size: 10.5))
                     .foregroundStyle(c(.faint))
             }

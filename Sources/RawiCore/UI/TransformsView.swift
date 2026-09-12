@@ -79,7 +79,7 @@ public struct TransformsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(title: "Transforms", appearance: model.appearance,
                              showInfo: $model.showInfo,
-                             info: "Copy some text, hold ⌃⌥Space and say what to do with it — "
+                             info: "Copy some text, hold ⌃⌥Space and say what to do with it. "
                                  + "the clipboard comes back rewritten. Saying a transform's "
                                  + "name uses its tuned instruction; anything else is used as "
                                  + "you said it. The original goes to History before the model "
@@ -217,12 +217,12 @@ public struct TransformsView: View {
             Text("Add a transform").font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(c(.bone))
             HStack(spacing: 9) {
-                TextField("Name — what you will say", text: $model.draftName)
+                TextField("Name, what you will say", text: $model.draftName)
                     .textFieldStyle(.plain).font(.system(size: 12))
                     .padding(8).frame(width: 200)
                     .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
                         .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
-                TextField("Instruction — what the model should do", text: $model.draftInstruction)
+                TextField("Instruction, what the model should do", text: $model.draftInstruction)
                     .textFieldStyle(.plain).font(.system(size: 12))
                     .padding(8)
                     .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))

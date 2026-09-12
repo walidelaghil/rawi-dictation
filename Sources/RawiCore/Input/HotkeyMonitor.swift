@@ -13,7 +13,7 @@ public enum HotkeyError: Error, LocalizedError {
             + "System Settings → Privacy & Security → Input Monitoring."
         case .carbonRegistrationFailed(let status):
             "Could not register the global hotkey (OSStatus \(status)). Another app "
-            + "is probably already using that combination — pick a different one."
+            + "is probably already using that combination. Pick a different one."
         case .carbonNeedsCombination(let hotkey):
             "“\(hotkey)” cannot be used without Input Monitoring. The permission-free "
             + "hotkey backend needs a modifier combination such as ctrl+option+space."

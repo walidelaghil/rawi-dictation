@@ -143,7 +143,7 @@ public struct SnippetsScreen: View {
 
             if model.snippets.isEmpty {
                 EmptyHint(title: "No snippets yet.",
-                          detail: "Try “my email” or “my calendar” — anything you say often.",
+                          detail: "Try “my email” or “my calendar”. Anything you say often.",
                           appearance: model.appearance)
             } else {
                 RowGroup(appearance: model.appearance) {

@@ -18,8 +18,9 @@ public final class PillWindow {
     public init() {}
 
     public func show(state: DictationState, level: Double,
-                     elapsed: Duration, remaining: Duration?) {
-        update(state: state, level: level, elapsed: elapsed, remaining: remaining)
+                     elapsed: Duration, remaining: Duration?, pasteHint: Bool = false) {
+        update(state: state, level: level, elapsed: elapsed, remaining: remaining,
+               pasteHint: pasteHint)
         let panel = panel ?? makePanel()
         self.panel = panel
         reposition(panel)
@@ -28,7 +29,8 @@ public final class PillWindow {
     }
 
     public func update(state: DictationState, level: Double,
-                       elapsed: Duration, remaining: Duration?) {
+                       elapsed: Duration, remaining: Duration?, pasteHint: Bool = false) {
+        model.pasteHint = pasteHint
         model.state = state
         model.level = level
         model.elapsed = elapsed

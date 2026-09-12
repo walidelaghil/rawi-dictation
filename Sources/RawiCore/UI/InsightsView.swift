@@ -31,7 +31,7 @@ public struct InsightsView: View {
                 ScreenHeader(title: "Insights", appearance: model.appearance,
                              showInfo: $model.showInfo,
                              info: "Every number here is computed from your history, not "
-                                 + "accumulated in a counter — delete a dictation and these "
+                                 + "accumulated in a counter, so deleting a dictation changes them "
                                  + "change to match. Words per minute is words over time "
                                  + "actually spoken. Time saved is an estimate against a typing "
                                  + "speed you set. Transforms are excluded from the spoken "
@@ -42,8 +42,8 @@ public struct InsightsView: View {
                               detail: "Dictate something and this fills in.",
                               appearance: model.appearance)
                 } else {
-                    tiles
                     streak
+                    tiles
                     apps
                 }
                 Spacer(minLength: 0)
@@ -74,8 +74,7 @@ public struct InsightsView: View {
                         ? "no cleanup was ever rejected"
                         : "\(i.cleanupsRejected) rejected, raw kept instead", .verdigris)
                 tile("\(i.activeDays.count)", "days used",
-                     "longest run \(i.longestStreak) day\(i.longestStreak == 1 ? "" : "s")",
-                     .bone)
+                     "since you started", .bone)
             }
         }
     }
@@ -135,40 +134,59 @@ public struct InsightsView: View {
     // MARK: - Streak
 
     private var streak: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("\(i.currentStreak) day\(i.currentStreak == 1 ? "" : "s") running")
-                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(c(.bone))
-                Text(i.currentStreak >= i.longestStreak
-                        ? "Your longest run so far"
-                        : "Your longest was \(i.longestStreak)")
-                    .font(.system(size: 11)).foregroundStyle(c(.faint))
-            }
-            Spacer()
-            HStack(spacing: 4) {
-                ForEach(lastFortnight, id: \.key) { day in
-                    RoundedRectangle(cornerRadius: Radius.mark)
-                        .fill(day.active ? c(.saffron) : c(.edge))
-                        .frame(width: 11, height: 22)
-                        .help(day.key)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("\(i.currentStreak)")
+                    .font(.system(size: 34, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(c(.saffron))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(i.currentStreak == 1 ? "day running" : "days running")
+                        .font(.system(size: 12.5)).foregroundStyle(c(.bone))
+                    Text(i.currentStreak >= i.longestStreak
+                            ? "your longest run so far"
+                            : "your longest was \(i.longestStreak)")
+                        .font(.system(size: 11)).foregroundStyle(c(.faint))
                 }
+                Spacer()
+            }
+
+            // Eight weeks of days, one column per week, oldest on the left. This
+            // is the only picture on the screen, so it gets the room: the tiles
+            // below are numbers you check, this is a shape you recognise.
+            HStack(alignment: .bottom, spacing: 4) {
+                ForEach(weeks, id: \.first!.key) { week in
+                    VStack(spacing: 4) {
+                        ForEach(week, id: \.key) { day in
+                            // The unlit days are a faint field, not inventory to
+                            // count: the shape you are meant to see is the run.
+                            RoundedRectangle(cornerRadius: Radius.mark)
+                                .fill(day.active ? c(.saffron) : c(.edge).opacity(0.3))
+                                .frame(width: 13, height: 13)
+                                .help(day.key)
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
             }
         }
-        .padding(14)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
             .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
     }
 
-    private var lastFortnight: [(key: String, active: Bool)] {
+    /// Eight weeks ending today, as columns of seven.
+    private var weeks: [[(key: String, active: Bool)]] {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let today = Calendar.current.startOfDay(for: Date())
-        return (0..<14).reversed().compactMap { offset in
+        let days: [(key: String, active: Bool)] = (0..<56).reversed().compactMap { offset in
             guard let date = Calendar.current.date(byAdding: .day, value: -offset, to: today)
             else { return nil }
             let key = formatter.string(from: date)
             return (key, i.activeDays.contains(key))
         }
+        return stride(from: 0, to: days.count, by: 7).map { Array(days[$0..<min($0 + 7, days.count)]) }
     }
 
     // MARK: - Apps
@@ -185,7 +203,7 @@ public struct InsightsView: View {
                         .lineLimit(1)
                     GeometryReader { geo in
                         RoundedRectangle(cornerRadius: Radius.mark)
-                            .fill(c(.lapis))
+                            .fill(c(.saffron).opacity(share.share >= 0.25 ? 0.9 : 0.55))
                             .frame(width: max(2, geo.size.width * share.share), height: 8)
                             .frame(height: 8, alignment: .leading)
                     }

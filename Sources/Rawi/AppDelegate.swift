@@ -578,7 +578,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let limit = Duration.seconds(config.maxSessionSeconds)
             remaining = limit - elapsed
         }
-        pill.show(state: state, level: recorder.level, elapsed: elapsed, remaining: remaining)
+        // The ⌘V hint only appears where it is true: with Accessibility granted
+        // the text is already in the document.
+        pill.show(state: state, level: recorder.level, elapsed: elapsed,
+                  remaining: remaining, pasteHint: !Permissions.current().accessibility)
         menuBar?.updateLive(level: recorder.level, elapsed: elapsed,
                             detectedLanguage: controller.lastDetectedLanguage)
     }

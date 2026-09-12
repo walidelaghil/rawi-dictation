@@ -136,7 +136,8 @@ import Foundation
         await g.ctl.handle(.beganHold)
         await g.ctl.handle(.endedHold)
         #expect(g.log.lines.contains { $0.lowercased().contains("accessibility") })
-        #expect(g.ctl.state == .error("Copied — press ⌘V"))
+        // The pill ends on the words that landed, not on an instruction.
+        #expect(g.ctl.state == .notice("Cleaned transcript."))
     }
 
     @Test("a second beganHold while recording is ignored") func reentrancy() async {
