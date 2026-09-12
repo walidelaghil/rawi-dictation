@@ -13,6 +13,7 @@ public final class MenuPanelModel: ObservableObject {
     public var onAction: ((String) -> Void)?
     public var onCopy: ((RecentDictation) -> Void)?
     public var onSettings: (() -> Void)?
+    public var onOpenWindow: (() -> Void)?
     public var onQuit: (() -> Void)?
 
     public init() {}
@@ -203,12 +204,17 @@ public struct MenuPanelView: View {
 
     private var footer: some View {
         HStack(spacing: 14) {
+            Button { model.onOpenWindow?() } label: {
+                Text("Open Rawi").font(.system(size: 12)).foregroundStyle(c(.muted))
+            }
+            .buttonStyle(.plain)
             Button { model.onSettings?() } label: {
-                Label("Settings", systemImage: "gearshape")
+                Image(systemName: "gearshape")
                     .font(.system(size: 12))
                     .foregroundStyle(c(.muted))
             }
             .buttonStyle(.plain)
+            .help("Settings")
             Spacer()
             Button { model.onQuit?() } label: {
                 Text("Quit").font(.system(size: 12)).foregroundStyle(c(.faint))

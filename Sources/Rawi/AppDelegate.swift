@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recorder = AudioRecorder()
     private let inserter: TextInserter
     private let pill = PillWindow()
+    private var history: HistoryStore!
+    private var mainWindow: MainWindow!
 
     private var config = Config.default
     private var controller: DictationController!
@@ -84,7 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// app following the OS.
     private func applyAppearance() {
         NSApp.appearance = config.appearance.nsAppearanceName.map { NSAppearance(named: $0) } ?? nil
-        menuBar?.setAppearance(config.appearance.resolved(systemIsDark: Appearance.systemIsDark))
+        let resolved = config.appearance.resolved(systemIsDark: Appearance.systemIsDark)
+        menuBar?.setAppearance(resolved)
+        mainWindow?.setAppearance(resolved)
     }
 
     /// Follow a live OS light/dark switch without a restart, when set to `system`.
@@ -104,6 +108,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildGraph() {
         let env = DotEnv.load(from: Config.envFile)
+        history = HistoryStore(limit: config.history.limit)
+        mainWindow = MainWindow(
+            store: history,
+            appearance: config.appearance.resolved(systemIsDark: Appearance.systemIsDark))
         let engine = makeEngine(env: env)
         let cleanup = makeCleanup(env: env)
 
@@ -117,6 +125,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onStateChange = { [weak self] state in
             self?.stateChanged(state)
         }
+        controller.onRecord = { [weak self] entry in
+            guard let self else { return }
+            guard self.config.history.enabled else { return }
+            // Exclusions are checked here rather than in the controller: what is
+            // private is a policy question, not a dictation one.
+            guard !self.config.history.excludes(entry.bundleID) else {
+                self.log.info("Not recorded — \(entry.appName ?? "that app") is excluded")
+                return
+            }
+            self.history.append(entry)
+            self.mainWindow.reload()
+        }
         menuBar = MenuBarController(controller: controller, log: log)
         menuBar.onAppearanceChange = { [weak self] appearance in
             guard let self else { return }
@@ -124,6 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? self.config.save()
             self.applyAppearance()
         }
+        menuBar.onOpenWindow = { [weak self] in self?.mainWindow.show() }
         menuBar.onAction = { [weak self] id in
             guard let self else { return }
             switch id {

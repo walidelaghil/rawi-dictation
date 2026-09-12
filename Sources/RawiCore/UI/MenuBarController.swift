@@ -23,6 +23,7 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
     public var onAction: ((String) -> Void)?
     public var onAppearanceChange: ((Appearance) -> Void)?
     public var onQuit: (() -> Void)?
+    public var onOpenWindow: (() -> Void)?
 
     public init(controller: DictationController, log: any Logging) {
         self.controller = controller
@@ -45,6 +46,10 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
             self?.log.info("Re-copied a recent dictation")
         }
         panel.onSettings = { [weak self] in self?.showSettingsMenu() }
+        panel.onOpenWindow = { [weak self] in
+            self?.popover.performClose(nil)
+            self?.onOpenWindow?()
+        }
         panel.onQuit = { [weak self] in
             self?.onQuit?()
             NSApp.terminate(nil)
