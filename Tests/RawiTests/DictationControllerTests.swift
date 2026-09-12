@@ -235,3 +235,87 @@ import Foundation
         #expect(ctl.recent.first?.script == .arabic)
     }
 }
+
+@MainActor
+@Suite("History recording") struct HistoryRecordingTests {
+    func rig(cleanup: String = "Cleaned text.", fails: Bool = false,
+             raw: String = "um raw transcript")
+        -> (DictationController, FakeInserter, Recorded) {
+        let r = FakeRecorder(), e = FakeEngine(), c = FakeCleanup()
+        let i = FakeInserter(), l = FakeLog()
+        e.result = .success(raw)
+        c.result = fails ? .failure(CleanupError.badResponse("x")) : .success(cleanup)
+        let ctl = DictationController(config: .default, recorder: r, engine: e,
+                                      cleanup: c, inserter: i, log: l)
+        ctl.frontmostApp = { ("Slack", "com.tinyspeck.slackmacgap") }
+        let box = Recorded()
+        ctl.onRecord = { box.append($0) }
+        return (ctl, i, box)
+    }
+
+    @Test("an inserted dictation is recorded with both texts") func records() async {
+        let (ctl, _, box) = rig()
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        #expect(box.entries.count == 1)
+        let e = box.entries[0]
+        #expect(e.cleaned == "Cleaned text.")
+        #expect(e.raw == "um raw transcript")     // what whisper actually heard
+        #expect(e.appName == "Slack")
+        #expect(e.bundleID == "com.tinyspeck.slackmacgap")
+        #expect(!e.guardRejected)
+    }
+
+    @Test("a dictation that never landed is not recorded") func notPasted() async {
+        let (ctl, inserter, box) = rig()
+        inserter.succeed = false
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        // It reached the clipboard, but history records what happened in a
+        // document, not what was attempted.
+        #expect(box.entries.isEmpty)
+    }
+
+    @Test("a guard rejection is recorded as such") func guardFlag() async {
+        // Cleanup that loses the dictation is discarded and the record says so.
+        // The raw must be long enough for the guard to have an opinion — it
+        // deliberately does not judge transcripts of a few words.
+        let long = "we should move the deadline to Friday because the API work is not done"
+        let (ctl, _, box) = rig(cleanup: "banana", raw: long)
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        #expect(box.entries.first?.guardRejected == true)
+        #expect(box.entries.first?.cleaned == long)
+    }
+
+    @Test("a normal cleanup is not flagged as a rejection") func notRejected() async {
+        let long = "we should move the deadline to Friday because the API work is not done"
+        let (ctl, _, box) = rig(cleanup: "We should move the deadline to Friday, "
+                                       + "because the API work is not done.", raw: long)
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        #expect(box.entries.first?.guardRejected == false)
+    }
+
+    @Test("the app is captured at key-press, not at insert") func capturedEarly() async {
+        let (ctl, _, box) = rig()
+        await ctl.handle(.beganHold)
+        ctl.frontmostApp = { ("Finder", "com.apple.finder") }   // focus moved mid-dictation
+        await ctl.handle(.endedHold)
+        #expect(box.entries.first?.appName == "Slack")
+    }
+
+    @Test("script is recorded so history can set it in the right face") func script() async {
+        let (ctl, _, box) = rig(cleanup: "يعني تمام كذا")
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        #expect(box.entries.first?.script == .arabic)
+    }
+}
+
+final class Recorded: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _entries: [HistoryEntry] = []
+    var entries: [HistoryEntry] { lock.withLock { _entries } }
+    func append(_ e: HistoryEntry) { lock.withLock { _entries.append(e) } }
+}

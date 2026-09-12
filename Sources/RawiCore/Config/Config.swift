@@ -151,6 +151,7 @@ public struct Config: Codable, Sendable, Equatable {
     public var api: APISettings
     public var cleanup: CleanupSettings
     public var output: OutputSettings
+    public var history: HistorySettings
 
     public init(appearance: Appearance = .system,
                 hotkey: String, doubleTapWindowMs: Int, minHoldMs: Int,
@@ -160,7 +161,8 @@ public struct Config: Codable, Sendable, Equatable {
                 cancelHotkey: String = "ctrl+option+escape",
                 engine: EngineKind,
                 whispercpp: WhisperCppSettings, api: APISettings,
-                cleanup: CleanupSettings, output: OutputSettings) {
+                cleanup: CleanupSettings, output: OutputSettings,
+                history: HistorySettings = Config.defaultHistory) {
         self.appearance = appearance
         self.hotkey = hotkey
         self.doubleTapWindowMs = doubleTapWindowMs
@@ -175,6 +177,7 @@ public struct Config: Codable, Sendable, Equatable {
         self.api = api
         self.cleanup = cleanup
         self.output = output
+        self.history = history
     }
 
     /// Tolerant decoding: a config missing any key still loads, filling from defaults.
@@ -202,6 +205,7 @@ public struct Config: Codable, Sendable, Equatable {
         api = try c.decodeIfPresent(APISettings.self, forKey: .api) ?? d.api
         cleanup = try c.decodeIfPresent(CleanupSettings.self, forKey: .cleanup) ?? d.cleanup
         output = try c.decodeIfPresent(OutputSettings.self, forKey: .output) ?? d.output
+        history = try c.decodeIfPresent(HistorySettings.self, forKey: .history) ?? d.history
     }
 
     // MARK: - Defaults
@@ -228,6 +232,12 @@ public struct Config: Codable, Sendable, Equatable {
         restorePreviousClipboard: false,
         restoreDelayMs: 300)
 
+    public static let defaultHistory = HistorySettings(
+        enabled: true,
+        limit: 500,
+        excludedBundleIDs: ["1password", "com.apple.MobileSMS", "com.apple.iChat",
+                            "keychain", "com.lastpass", "com.bitwarden"])
+
     public static let `default` = Config(
         appearance: .system,
         hotkey: "fn",
@@ -242,7 +252,8 @@ public struct Config: Codable, Sendable, Equatable {
         whispercpp: defaultWhisperCpp,
         api: defaultAPI,
         cleanup: defaultCleanup,
-        output: defaultOutput)
+        output: defaultOutput,
+        history: defaultHistory)
 
     // MARK: - Locations
 

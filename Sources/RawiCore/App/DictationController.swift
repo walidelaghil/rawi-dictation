@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 public enum RecordingMode: Equatable, Sendable { case pushToTalk, handsFree }
@@ -47,6 +48,20 @@ public final class DictationController {
 
     /// The language whisper detected on the last transcript, for the menu.
     public private(set) var lastDetectedLanguage: String?
+
+    /// Fired once a dictation has actually landed in a document. Not fired when
+    /// the paste failed and the text only reached the clipboard — history records
+    /// what happened, not what was attempted.
+    public var onRecord: ((HistoryEntry) -> Void)?
+
+    /// Which app had focus when the key went down. Injectable so tests do not
+    /// depend on a live workspace.
+    public var frontmostApp: () -> (name: String?, bundleID: String?) = {
+        let app = NSWorkspace.shared.frontmostApplication
+        return (app?.localizedName, app?.bundleIdentifier)
+    }
+
+    private var captured: (name: String?, bundleID: String?) = (nil, nil)
 
     private var currentRecordingURL: URL?
     private var cancelled = false
@@ -126,6 +141,9 @@ public final class DictationController {
             .appendingPathComponent("dictation-\(Int(Date().timeIntervalSince1970)).wav")
         do {
             cancelled = false
+            // Captured at key-press, not at insert: focus can move while you speak,
+            // and the app you were looking at is the one that shaped the dictation.
+            captured = frontmostApp()
             try recorder.start(to: url)
             currentRecordingURL = url
             let now = ContinuousClock.now
@@ -215,6 +233,7 @@ public final class DictationController {
         // 2. Clean up. A cleanup failure must never lose the dictation, so the raw
         //    transcript is inserted instead.
         var text = raw
+        var rejected = false
         state = .cleaning
         do {
             let candidate = try await cleanup.clean(raw)
@@ -225,6 +244,7 @@ public final class DictationController {
             case .accept:
                 text = candidate
             case .reject(let reason):
+                rejected = true
                 log.warn("Cleanup rejected (\(reason)); inserting raw transcript")
             }
         } catch {
@@ -240,6 +260,12 @@ public final class DictationController {
         if pasted {
             log.info("Inserted \(text.count) characters")
             remember(text)
+            onRecord?(HistoryEntry(
+                at: Date(), cleaned: text, raw: raw,
+                script: ScriptDetector.detect(text),
+                appName: captured.name, bundleID: captured.bundleID,
+                durationSeconds: Double(recording.duration.components.seconds),
+                peakLevel: recording.peakLevel, guardRejected: rejected))
             try? FileManager.default.removeItem(at: recording.url)
             state = .idle
         } else {
