@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let inserter: TextInserter
     private let pill = PillWindow()
     private var history: HistoryStore!
+    private var vocabulary: VocabularyStore!
     private var mainWindow: MainWindow!
 
     private var config = Config.default
@@ -109,8 +110,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildGraph() {
         let env = DotEnv.load(from: Config.envFile)
         history = HistoryStore(limit: config.history.limit)
+        vocabulary = VocabularyStore()
         mainWindow = MainWindow(
-            store: history,
+            store: history, vocabularyStore: vocabulary,
             appearance: config.appearance.resolved(systemIsDark: Appearance.systemIsDark))
         let engine = makeEngine(env: env)
         let cleanup = makeCleanup(env: env)
@@ -125,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onStateChange = { [weak self] state in
             self?.stateChanged(state)
         }
+        controller.vocabulary = { [weak self] in self?.vocabulary.snapshot() ?? .empty }
         controller.onRecord = { [weak self] entry in
             guard let self else { return }
             guard self.config.history.enabled else { return }

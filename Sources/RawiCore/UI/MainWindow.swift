@@ -10,17 +10,22 @@ import SwiftUI
 public final class MainWindow: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let model: HistoryViewModel
+    private let vocabulary: VocabularyViewModel
     private let store: HistoryStore
 
-    public init(store: HistoryStore, appearance: ResolvedAppearance) {
+    public init(store: HistoryStore, vocabularyStore: VocabularyStore,
+                appearance: ResolvedAppearance) {
         self.store = store
         self.model = HistoryViewModel(store: store)
+        self.vocabulary = VocabularyViewModel(store: vocabularyStore, history: store)
         super.init()
         model.appearance = appearance
+        vocabulary.appearance = appearance
     }
 
     public func show() {
         model.reload()
+        vocabulary.reload()
         let window = window ?? makeWindow()
         self.window = window
         window.makeKeyAndOrderFront(nil)
@@ -29,10 +34,11 @@ public final class MainWindow: NSObject, NSWindowDelegate {
 
     public func setAppearance(_ appearance: ResolvedAppearance) {
         model.appearance = appearance
+        vocabulary.appearance = appearance
         window?.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
     }
 
-    public func reload() { model.reload() }
+    public func reload() { model.reload(); vocabulary.reload() }
 
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
@@ -45,15 +51,32 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         window.delegate = self
         window.minSize = NSSize(width: 760, height: 460)
         window.center()
-        window.contentView = NSHostingView(rootView: MainWindowView(history: model))
+        window.contentView = NSHostingView(
+            rootView: MainWindowView(history: model, vocabulary: vocabulary))
         window.appearance = NSAppearance(
             named: model.appearance == .dark ? .darkAqua : .aqua)
         return window
     }
 }
 
+enum Screen: String, CaseIterable {
+    case history = "History"
+    case dictionary = "Dictionary"
+    case snippets = "Snippets"
+
+    var symbol: String {
+        switch self {
+        case .history: "clock"
+        case .dictionary: "character.book.closed"
+        case .snippets: "scissors"
+        }
+    }
+}
+
 struct MainWindowView: View {
     @ObservedObject var history: HistoryViewModel
+    @ObservedObject var vocabulary: VocabularyViewModel
+    @State private var screen: Screen = .history
 
     private func c(_ token: ColorToken) -> Color {
         RawiColors.color(token, history.appearance)
@@ -63,7 +86,11 @@ struct MainWindowView: View {
         HStack(spacing: 0) {
             rail
             Divider().overlay(c(.edge))
-            HistoryView(model: history)
+            switch screen {
+            case .history: HistoryView(model: history)
+            case .dictionary: DictionaryScreen(model: vocabulary)
+            case .snippets: SnippetsScreen(model: vocabulary)
+            }
         }
         .background(c(.surface))
     }
@@ -79,7 +106,14 @@ struct MainWindowView: View {
             }
             .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 16)
 
-            railRow("History", symbol: "clock", selected: true)
+            // Only built screens appear. A greyed row for an unbuilt phase is dead
+            // UI that teaches you to stop reading the rail.
+            ForEach(Screen.allCases, id: \.self) { item in
+                Button { screen = item } label: {
+                    railRow(item.rawValue, symbol: item.symbol, selected: screen == item)
+                }
+                .buttonStyle(.plain)
+            }
 
             Spacer()
 
