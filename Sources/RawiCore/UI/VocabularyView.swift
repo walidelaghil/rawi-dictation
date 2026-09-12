@@ -4,7 +4,6 @@ import SwiftUI
 public final class VocabularyViewModel: ObservableObject {
     @Published public var terms: [DictionaryTerm] = []
     @Published public var snippets: [Snippet] = []
-    @Published public var suggestions: [TermSuggestion] = []
     @Published public var appearance: ResolvedAppearance = .dark
     @Published public var showInfo = false
     @Published public var newTerm = ""
@@ -23,17 +22,13 @@ public final class VocabularyViewModel: ObservableObject {
     public func reload() {
         terms = store.terms
         snippets = store.snippets
-        suggestions = TermSuggester.suggestions(from: history.all(), known: store.terms)
     }
+
+    public var learnedCount: Int { terms.filter(\.addedAutomatically).count }
 
     public func addTerm() {
         guard store.addTerm(newTerm) else { return }
         newTerm = ""
-        reload()
-    }
-    public func accept(_ suggestion: TermSuggestion) {
-        store.addTerm(suggestion.token.capitalized,
-                      note: "seen \(suggestion.occurrences) times", automatic: true)
         reload()
     }
     public func removeTerm(_ term: DictionaryTerm) { store.removeTerm(term.id); reload() }
@@ -55,13 +50,49 @@ public struct DictionaryScreen: View {
         VStack(alignment: .leading, spacing: 16) {
             ScreenHeader(title: "Dictionary", appearance: model.appearance,
                          showInfo: $model.showInfo,
-                         info: "Your terms are applied three ways: as a hint to whisper, as a "
-                             + "glossary for the cleanup model, and — the one that always works — "
-                             + "a direct correction in code. The first two depend on the model; "
-                             + "the third does not.")
+                         info: "Rawi learns the names and jargon you actually use, from your "
+                             + "own history. A word has to recur over several days before it "
+                             + "counts, and anything close to an ordinary English word is "
+                             + "refused: enforcing the wrong spelling is worse than enforcing "
+                             + "none. Terms are applied as a hint to whisper, as a glossary for "
+                             + "the cleanup model, and as a direct correction in code. Only the "
+                             + "third always works.")
+
+            if model.terms.isEmpty {
+                EmptyHint(title: "Nothing learned yet.",
+                          detail: "Say a name a few times over a few days and it appears here. "
+                                + "You can also add one below.",
+                          appearance: model.appearance)
+            } else {
+                RowGroup(appearance: model.appearance) {
+                    ForEach(model.terms) { term in
+                      Row(appearance: model.appearance) {
+                        HStack(spacing: 11) {
+                            Text(term.term).font(.system(size: 13))
+                                .foregroundStyle(c(.bone))
+                                .frame(width: 190, alignment: .leading)
+                            Text(term.addedAutomatically
+                                 ? term.note
+                                 : (term.note.isEmpty ? "added by you" : term.note))
+                                .font(.system(size: 11))
+                                .foregroundStyle(c(.faint))
+                            Spacer(minLength: 8)
+                            Button { model.removeTerm(term) } label: {
+                                Image(systemName: "xmark").font(.system(size: 9))
+                                    .foregroundStyle(c(.faint))
+                            }
+                            .buttonStyle(.plain)
+                            .help(term.addedAutomatically
+                                  ? "Remove, and stop learning this word"
+                                  : "Remove")
+                        }
+                      }
+                    }
+                }
+            }
 
             HStack(spacing: 9) {
-                TextField("Add a term Rawi keeps getting wrong", text: $model.newTerm)
+                TextField("Add a term Rawi has not heard enough yet", text: $model.newTerm)
                     .textFieldStyle(.plain).font(.system(size: 13))
                     .foregroundStyle(c(.bone))
                     .onSubmit { model.addTerm() }
@@ -70,69 +101,10 @@ public struct DictionaryScreen: View {
                     .font(.system(size: 12)).foregroundStyle(c(.saffron))
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 8).fill(c(.ink))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c(.edge))))
+            .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
+                .overlay(RoundedRectangle(cornerRadius: Radius.control)
+                    .strokeBorder(c(.edge))))
 
-            if !model.suggestions.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("SEEN OFTEN — ADD?")
-                        .font(.system(size: 9, weight: .medium).monospaced()).tracking(1.4)
-                        .foregroundStyle(c(.faint))
-                    FlowRow(spacing: 7) {
-                        ForEach(model.suggestions) { s in
-                            Button { model.accept(s) } label: {
-                                HStack(spacing: 6) {
-                                    Text(s.token).font(.system(size: 11.5))
-                                    Text("\(s.occurrences)×")
-                                        .font(.system(size: 9.5).monospaced())
-                                        .foregroundStyle(c(.faint))
-                                }
-                                .padding(.horizontal, 9).padding(.vertical, 4)
-                                .background(Capsule().fill(c(.raised))
-                                    .overlay(Capsule().strokeBorder(
-                                        s.looksLikeName ? c(.saffron) : c(.edge))))
-                                .foregroundStyle(c(.muted))
-                            }
-                            .buttonStyle(.plain)
-                            .help("Add “\(s.token)” to the dictionary")
-                        }
-                    }
-                }
-            }
-
-            if model.terms.isEmpty {
-                EmptyHint(title: "No terms yet.",
-                          detail: "Add the names and jargon Rawi mishears. "
-                                + "Suggestions appear here once a word recurs.",
-                          appearance: model.appearance)
-            } else {
-                RowList(appearance: model.appearance) {
-                    ForEach(model.terms) { term in
-                        HStack(spacing: 11) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(term.term).font(.system(size: 13))
-                                    .foregroundStyle(c(.bone))
-                                if !term.note.isEmpty {
-                                    Text(term.note).font(.system(size: 10.5).monospaced())
-                                        .foregroundStyle(c(.faint))
-                                }
-                            }
-                            Spacer()
-                            if term.addedAutomatically {
-                                Text("SUGGESTED")
-                                    .font(.system(size: 9, weight: .medium).monospaced())
-                                    .foregroundStyle(c(.saffron))
-                            }
-                            Button { model.removeTerm(term) } label: {
-                                Image(systemName: "xmark").font(.system(size: 9))
-                                    .foregroundStyle(c(.faint))
-                            }.buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 14).padding(.vertical, 11)
-                        Divider().overlay(c(.edge))
-                    }
-                }
-            }
             Spacer()
         }
         .padding(.horizontal, 24).padding(.vertical, 22)
@@ -166,15 +138,15 @@ public struct SnippetsScreen: View {
                     .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(c(.saffron))
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 8).fill(c(.ink))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c(.edge))))
+            .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
+                .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
 
             if model.snippets.isEmpty {
                 EmptyHint(title: "No snippets yet.",
                           detail: "Try “my email” or “my calendar” — anything you say often.",
                           appearance: model.appearance)
             } else {
-                RowList(appearance: model.appearance) {
+                RowGroup(appearance: model.appearance) {
                     ForEach(model.snippets) { snippet in
                         HStack(spacing: 11) {
                             VStack(alignment: .leading, spacing: 3) {
@@ -190,8 +162,6 @@ public struct SnippetsScreen: View {
                                     .foregroundStyle(c(.faint))
                             }.buttonStyle(.plain)
                         }
-                        .padding(.horizontal, 14).padding(.vertical, 11)
-                        Divider().overlay(c(.edge))
                     }
                 }
             }
@@ -228,8 +198,8 @@ struct ScreenHeader: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(13)
                     .frame(maxWidth: 520, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
-                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+                    .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
             }
         }
     }
@@ -252,8 +222,8 @@ struct RowList<Content: View>: View {
     private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
     var body: some View {
         ScrollView { LazyVStack(spacing: 0) { content } }
-            .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+            .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+                .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
     }
 }
 

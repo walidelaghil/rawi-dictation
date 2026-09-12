@@ -133,9 +133,10 @@ func scratchSettings(_ config: Config = .default) -> SettingsViewModel {
         let second = CarbonHotkeyMonitor(keyCode: nil, modifiers: [],
                                          transformKeyCode: 49,
                                          transformModifiers: [.maskControl, .maskAlternate])
-        for id in UInt32(1)...30 where first.owns(id: id) {
+        for id in [first.ids.dictate, first.ids.cancel, first.ids.transform] {
             #expect(!second.owns(id: id))
         }
+        #expect(first.owns(id: first.ids.dictate))
         #expect(!first.handle(id: 999, kind: 0))
     }
 
@@ -143,8 +144,7 @@ func scratchSettings(_ config: Config = .default) -> SettingsViewModel {
         var pressed = false
         let monitor = CarbonHotkeyMonitor(keyCode: 49, modifiers: [.maskAlternate],
                                           onPress: { pressed = true })
-        let id = (UInt32(1)...30).first { monitor.owns(id: $0) }!
-        #expect(monitor.handle(id: id, kind: UInt32(kEventHotKeyPressed)))
+        #expect(monitor.handle(id: monitor.ids.dictate, kind: UInt32(kEventHotKeyPressed)))
         #expect(pressed)
     }
 }

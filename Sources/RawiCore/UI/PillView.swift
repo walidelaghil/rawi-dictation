@@ -108,7 +108,7 @@ public struct PillView: View {
         case .error, .notice:
             Circle().fill(accent).frame(width: 8, height: 8)
         case .idle:
-            RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 8, height: 8)
+            RoundedRectangle(cornerRadius: Radius.mark).fill(accent).frame(width: 8, height: 8)
         }
     }
 }

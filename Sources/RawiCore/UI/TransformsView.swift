@@ -127,7 +127,7 @@ public struct TransformsView: View {
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(c(.ink))
                         .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 7).fill(c(.saffron)))
+                        .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.saffron)))
                 }
                 .buttonStyle(.plain)
                 .disabled(model.trying || model.preview == nil)
@@ -151,14 +151,14 @@ public struct TransformsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(11)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(c(.surface))
-                        .overlay(RoundedRectangle(cornerRadius: 8)
+                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control)
                             .strokeBorder(c(.verdigris).opacity(0.45))))
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
     }
 
     private func field(_ label: String, text: Binding<String>, lines: Int) -> some View {
@@ -171,15 +171,15 @@ public struct TransformsView: View {
                 .scrollContentBackground(.hidden)
                 .frame(height: CGFloat(lines) * 17)
                 .padding(7)
-                .background(RoundedRectangle(cornerRadius: 8).fill(c(.surface))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c(.edge))))
+                .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
         }
     }
 
     // MARK: - List
 
     private var list: some View {
-        RowList(appearance: model.appearance) {
+        RowGroup(appearance: model.appearance) {
             ForEach(model.transforms) { transform in
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
@@ -205,8 +205,6 @@ public struct TransformsView: View {
                         }.buttonStyle(.plain).help("Delete")
                     }
                 }
-                .padding(.horizontal, 14).padding(.vertical, 11)
-                Divider().overlay(c(.edge))
             }
         }
         .frame(minHeight: 180)
@@ -222,18 +220,18 @@ public struct TransformsView: View {
                 TextField("Name — what you will say", text: $model.draftName)
                     .textFieldStyle(.plain).font(.system(size: 12))
                     .padding(8).frame(width: 200)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(c(.surface))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c(.edge))))
+                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
                 TextField("Instruction — what the model should do", text: $model.draftInstruction)
                     .textFieldStyle(.plain).font(.system(size: 12))
                     .padding(8)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(c(.surface))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c(.edge))))
+                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
                 Button { model.add() } label: {
                     Text("Add").font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(c(.ink))
                         .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(RoundedRectangle(cornerRadius: 7).fill(c(.bone)))
+                        .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.bone)))
                 }
                 .buttonStyle(.plain)
                 .disabled(!model.canAdd)
@@ -241,7 +239,7 @@ public struct TransformsView: View {
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
     }
 }

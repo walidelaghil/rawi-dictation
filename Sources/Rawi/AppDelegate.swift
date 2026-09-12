@@ -81,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // does not return until the user answers the system dialog, so
             // awaiting it here left the menu bar unrefreshed and the permission
             // state unlogged for as long as the prompt sat on screen.
+            self.learnTerms()
             self.logPermissions()
             self.menuBar.refresh(state: .idle, permissions: Permissions.current())
             self.menuBar.setRecent(self.recentFromHistory())
@@ -192,6 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             self.history.append(entry)
+            self.learnTerms()
             self.mainWindow.reload()
             self.menuBar.setRecent(self.recentFromHistory())
         }
@@ -229,6 +231,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyAppearance()
         tapPattern = TapPattern(doubleTapWindow: .milliseconds(config.doubleTapWindowMs),
                                 minHold: .milliseconds(config.minHoldMs))
+    }
+
+    /// Keeps the dictionary in step with what you actually say.
+    ///
+    /// Runs after every dictation rather than on a schedule: it is a pass over at
+    /// most 500 short strings, and a term learned an hour from now is a term that
+    /// spelled your colleague's name wrong an hour longer.
+    private func learnTerms() {
+        let learned = TermLearner.learn(from: history.all(),
+                                        known: vocabulary.terms,
+                                        blocked: vocabulary.blocked)
+        let change = vocabulary.syncLearned(learned)
+        for term in change.added { log.info("Learned “\(term)” from your own dictations") }
+        for term in change.dropped { log.info("Dropped “\(term)” — you stopped saying it") }
     }
 
     /// What the menu's Recent shows. Read from history rather than from an

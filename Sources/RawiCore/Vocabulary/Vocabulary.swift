@@ -53,6 +53,9 @@ public final class VocabularyStore: @unchecked Sendable {
     private struct Payload: Codable {
         var terms: [DictionaryTerm]
         var snippets: [Snippet]
+        /// Terms you removed. Without this, anything learned automatically comes
+        /// straight back on the next dictation and removing it means nothing.
+        var blocked: [String] = []
     }
 
     private let url: URL
@@ -69,6 +72,7 @@ public final class VocabularyStore: @unchecked Sendable {
     }
 
     public var terms: [DictionaryTerm] { lock.withLock { payload.terms } }
+    public var blocked: [String] { lock.withLock { payload.blocked } }
     public var snippets: [Snippet] { lock.withLock { payload.snippets } }
 
     @discardableResult
@@ -88,8 +92,58 @@ public final class VocabularyStore: @unchecked Sendable {
         }
     }
 
+    /// Removing a learned term also blocks it: you are telling Rawi it was wrong,
+    /// and it must not decide otherwise tomorrow. A term you typed in yourself is
+    /// simply removed — there is nothing to argue with.
     public func removeTerm(_ id: UUID) {
-        lock.withLock { payload.terms.removeAll { $0.id == id }; save() }
+        lock.withLock {
+            if let term = payload.terms.first(where: { $0.id == id }),
+               term.addedAutomatically {
+                let lower = term.term.lowercased()
+                if !payload.blocked.contains(lower) { payload.blocked.append(lower) }
+            }
+            payload.terms.removeAll { $0.id == id }
+            save()
+        }
+    }
+
+    /// Brings the learned half of the dictionary in line with the evidence.
+    ///
+    /// Terms you added by hand are never touched. Learned terms that no longer
+    /// meet the bar are dropped rather than left to accumulate: the whisper
+    /// prompt has a budget, and a term you stopped saying months ago is spending
+    /// it. Returns what changed, for the log.
+    @discardableResult
+    public func syncLearned(_ learned: [LearnedTerm]) -> (added: [String], dropped: [String]) {
+        lock.withLock {
+            let wanted = Dictionary(uniqueKeysWithValues:
+                learned.map { ($0.term.lowercased(), $0) })
+            let manual = Set(payload.terms.filter { !$0.addedAutomatically }
+                .map { $0.term.lowercased() })
+
+            let dropped = payload.terms
+                .filter { $0.addedAutomatically && wanted[$0.term.lowercased()] == nil }
+                .map(\.term)
+            payload.terms.removeAll {
+                $0.addedAutomatically && wanted[$0.term.lowercased()] == nil
+            }
+
+            var added: [String] = []
+            for (lower, term) in wanted where !manual.contains(lower) {
+                if let index = payload.terms.firstIndex(where: {
+                    $0.term.lowercased() == lower
+                }) {
+                    payload.terms[index].note = term.note        // refresh the evidence
+                    payload.terms[index].term = term.term
+                } else {
+                    payload.terms.append(DictionaryTerm(term: term.term, note: term.note,
+                                                        addedAutomatically: true))
+                    added.append(term.term)
+                }
+            }
+            if !added.isEmpty || !dropped.isEmpty { save() }
+            return (added, dropped)
+        }
     }
 
     @discardableResult

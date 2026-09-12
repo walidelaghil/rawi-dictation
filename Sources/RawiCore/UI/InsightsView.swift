@@ -112,8 +112,8 @@ public struct InsightsView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
     }
 
     private func tile(_ value: String, _ label: String,
@@ -128,8 +128,8 @@ public struct InsightsView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
     }
 
     // MARK: - Streak
@@ -147,7 +147,7 @@ public struct InsightsView: View {
             Spacer()
             HStack(spacing: 4) {
                 ForEach(lastFortnight, id: \.key) { day in
-                    RoundedRectangle(cornerRadius: 3)
+                    RoundedRectangle(cornerRadius: Radius.mark)
                         .fill(day.active ? c(.saffron) : c(.edge))
                         .frame(width: 11, height: 22)
                         .help(day.key)
@@ -155,8 +155,8 @@ public struct InsightsView: View {
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
     }
 
     private var lastFortnight: [(key: String, active: Bool)] {
@@ -184,7 +184,7 @@ public struct InsightsView: View {
                         .frame(width: 150, alignment: .leading)
                         .lineLimit(1)
                     GeometryReader { geo in
-                        RoundedRectangle(cornerRadius: 3)
+                        RoundedRectangle(cornerRadius: Radius.mark)
                             .fill(c(.lapis))
                             .frame(width: max(2, geo.size.width * share.share), height: 8)
                             .frame(height: 8, alignment: .leading)
@@ -199,7 +199,7 @@ public struct InsightsView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
     }
 }

@@ -171,6 +171,12 @@ public final class CarbonHotkeyMonitor: HotkeyBackend {
         id == dictateID || id == cancelID || id == transformID
     }
 
+    /// This monitor's block of ids. Each instance takes its own, so a test cannot
+    /// assume where the block starts.
+    var ids: (dictate: UInt32, cancel: UInt32, transform: UInt32) {
+        (dictateID, cancelID, transformID)
+    }
+
     static func carbonModifiers(_ flags: CGEventFlags) -> UInt32 {
         var result: Int = 0
         if flags.contains(.maskCommand) { result |= cmdKey }

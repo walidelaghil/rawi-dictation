@@ -190,7 +190,7 @@ public struct SettingsView: View {
                             .foregroundStyle(model.config.appearance == option
                                              ? c(.ink) : c(.muted))
                             .padding(.horizontal, 13).padding(.vertical, 6)
-                            .background(RoundedRectangle(cornerRadius: 7)
+                            .background(RoundedRectangle(cornerRadius: Radius.control)
                                 .fill(model.config.appearance == option ? c(.bone) : c(.raised)))
                     }
                     .buttonStyle(.plain)
@@ -356,13 +356,13 @@ public struct SettingsView: View {
                     Text("Open config.json").font(.system(size: 11.5))
                         .foregroundStyle(c(.ink))
                         .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 7).fill(c(.bone)))
+                        .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.bone)))
                 }.buttonStyle(.plain)
                 Button { model.reload() } label: {
                     Text("Reload from disk").font(.system(size: 11.5))
                         .foregroundStyle(c(.muted))
                         .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 7).fill(c(.raised)))
+                        .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.raised)))
                 }.buttonStyle(.plain)
                 Text(model.configPath)
                     .font(.system(size: 10.5).monospaced()).foregroundStyle(c(.faint))
@@ -386,8 +386,8 @@ public struct SettingsView: View {
         }
         .padding(15)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
     }
 
     private func picker(_ options: [(String, String)], selected: String,
@@ -408,8 +408,8 @@ public struct SettingsView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .padding(.horizontal, 11).padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 7).fill(c(.surface))
-            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(c(.edge))))
+        .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
+            .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
     }
 }
 
@@ -436,8 +436,8 @@ struct HotkeyField: View {
                 .foregroundStyle(recording ? c(.saffron) : (clashes ? c(.clay) : c(.bone)))
                 .frame(minWidth: 104)
                 .padding(.horizontal, 11).padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 7).fill(c(.surface))
-                    .overlay(RoundedRectangle(cornerRadius: 7)
+                .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.control)
                         .strokeBorder(recording ? c(.saffron)
                                                 : (clashes ? c(.clay) : c(.edge)))))
         }

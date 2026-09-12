@@ -202,7 +202,7 @@ struct MainWindowView: View {
         }
         .foregroundStyle(selected ? c(.bone) : c(.muted))
         .padding(.horizontal, 9).padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 7)
+        .background(RoundedRectangle(cornerRadius: Radius.control)
             .fill(selected ? c(.raised) : .clear))
     }
 }

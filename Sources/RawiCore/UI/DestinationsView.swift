@@ -35,8 +35,9 @@ public struct DestinationsView: View {
 
             capability
 
-            RowList(appearance: model.appearance) {
+            RowGroup(appearance: model.appearance) {
                 ForEach(model.rules) { rule in
+                  Row(appearance: model.appearance) {
                     HStack(alignment: .top, spacing: 12) {
                         Button { model.toggle(rule) } label: {
                             Image(systemName: rule.enabled ? "checkmark.square.fill" : "square")
@@ -69,8 +70,7 @@ public struct DestinationsView: View {
                             }.buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 11)
-                    Divider().overlay(c(.edge))
+                  }
                 }
             }
             Spacer()
@@ -107,7 +107,7 @@ public struct DestinationsView: View {
         }
         .padding(13)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(token).opacity(0.45))))
+        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(token).opacity(0.45))))
     }
 }

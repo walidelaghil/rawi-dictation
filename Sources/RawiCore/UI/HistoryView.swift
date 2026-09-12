@@ -100,8 +100,8 @@ public struct HistoryView: View {
         }
         .padding(15)
         .frame(width: 380, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 11).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(c(.edge))))
+        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
         .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
         .offset(x: 0, y: 52)
     }
@@ -123,8 +123,8 @@ public struct HistoryView: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 8).fill(c(.ink))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c(.edge))))
+        .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
+            .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
     }
 
     private var filters: some View {
@@ -177,16 +177,11 @@ public struct HistoryView: View {
     }
 
     private var list: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(model.visible) { entry in
-                    row(entry)
-                    Divider().overlay(c(.edge))
-                }
+        RowGroup(appearance: model.appearance) {
+            ForEach(model.visible) { entry in
+                Row(appearance: model.appearance) { row(entry) }
             }
         }
-        .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
     }
 
     private func row(_ entry: HistoryEntry) -> some View {
@@ -230,7 +225,7 @@ public struct HistoryView: View {
             Button { model.copy(entry) } label: {
                 Text("Copy").font(.system(size: 11)).foregroundStyle(c(.muted))
                     .padding(.horizontal, 9).padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: 5)
+                    .background(RoundedRectangle(cornerRadius: Radius.control)
                         .strokeBorder(c(.edge)))
             }
             .buttonStyle(.plain)
@@ -241,6 +236,5 @@ public struct HistoryView: View {
             .buttonStyle(.plain)
             .help("Delete this entry")
         }
-        .padding(.horizontal, 14).padding(.vertical, 11)
     }
 }
