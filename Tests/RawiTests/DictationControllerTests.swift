@@ -168,12 +168,21 @@ import Foundation
         #expect(seen.last == .idle)
     }
 
-    @Test("a recorder that cannot start reports an error rather than hanging") func startFails() async {
+    @Test("a denied microphone asks again rather than dead-ending") func micDenied() async {
+        // A rebuild invalidates the TCC grant, so this is the common case rather
+        // than the exotic one. The message tells the user what to do.
         let g = make()
         g.rec.startError = AudioError.microphonePermissionDenied
         await g.ctl.handle(.beganHold)
-        #expect(g.ctl.state == .error(AudioError.microphonePermissionDenied.localizedDescription))
-        #expect(g.log.lines.contains { $0.lowercased().contains("microphone") })
+        #expect(g.ctl.state == .error("Allow microphone access"))
+        #expect(g.log.lines.contains { $0.lowercased().contains("rebuilt") })
+    }
+
+    @Test("any other start failure is reported as itself") func startFails() async {
+        let g = make()
+        g.rec.startError = AudioError.engineStartFailed("no device")
+        await g.ctl.handle(.beganHold)
+        #expect(g.ctl.state == .error(AudioError.engineStartFailed("no device").localizedDescription))
     }
 }
 
