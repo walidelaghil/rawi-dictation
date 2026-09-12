@@ -38,7 +38,7 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
         self.threads = threads
     }
 
-    public func transcribe(wav: URL) async throws -> String {
+    public func transcribe(wav: URL, prompt: String = "") async throws -> String {
         guard let executable = Self.resolveBinary(binary) else {
             throw TranscriptionError.binaryNotFound(binary)
         }
@@ -54,7 +54,8 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
                 DispatchQueue.global(qos: .userInitiated).async {
                     do {
                         let text = try self.run(executable: executable,
-                                                modelPath: modelPath, wav: wav)
+                                                modelPath: modelPath, wav: wav,
+                                                prompt: prompt)
                         continuation.resume(returning: text)
                     } catch {
                         continuation.resume(throwing: error)
@@ -66,7 +67,8 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
         }
     }
 
-    private func run(executable: URL, modelPath: String, wav: URL) throws -> String {
+    private func run(executable: URL, modelPath: String, wav: URL,
+                     prompt: String) throws -> String {
         let process = Process()
         process.executableURL = executable
         process.arguments = [
@@ -78,6 +80,9 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
             "-l", language,
             "-t", String(threads),
         ]
+        // Biases the decoder before it goes wrong. Measured: this alone fixed
+        // Walid→Waleed and Kanji→Kandji.
+        if !prompt.isEmpty { process.arguments? += ["--prompt", prompt] }
 
         let outPipe = Pipe(), errPipe = Pipe()
         process.standardOutput = outPipe

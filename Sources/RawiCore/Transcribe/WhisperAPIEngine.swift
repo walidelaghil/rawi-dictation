@@ -21,7 +21,7 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
         self.session = session
     }
 
-    public func transcribe(wav: URL) async throws -> String {
+    public func transcribe(wav: URL, prompt: String = "") async throws -> String {
         let wavData = try Data(contentsOf: wav)
         let boundary = "Rawi-\(UUID().uuidString)"
 
@@ -31,7 +31,8 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
         request.setValue("multipart/form-data; boundary=\(boundary)",
                          forHTTPHeaderField: "Content-Type")
         let body = Self.multipartBody(boundary: boundary, model: model,
-                                      filename: wav.lastPathComponent, wav: wavData)
+                                      filename: wav.lastPathComponent, wav: wavData,
+                                      prompt: prompt)
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -93,7 +94,7 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
     }
 
     static func multipartBody(boundary: String, model: String,
-                              filename: String, wav: Data) -> Data {
+                              filename: String, wav: Data, prompt: String = "") -> Data {
         var body = Data()
         func field(_ name: String, _ value: String) {
             body.append(Data("--\(boundary)\r\n".utf8))
@@ -102,6 +103,8 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
         }
         field("model", model)
         field("response_format", "json")
+        // Both Groq and OpenAI accept a biasing prompt on this endpoint.
+        if !prompt.isEmpty { field("prompt", prompt) }
 
         body.append(Data("--\(boundary)\r\n".utf8))
         body.append(Data(

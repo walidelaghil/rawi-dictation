@@ -25,8 +25,10 @@ final class FakeEngine: TranscriptionEngine, @unchecked Sendable {
     var result: Result<String, any Error> = .success("raw transcript")
     var cancelCount = 0
     var callCount = 0
-    func transcribe(wav: URL) async throws -> String {
+    var lastPrompt: String = ""
+    func transcribe(wav: URL, prompt: String) async throws -> String {
         callCount += 1
+        lastPrompt = prompt
         return try result.get()
     }
     func cancel() { cancelCount += 1 }

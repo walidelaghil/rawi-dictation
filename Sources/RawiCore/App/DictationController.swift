@@ -63,6 +63,11 @@ public final class DictationController {
 
     private var captured: (name: String?, bundleID: String?) = (nil, nil)
 
+    /// Read at key-press so a dictation uses the vocabulary as it was when you
+    /// started speaking, not as it might be by the time you stop.
+    public var vocabulary: () -> VocabularySnapshot = { .empty }
+    private var capturedVocabulary: VocabularySnapshot = .empty
+
     private var currentRecordingURL: URL?
     private var cancelled = false
 
@@ -144,6 +149,7 @@ public final class DictationController {
             // Captured at key-press, not at insert: focus can move while you speak,
             // and the app you were looking at is the one that shaped the dictation.
             captured = frontmostApp()
+            capturedVocabulary = vocabulary()
             try recorder.start(to: url)
             currentRecordingURL = url
             let now = ContinuousClock.now
@@ -204,7 +210,8 @@ public final class DictationController {
         //    dictation is never silently lost.
         let raw: String
         do {
-            raw = try await engine.transcribe(wav: recording.url)
+            raw = try await engine.transcribe(wav: recording.url,
+                                              prompt: capturedVocabulary.whisperPrompt)
         } catch {
             if cancelled { state = .idle; return }
             if case TranscriptionError.emptyResult = error {
@@ -253,7 +260,16 @@ public final class DictationController {
         }
         if cancelled { state = .idle; return }
 
-        // 3. Insert.
+        // 3. Apply the dictionary deterministically. The model layers are
+        //    unreliable — 1.5b ignores a glossary entirely — so the guarantee
+        //    lives in code that cannot decline.
+        text = TermCorrector.apply(text, terms: capturedVocabulary.terms)
+
+        // 4. Expand snippets — after the guard, so an expanded address can never
+        //    be mistaken for the model rewriting your words.
+        text = SnippetExpander.expand(text, with: capturedVocabulary.snippets)
+
+        // 5. Insert.
         state = .inserting
         let pasted = inserter.insert(text,
                                      restoringClipboard: config.output.restorePreviousClipboard)

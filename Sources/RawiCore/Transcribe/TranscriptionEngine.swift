@@ -1,8 +1,15 @@
 import Foundation
 
 public protocol TranscriptionEngine: AnyObject, Sendable {
-    func transcribe(wav: URL) async throws -> String
+    /// `prompt` biases decoding toward words it would otherwise get wrong —
+    /// names, jargon, product names. Both whisper.cpp and the hosted APIs accept
+    /// one, so it belongs in the protocol rather than in one implementation.
+    func transcribe(wav: URL, prompt: String) async throws -> String
     func cancel()
+}
+
+public extension TranscriptionEngine {
+    func transcribe(wav: URL) async throws -> String { try await transcribe(wav: wav, prompt: "") }
 }
 
 public enum TranscriptionError: Error, LocalizedError, Equatable {

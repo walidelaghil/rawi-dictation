@@ -16,11 +16,15 @@ public final class RoutedCleanup: CleanupProvider, @unchecked Sendable {
     private var built: [String: any CleanupProvider] = [:]
     private var lastUsed: (any CleanupProvider)?
 
+    /// `glossary` is the second layer of the dictionary — it catches terms the
+    /// decoder hint missed. Measured: the hint alone did not rescue Sala→Salla.
     public init(kind: CleanupKind, apiKey: String?, models: CleanupModels,
-                prompt: String, makeProvider: ((String) -> any CleanupProvider)? = nil) {
+                prompt: String, glossary: String = "",
+                makeProvider: ((String) -> any CleanupProvider)? = nil) {
         self.models = models
+        let full = glossary.isEmpty ? prompt : prompt + glossary
         self.makeProvider = makeProvider ?? { model in
-            ChatCleanup(kind: kind, apiKey: apiKey, model: model, prompt: prompt)
+            ChatCleanup(kind: kind, apiKey: apiKey, model: model, prompt: full)
         }
     }
 
