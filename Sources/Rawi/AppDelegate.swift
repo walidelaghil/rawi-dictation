@@ -139,6 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         transforms = TransformStore()
         mainWindow = MainWindow(
             store: history, vocabularyStore: vocabulary, destinationStore: destinations,
+            transformStore: transforms,
             appearance: config.appearance.resolved(systemIsDark: Appearance.systemIsDark))
         let engine = makeEngine(env: env)
         let cleanup = makeCleanup(env: env)
@@ -230,6 +231,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         controller.transformRunner = TransformRunner(store: transforms, rewriter: rewriter)
+        // The try-it box on the Transforms screen runs the same model the hotkey
+        // does, so tuning an instruction there means something.
+        mainWindow.transforms.preview = { text, instruction in
+            try await rewriter.clean(wrapTransform(text: text, instruction: instruction))
+        }
         controller.onTransform = { [weak self] outcome in
             self?.mainWindow.reload()
             _ = outcome

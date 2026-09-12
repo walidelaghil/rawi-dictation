@@ -13,23 +13,28 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     private let vocabulary: VocabularyViewModel
     private let destinations: DestinationsViewModel
     private let store: HistoryStore
+    public let transforms: TransformsViewModel
+    private let insights: InsightsViewModel
 
     public init(store: HistoryStore, vocabularyStore: VocabularyStore,
-                destinationStore: DestinationStore, appearance: ResolvedAppearance) {
+                destinationStore: DestinationStore, transformStore: TransformStore,
+                appearance: ResolvedAppearance) {
         self.store = store
         self.model = HistoryViewModel(store: store)
         self.vocabulary = VocabularyViewModel(store: vocabularyStore, history: store)
         self.destinations = DestinationsViewModel(store: destinationStore)
+        self.transforms = TransformsViewModel(store: transformStore)
+        self.insights = InsightsViewModel(store: store)
         super.init()
         model.appearance = appearance
         vocabulary.appearance = appearance
         destinations.appearance = appearance
+        transforms.appearance = appearance
+        insights.appearance = appearance
     }
 
     public func show() {
-        model.reload()
-        vocabulary.reload()
-        destinations.reload()
+        reload()
         let window = window ?? makeWindow()
         self.window = window
         window.makeKeyAndOrderFront(nil)
@@ -40,10 +45,18 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         model.appearance = appearance
         vocabulary.appearance = appearance
         destinations.appearance = appearance
+        transforms.appearance = appearance
+        insights.appearance = appearance
         window?.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
     }
 
-    public func reload() { model.reload(); vocabulary.reload(); destinations.reload() }
+    public func reload() {
+        model.reload()
+        vocabulary.reload()
+        destinations.reload()
+        transforms.reload()
+        insights.reload()
+    }
 
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
@@ -58,7 +71,8 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         window.center()
         window.contentView = NSHostingView(
             rootView: MainWindowView(history: model, vocabulary: vocabulary,
-                                     destinations: destinations))
+                                     destinations: destinations, transforms: transforms,
+                                     insights: insights))
         window.appearance = NSAppearance(
             named: model.appearance == .dark ? .darkAqua : .aqua)
         return window
@@ -67,6 +81,8 @@ public final class MainWindow: NSObject, NSWindowDelegate {
 
 enum Screen: String, CaseIterable {
     case history = "History"
+    case transforms = "Transforms"
+    case insights = "Insights"
     case dictionary = "Dictionary"
     case snippets = "Snippets"
     case destinations = "Destinations"
@@ -74,6 +90,8 @@ enum Screen: String, CaseIterable {
     var symbol: String {
         switch self {
         case .history: "clock"
+        case .transforms: "wand.and.sparkles"
+        case .insights: "chart.bar"
         case .dictionary: "character.book.closed"
         case .snippets: "scissors"
         case .destinations: "scope"
@@ -85,6 +103,8 @@ struct MainWindowView: View {
     @ObservedObject var history: HistoryViewModel
     @ObservedObject var vocabulary: VocabularyViewModel
     @ObservedObject var destinations: DestinationsViewModel
+    @ObservedObject var transforms: TransformsViewModel
+    @ObservedObject var insights: InsightsViewModel
     @State private var screen: Screen = .history
 
     private func c(_ token: ColorToken) -> Color {
@@ -97,6 +117,8 @@ struct MainWindowView: View {
             Divider().overlay(c(.edge))
             switch screen {
             case .history: HistoryView(model: history)
+            case .transforms: TransformsView(model: transforms)
+            case .insights: InsightsView(model: insights)
             case .dictionary: DictionaryScreen(model: vocabulary)
             case .snippets: SnippetsScreen(model: vocabulary)
             case .destinations: DestinationsView(model: destinations)
