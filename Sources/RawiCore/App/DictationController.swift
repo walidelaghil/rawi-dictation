@@ -257,15 +257,20 @@ public final class DictationController {
         state = .inserting
         let pasted = inserter.insert(text,
                                      restoringClipboard: config.output.restorePreviousClipboard)
+        // Recorded whether or not the synthetic paste landed. On a Mac that cannot
+        // grant Accessibility the clipboard *is* the delivery mechanism — pressing
+        // ⌘V is the user completing the insertion, not the dictation failing. Gating
+        // on `pasted` left history permanently empty on exactly that machine.
+        remember(text)
+        onRecord?(HistoryEntry(
+            at: Date(), cleaned: text, raw: raw,
+            script: ScriptDetector.detect(text),
+            appName: captured.name, bundleID: captured.bundleID,
+            durationSeconds: Double(recording.duration.components.seconds),
+            peakLevel: recording.peakLevel, guardRejected: rejected))
+
         if pasted {
             log.info("Inserted \(text.count) characters")
-            remember(text)
-            onRecord?(HistoryEntry(
-                at: Date(), cleaned: text, raw: raw,
-                script: ScriptDetector.detect(text),
-                appName: captured.name, bundleID: captured.bundleID,
-                durationSeconds: Double(recording.duration.components.seconds),
-                peakLevel: recording.peakLevel, guardRejected: rejected))
             try? FileManager.default.removeItem(at: recording.url)
             state = .idle
         } else {
@@ -273,6 +278,7 @@ public final class DictationController {
                 Could not paste: Accessibility permission is not granted. \
                 The text is on the clipboard — press Cmd-V to insert it.
                 """)
+            try? FileManager.default.removeItem(at: recording.url)
             state = .error("Copied — press ⌘V")
             scheduleErrorClear()
         }

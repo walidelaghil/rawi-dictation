@@ -196,14 +196,14 @@ import Foundation
         #expect(ctl.recent.first?.script == .latin)
     }
 
-    @Test("a dictation that was never pasted is not remembered") func notPasted() async {
+    @Test("a clipboard-only dictation is still in Recent") func clipboardOnly() async {
         let (ctl, inserter) = make()
         inserter.succeed = false
         await ctl.handle(.beganHold)
         await ctl.handle(.endedHold)
-        // It is on the clipboard, but it never reached a document — Recent is a
-        // record of what landed, not of what was attempted.
-        #expect(ctl.recent.isEmpty)
+        // Same reasoning as history: without Accessibility the clipboard is how
+        // text is delivered, so this dictation absolutely happened.
+        #expect(ctl.recent.count == 1)
     }
 
     @Test("the ring holds five and drops the oldest") func ring() async {
@@ -266,13 +266,29 @@ import Foundation
         #expect(!e.guardRejected)
     }
 
-    @Test("a dictation that never landed is not recorded") func notPasted() async {
+    @Test("a dictation that reached only the clipboard is still recorded") func clipboardOnly() async {
         let (ctl, inserter, box) = rig()
         inserter.succeed = false
+        // On a Mac that cannot grant Accessibility the paste never succeeds, so
+        // gating on it would leave history permanently empty. The clipboard is the
+        // delivery mechanism there; ⌘V is the user finishing the job.
         await ctl.handle(.beganHold)
         await ctl.handle(.endedHold)
-        // It reached the clipboard, but history records what happened in a
-        // document, not what was attempted.
+        #expect(box.entries.count == 1)
+        #expect(box.entries.first?.cleaned == "Cleaned text.")
+    }
+
+    @Test("a cancelled dictation is not recorded") func cancelled() async {
+        let (ctl, _, box) = rig()
+        await ctl.handle(.beganHold)
+        await ctl.cancelRequested()
+        #expect(box.entries.isEmpty)
+    }
+
+    @Test("an empty transcript is not recorded") func emptyNotRecorded() async {
+        let (ctl, _, box) = rig(cleanup: "   ", raw: "   ")
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
         #expect(box.entries.isEmpty)
     }
 
