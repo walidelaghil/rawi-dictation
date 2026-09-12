@@ -146,7 +146,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let url = BrowserContext.activeURL(bundleID: bundleID)
             let rule = DestinationMatcher.match(bundleID: bundleID, url: url,
                                                 rules: self.destinations.rules)
-            if let rule { self.log.info("Destination: \(rule.name)") }
+            // Log the signals, not just the outcome: "no rule matched" is
+            // indistinguishable from "the URL could not be read" otherwise, and
+            // those need completely different fixes.
+            let host = url.flatMap { URL(string: $0)?.host } ?? "—"
+            self.log.info("""
+                Destination: \(rule?.name ?? "none") \
+                [app \(bundleID ?? "unknown"), page \(host)\
+                \(url == nil && BrowserContext.scriptable[bundleID ?? ""] != nil
+                   ? ", url unreadable: \(BrowserContext.lastError ?? "no window")" : "")]
+                """)
             return rule
         }
         controller.onRecord = { [weak self] entry in
