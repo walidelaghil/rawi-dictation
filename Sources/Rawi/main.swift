@@ -33,6 +33,21 @@ if CommandLine.arguments.contains("--install-karabiner-rule") {
     exit(0)
 }
 
+// Renders the app icon from the same mark the menu bar draws, so the two cannot
+// drift apart and no bitmap needs to live in the repository. Used by `make bundle`.
+if let i = CommandLine.arguments.firstIndex(of: "--write-iconset"),
+   i + 1 < CommandLine.arguments.count {
+    let directory = URL(fileURLWithPath: CommandLine.arguments[i + 1])
+    do {
+        try RawiMark.writeIconset(to: directory)
+        print("Wrote \(directory.path)")
+    } catch {
+        FileHandle.standardError.write(Data("Failed: \(error.localizedDescription)\n".utf8))
+        exit(1)
+    }
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--doctor") {
     let finished = DispatchSemaphore(value: 0)
     Task.detached {

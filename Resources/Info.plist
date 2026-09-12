@@ -10,6 +10,8 @@
     <string>Rawi</string>
     <key>CFBundleExecutable</key>
     <string>Rawi</string>
+    <key>CFBundleIconFile</key>
+    <string>Rawi</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

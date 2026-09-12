@@ -68,14 +68,11 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
         panel.state = state
 
         guard let button = statusItem.button else { return }
-        let name: String
-        if !controller.isEnabled { name = "mic.slash" }
-        else if !permissions.microphone { name = "exclamationmark.triangle" }
-        else if state.recordingMode != nil { name = "mic.fill" }
-        else if state.isBusy { name = "waveform" }
-        else { name = "mic" }
-        button.image = NSImage(systemSymbolName: name, accessibilityDescription: "Rawi")
-        button.image?.isTemplate = true
+        // The Rawi mark, not an SF Symbol: the menu bar is where this app lives, so
+        // it should be recognisable there rather than borrowing a generic mic. State
+        // rides on colour instead of on a different glyph — see RawiMark.
+        button.image = RawiMark.statusImage(state: state, enabled: controller.isEnabled,
+                                            microphoneGranted: permissions.microphone)
         button.toolTip = "Rawi — \(PillLabel.text(for: state))"
     }
 

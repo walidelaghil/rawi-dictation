@@ -10,7 +10,14 @@ APP           := build/Rawi.app
 INSTALLED     := $(INSTALL_DIR)/Rawi.app
 BIN           := .build/release/Rawi
 
-.PHONY: all build bundle install uninstall run test clean warm doctor
+.PHONY: all build bundle install uninstall run test clean warm doctor icon
+
+# The icon on its own, for looking at it without installing.
+icon: build
+	rm -rf build/Rawi.iconset
+	$(BIN) --write-iconset build/Rawi.iconset
+	iconutil -c icns build/Rawi.iconset -o build/Rawi.icns
+	@echo "Wrote build/Rawi.icns"
 
 all: bundle
 
@@ -22,6 +29,11 @@ bundle: build
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	cp $(BIN) $(APP)/Contents/MacOS/Rawi
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
+	@# The icon is drawn from the same mark the menu bar uses, so no bitmap
+	@# lives in the repository and the two cannot drift apart.
+	rm -rf build/Rawi.iconset
+	$(BIN) --write-iconset build/Rawi.iconset > /dev/null
+	iconutil -c icns build/Rawi.iconset -o $(APP)/Contents/Resources/Rawi.icns
 	codesign --force --sign "$(SIGN_IDENTITY)" --timestamp=none $(APP)
 	@codesign -dv $(APP) 2>&1 | grep -E 'Identifier|Signature' || true
 	@echo "Built $(APP)"
