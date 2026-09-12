@@ -5,7 +5,7 @@ import Foundation
 /// Proves the real pipeline handles both languages through ONE configuration —
 /// the thing v1 could not do, because its model was English-only.
 /// Skipped when the multilingual model or whisper-cli is absent.
-@Suite("Language end to end") struct LanguageEndToEndTests {
+@Suite("Language end to end", .serialized) struct LanguageEndToEndTests {
     static var ready: Bool {
         ModelStore.isInstalled(ModelStore.recommended)
             && WhisperCppEngine.resolveBinary("whisper-cli") != nil

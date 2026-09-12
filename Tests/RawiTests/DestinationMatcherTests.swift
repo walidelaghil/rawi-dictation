@@ -137,3 +137,76 @@ import Foundation
         }
     }
 }
+
+@MainActor
+@Suite("Destinations applied") struct DestinationApplicationTests {
+    func rig(_ rule: DestinationRule?) -> (DictationController, FakeCleanup, Recorded) {
+        let r = FakeRecorder(), e = FakeEngine(), c = FakeCleanup()
+        e.result = .success("we should ship this on friday")
+        c.result = .success("We should ship this on Friday.")
+        let ctl = DictationController(config: .default, recorder: r, engine: e,
+                                      cleanup: c, inserter: FakeInserter(), log: FakeLog())
+        ctl.frontmostApp = { ("Slack", "com.tinyspeck.slackmacgap") }
+        ctl.destination = { _ in rule }
+        let box = Recorded()
+        ctl.onRecord = { box.append($0) }
+        return (ctl, c, box)
+    }
+
+    @Test("the matched rule's instruction reaches cleanup") func instructionApplied() async {
+        let rule = DestinationRule(name: "Slack", instruction: "One short paragraph.")
+        let (ctl, cleanup, _) = rig(rule)
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        #expect(cleanup.lastInstruction == "One short paragraph.")
+    }
+
+    @Test("no match means no instruction, not an empty rule") func noRule() async {
+        let (ctl, cleanup, _) = rig(nil)
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        #expect(cleanup.lastInstruction.isEmpty)
+    }
+
+    @Test("history records which rule shaped it") func recorded() async {
+        let (ctl, _, box) = rig(DestinationRule(name: "Slack", instruction: "x"))
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        #expect(box.entries.first?.destination == "Slack")
+    }
+
+    @Test("the destination is resolved at key-press") func capturedEarly() async {
+        let (ctl, cleanup, _) = rig(DestinationRule(name: "Slack", instruction: "first"))
+        await ctl.handle(.beganHold)
+        ctl.destination = { _ in DestinationRule(name: "Other", instruction: "second") }
+        await ctl.handle(.endedHold)
+        #expect(cleanup.lastInstruction == "first")
+    }
+
+    @Test("a rule cannot exempt cleanup from the guard") func guardStillApplies() async {
+        // A destination rule shapes output; it is not a licence to lose the
+        // dictation. The guard runs after cleanup either way.
+        let r = FakeRecorder(), e = FakeEngine(), c = FakeCleanup()
+        let inserter = FakeInserter()
+        let long = "we should move the deadline to Friday because the API work is not done"
+        e.result = .success(long)
+        c.result = .success("ok")            // cleanup destroyed it
+        let ctl = DictationController(config: .default, recorder: r, engine: e,
+                                      cleanup: c, inserter: inserter, log: FakeLog())
+        ctl.destination = { _ in DestinationRule(name: "Terse", instruction: "Be very brief.") }
+        await ctl.handle(.beganHold)
+        await ctl.handle(.endedHold)
+        #expect(inserter.inserted.first == long, "the guard must still protect your words")
+    }
+
+    @Test("history written before this field still loads") func backCompat() throws {
+        let json = #"""
+        {"id":"11111111-1111-1111-1111-111111111111","at":"2026-09-12T10:00:00Z",
+         "cleaned":"x","raw":"x","script":"latin","appName":"Slack","bundleID":"b",
+         "durationSeconds":1,"peakLevel":0.3,"guardRejected":false}
+        """#
+        let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601
+        let entry = try d.decode(HistoryEntry.self, from: Data(json.utf8))
+        #expect(entry.destination == nil)
+    }
+}

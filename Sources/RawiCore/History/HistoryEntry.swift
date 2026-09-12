@@ -13,6 +13,9 @@ public struct HistoryEntry: Codable, Sendable, Equatable, Identifiable {
     public let cleaned: String
     public let raw: String
     public let script: Script
+    /// The rule that shaped this dictation. The URL that matched it is
+    /// deliberately not stored — see BrowserContext.
+    public let destination: String?
     public let appName: String?
     public let bundleID: String?
     public let durationSeconds: Double
@@ -20,7 +23,8 @@ public struct HistoryEntry: Codable, Sendable, Equatable, Identifiable {
     /// Cleanup was discarded and the raw transcript used instead.
     public let guardRejected: Bool
 
-    public init(id: UUID = UUID(), at: Date, cleaned: String, raw: String, script: Script,
+    public init(id: UUID = UUID(), at: Date, cleaned: String, raw: String,
+                destination: String? = nil, script: Script,
                 appName: String?, bundleID: String?, durationSeconds: Double,
                 peakLevel: Double, guardRejected: Bool) {
         self.id = id
@@ -28,6 +32,7 @@ public struct HistoryEntry: Codable, Sendable, Equatable, Identifiable {
         self.cleaned = cleaned
         self.raw = raw
         self.script = script
+        self.destination = destination
         self.appName = appName
         self.bundleID = bundleID
         self.durationSeconds = durationSeconds

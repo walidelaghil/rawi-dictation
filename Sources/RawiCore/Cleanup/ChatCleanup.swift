@@ -25,7 +25,7 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
         self.session = session
     }
 
-    public func clean(_ transcript: String) async throws -> String {
+    public func clean(_ transcript: String, instruction: String = "") async throws -> String {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return transcript }
 
@@ -43,8 +43,11 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
         case .ollama, .off:
             break
         }
+        let composed = instruction.isEmpty
+            ? prompt
+            : prompt + "\n\nSHAPE FOR THIS DESTINATION: " + instruction
         request.httpBody = try Self.requestBody(kind: kind, model: model,
-                                                prompt: prompt, transcript: trimmed)
+                                                prompt: composed, transcript: trimmed)
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in

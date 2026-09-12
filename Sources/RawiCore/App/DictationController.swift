@@ -68,6 +68,12 @@ public final class DictationController {
     public var vocabulary: () -> VocabularySnapshot = { .empty }
     private var capturedVocabulary: VocabularySnapshot = .empty
 
+    /// Resolves where this dictation is going. Given the frontmost bundle id so
+    /// the app delegate can read a browser URL without the controller knowing
+    /// anything about browsers.
+    public var destination: (String?) -> DestinationRule? = { _ in nil }
+    private var capturedDestination: DestinationRule?
+
     private var currentRecordingURL: URL?
     private var cancelled = false
 
@@ -150,6 +156,7 @@ public final class DictationController {
             // and the app you were looking at is the one that shaped the dictation.
             captured = frontmostApp()
             capturedVocabulary = vocabulary()
+            capturedDestination = destination(captured.bundleID)
             try recorder.start(to: url)
             currentRecordingURL = url
             let now = ContinuousClock.now
@@ -260,7 +267,8 @@ public final class DictationController {
         var rejected = false
         state = .cleaning
         do {
-            let candidate = try await cleanup.clean(raw)
+            let candidate = try await cleanup.clean(
+                raw, instruction: capturedDestination?.instruction ?? "")
             // The model is not trusted blindly: a local model will sometimes answer
             // or obey the dictation instead of cleaning it. Inserting the raw
             // transcript is always better than inserting the model's invention.
@@ -297,6 +305,7 @@ public final class DictationController {
         remember(text)
         onRecord?(HistoryEntry(
             at: Date(), cleaned: text, raw: raw,
+            destination: capturedDestination?.name,
             script: ScriptDetector.detect(text),
             appName: captured.name, bundleID: captured.bundleID,
             durationSeconds: Double(recording.duration.components.seconds),

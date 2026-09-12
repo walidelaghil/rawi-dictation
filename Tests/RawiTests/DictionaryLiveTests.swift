@@ -4,7 +4,7 @@ import Foundation
 
 /// Proves the decoder hint actually changes what whisper produces — the whole
 /// premise of layer one. Skipped when the model or binary is absent.
-@Suite("Dictionary, live") struct DictionaryLiveTests {
+@Suite("Dictionary, live", .serialized) struct DictionaryLiveTests {
     /// A glossary in the cleanup prompt works on a capable model and is ignored by
     /// a small one. Measured: qwen2.5:3b applies it with any phrasing; qwen2.5:1.5b
     /// applies it with none — and 1.5b is what English routes to. So this is

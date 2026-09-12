@@ -9,7 +9,7 @@ import Foundation
 ///
 /// Skipped automatically when the model or binary is absent, so `swift test`
 /// stays green on a machine that has not downloaded a model.
-@Suite("End-to-end transcription") struct EndToEndTranscriptionTests {
+@Suite("End-to-end transcription", .serialized) struct EndToEndTranscriptionTests {
     static var modelPath: String { Config.expand(Config.defaultWhisperCpp.model) }
 
     static var isAvailable: Bool {

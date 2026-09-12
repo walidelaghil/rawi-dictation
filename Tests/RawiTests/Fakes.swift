@@ -38,8 +38,10 @@ final class FakeCleanup: CleanupProvider, @unchecked Sendable {
     var result: Result<String, any Error> = .success("Cleaned transcript.")
     var received: [String] = []
     var cancelCount = 0
-    func clean(_ t: String) async throws -> String {
+    var lastInstruction: String = ""
+    func clean(_ t: String, instruction: String) async throws -> String {
         received.append(t)
+        lastInstruction = instruction
         return try result.get()
     }
     func cancel() { cancelCount += 1 }

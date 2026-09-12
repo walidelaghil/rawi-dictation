@@ -34,7 +34,7 @@ public final class RoutedCleanup: CleanupProvider, @unchecked Sendable {
         models.model(for: ScriptDetector.detect(transcript))
     }
 
-    public func clean(_ transcript: String) async throws -> String {
+    public func clean(_ transcript: String, instruction: String = "") async throws -> String {
         guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return transcript
         }
@@ -46,7 +46,7 @@ public final class RoutedCleanup: CleanupProvider, @unchecked Sendable {
             lastUsed = fresh
             return fresh
         }
-        return try await provider.clean(transcript)
+        return try await provider.clean(transcript, instruction: instruction)
     }
 
     /// Cancels whichever child is in flight. The route is decided per call, so

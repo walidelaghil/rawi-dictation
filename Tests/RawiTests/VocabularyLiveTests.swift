@@ -5,7 +5,7 @@ import Foundation
 /// The whole vocabulary path on real audio and the real models: transcribe →
 /// clean → correct → expand. Everything a dictation does except capturing from
 /// the microphone, which no automated test can stand in for.
-@Suite("Vocabulary end to end") struct VocabularyLiveTests {
+@Suite("Vocabulary end to end", .serialized) struct VocabularyLiveTests {
     static var ready: Bool {
         ModelStore.isInstalled(ModelStore.recommended)
             && WhisperCppEngine.resolveBinary("whisper-cli") != nil

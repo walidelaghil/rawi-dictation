@@ -1,8 +1,17 @@
 import Foundation
 
 public protocol CleanupProvider: AnyObject, Sendable {
-    func clean(_ transcript: String) async throws -> String
+    /// `instruction` shapes this one dictation for where it is going. It is a
+    /// per-call argument rather than provider state because the destination
+    /// changes with every key-press while the provider is built once.
+    func clean(_ transcript: String, instruction: String) async throws -> String
     func cancel()
+}
+
+public extension CleanupProvider {
+    func clean(_ transcript: String) async throws -> String {
+        try await clean(transcript, instruction: "")
+    }
 }
 
 public enum CleanupError: Error, LocalizedError, Equatable {
@@ -22,7 +31,9 @@ public enum CleanupError: Error, LocalizedError, Equatable {
 /// Used when `cleanup.provider` is `off`. Returns the transcript untouched.
 public final class NoopCleanup: CleanupProvider {
     public init() {}
-    public func clean(_ transcript: String) async throws -> String { transcript }
+    public func clean(_ transcript: String, instruction: String) async throws -> String {
+        transcript
+    }
     public func cancel() {}
 }
 

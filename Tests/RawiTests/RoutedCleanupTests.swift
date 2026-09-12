@@ -8,7 +8,10 @@ final class SpyCleanup: CleanupProvider, @unchecked Sendable {
     var cancels = 0
     var result: Result<String, any Error> = .success("cleaned")
     init(name: String) { self.name = name }
-    func clean(_ t: String) async throws -> String { calls.append(t); return try result.get() }
+    var lastInstruction = ""
+    func clean(_ t: String, instruction: String) async throws -> String {
+        calls.append(t); lastInstruction = instruction; return try result.get()
+    }
     func cancel() { cancels += 1 }
 }
 
