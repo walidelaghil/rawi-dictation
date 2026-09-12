@@ -9,12 +9,18 @@ import SwiftUI
 @MainActor
 public final class MainWindow: NSObject, NSWindowDelegate {
     private var window: NSWindow?
+    private let selection = ScreenSelection()
+    private var selected: Screen {
+        get { selection.screen }
+        set { selection.screen = newValue }
+    }
     private let model: HistoryViewModel
     private let vocabulary: VocabularyViewModel
     private let destinations: DestinationsViewModel
     private let store: HistoryStore
     public let transforms: TransformsViewModel
     private let insights: InsightsViewModel
+    public let settings: SettingsViewModel
 
     public init(store: HistoryStore, vocabularyStore: VocabularyStore,
                 destinationStore: DestinationStore, transformStore: TransformStore,
@@ -25,15 +31,19 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         self.destinations = DestinationsViewModel(store: destinationStore)
         self.transforms = TransformsViewModel(store: transformStore)
         self.insights = InsightsViewModel(store: store)
+        self.settings = SettingsViewModel()
         super.init()
         model.appearance = appearance
         vocabulary.appearance = appearance
         destinations.appearance = appearance
         transforms.appearance = appearance
         insights.appearance = appearance
+        settings.appearance = appearance
     }
 
-    public func show() {
+    /// Opens on a particular screen — the gear in the menu panel opens Settings.
+    public func show(_ screen: Screen? = nil) {
+        if let screen { selected = screen }
         reload()
         let window = window ?? makeWindow()
         self.window = window
@@ -47,6 +57,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         destinations.appearance = appearance
         transforms.appearance = appearance
         insights.appearance = appearance
+        settings.appearance = appearance
         window?.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
     }
 
@@ -56,6 +67,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         destinations.reload()
         transforms.reload()
         insights.reload()
+        settings.reload()
     }
 
     private func makeWindow() -> NSWindow {
@@ -72,20 +84,28 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         window.contentView = NSHostingView(
             rootView: MainWindowView(history: model, vocabulary: vocabulary,
                                      destinations: destinations, transforms: transforms,
-                                     insights: insights))
+                                     insights: insights, settings: settings,
+                                     selection: selection))
         window.appearance = NSAppearance(
             named: model.appearance == .dark ? .darkAqua : .aqua)
         return window
     }
 }
 
-enum Screen: String, CaseIterable {
+/// Which screen is showing, held outside the view so the menu bar can open one.
+@MainActor
+final class ScreenSelection: ObservableObject {
+    @Published var screen: Screen = .history
+}
+
+public enum Screen: String, CaseIterable {
     case history = "History"
     case transforms = "Transforms"
     case insights = "Insights"
     case dictionary = "Dictionary"
     case snippets = "Snippets"
     case destinations = "Destinations"
+    case settings = "Settings"
 
     var symbol: String {
         switch self {
@@ -95,6 +115,7 @@ enum Screen: String, CaseIterable {
         case .dictionary: "character.book.closed"
         case .snippets: "scissors"
         case .destinations: "scope"
+        case .settings: "gearshape"
         }
     }
 }
@@ -105,7 +126,9 @@ struct MainWindowView: View {
     @ObservedObject var destinations: DestinationsViewModel
     @ObservedObject var transforms: TransformsViewModel
     @ObservedObject var insights: InsightsViewModel
-    @State private var screen: Screen = .history
+    @ObservedObject var settings: SettingsViewModel
+    @ObservedObject var selection: ScreenSelection
+    private var screen: Screen { selection.screen }
 
     private func c(_ token: ColorToken) -> Color {
         RawiColors.color(token, history.appearance)
@@ -122,6 +145,7 @@ struct MainWindowView: View {
             case .dictionary: DictionaryScreen(model: vocabulary)
             case .snippets: SnippetsScreen(model: vocabulary)
             case .destinations: DestinationsView(model: destinations)
+            case .settings: SettingsView(model: settings)
             }
         }
         .background(c(.surface))
@@ -145,7 +169,7 @@ struct MainWindowView: View {
             // Only built screens appear. A greyed row for an unbuilt phase is dead
             // UI that teaches you to stop reading the rail.
             ForEach(Screen.allCases, id: \.self) { item in
-                Button { screen = item } label: {
+                Button { selection.screen = item } label: {
                     railRow(item.rawValue, symbol: item.symbol, selected: screen == item)
                 }
                 .buttonStyle(.plain)

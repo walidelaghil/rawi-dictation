@@ -1,0 +1,428 @@
+import AppKit
+import SwiftUI
+
+@MainActor
+public final class SettingsViewModel: ObservableObject {
+    @Published public var config: Config
+    @Published public var appearance: ResolvedAppearance = .dark
+    @Published public var showInfo = false
+    @Published public var installedOllama: [String] = []
+    @Published public var ollamaReachable = false
+    @Published public var recording: String?
+    @Published public var saveError: String?
+
+    /// Which keys exist, in the order the screen lists them. The label is what a
+    /// clash is reported against, so it is the user's word for the key.
+    public enum Key: String, CaseIterable {
+        case dictate, transform, cancel
+
+        public var label: String {
+            switch self {
+            case .dictate: "Dictate"
+            case .transform: "Transform clipboard"
+            case .cancel: "Cancel"
+            }
+        }
+
+        public var detail: String {
+            switch self {
+            case .dictate: "Hold to speak. Double-tap for hands-free."
+            case .transform: "Hold, say what to do with the clipboard."
+            case .cancel: "Drops a recording, or stops work already running."
+            }
+        }
+    }
+
+    public init(config: Config = .default) {
+        self.config = config
+    }
+
+    public func value(for key: Key) -> String {
+        switch key {
+        case .dictate: config.hotkey
+        case .transform: config.transformHotkey
+        case .cancel: config.cancelHotkey
+        }
+    }
+
+    public func set(_ raw: String, for key: Key) {
+        switch key {
+        case .dictate:
+            config.hotkey = raw
+            // The Carbon backend cannot bind a bare modifier, so it falls back to
+            // this. Keeping the two in step means the key you chose is the key you
+            // get on a Mac that cannot grant Input Monitoring.
+            if HotkeyConfig.isCarbonCompatible(raw) { config.fallbackHotkey = raw }
+        case .transform: config.transformHotkey = raw
+        case .cancel: config.cancelHotkey = raw
+        }
+        save()
+    }
+
+    public var clashing: [String] {
+        HotkeyConfig.clashes(in: Key.allCases.map { ($0.label, value(for: $0)) })
+    }
+
+    public func clashes(_ key: Key) -> Bool { clashing.contains(key.label) }
+
+    /// Everything is written straight to `config.json`, which the running app is
+    /// already watching — so a change here reaches the hotkeys and the providers
+    /// through exactly the path a hand edit would take. No second mechanism.
+    public func save() {
+        do {
+            try config.save()
+            saveError = nil
+        } catch {
+            saveError = error.localizedDescription
+        }
+    }
+
+    public func reload() {
+        if let loaded = try? Config.load() { config = loaded }
+        Task { await probeOllama() }
+    }
+
+    public func probeOllama() async {
+        let models = await OllamaModels.installed()
+        installedOllama = OllamaModels.preferred(from: models)
+        ollamaReachable = !models.isEmpty
+    }
+
+    public var whisperModels: [WhisperModel] { ModelStore.installed() }
+
+    public var currentWhisperModel: WhisperModel? {
+        ModelStore.model(forPath: config.whispercpp.model)
+    }
+}
+
+public struct SettingsView: View {
+    @ObservedObject var model: SettingsViewModel
+    public init(model: SettingsViewModel) { self.model = model }
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, model.appearance) }
+
+    public var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ScreenHeader(title: "Settings", appearance: model.appearance,
+                             showInfo: $model.showInfo,
+                             info: "Everything here writes to ~/.config/rawi/config.json, "
+                                 + "which the running app watches — changes take effect as you "
+                                 + "make them, with no restart. The file stays hand-editable, "
+                                 + "and it holds a few things this screen does not show, like "
+                                 + "the cleanup prompt itself.")
+
+                if let error = model.saveError {
+                    Text("Could not save: \(error)")
+                        .font(.system(size: 11.5)).foregroundStyle(c(.clay))
+                }
+
+                appearanceSection
+                keysSection
+                transcriptionSection
+                cleanupSection
+                fileSection
+            }
+            .padding(.horizontal, 24).padding(.vertical, 22)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .background(c(.surface))
+        .onAppear { model.reload() }
+    }
+
+    // MARK: - Appearance
+
+    private var appearanceSection: some View {
+        section("Appearance", "The pill stays dark in both. It floats over other "
+                            + "people's windows, and a light pill on a light document "
+                            + "disappears.") {
+            HStack(spacing: 8) {
+                ForEach(Appearance.allCases, id: \.self) { option in
+                    Button {
+                        model.config.appearance = option
+                        model.save()
+                    } label: {
+                        Text(option.displayName)
+                            .font(.system(size: 12,
+                                          weight: model.config.appearance == option
+                                              ? .medium : .regular))
+                            .foregroundStyle(model.config.appearance == option
+                                             ? c(.ink) : c(.muted))
+                            .padding(.horizontal, 13).padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 7)
+                                .fill(model.config.appearance == option ? c(.bone) : c(.raised)))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    // MARK: - Keys
+
+    private var keysSection: some View {
+        section("Keys", "Click a shortcut and press the combination you want. "
+                      + "Carbon hotkeys need no permission but must include a modifier.") {
+            VStack(alignment: .leading, spacing: 9) {
+                ForEach(SettingsViewModel.Key.allCases, id: \.self) { key in
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(key.label).font(.system(size: 12.5))
+                                .foregroundStyle(c(.bone))
+                            Text(key.detail).font(.system(size: 10.5))
+                                .foregroundStyle(c(.faint))
+                        }
+                        .frame(width: 230, alignment: .leading)
+
+                        HotkeyField(raw: model.value(for: key),
+                                    recording: model.recording == key.rawValue,
+                                    clashes: model.clashes(key),
+                                    appearance: model.appearance,
+                                    onStart: { model.recording = key.rawValue },
+                                    onCapture: { raw in
+                                        model.recording = nil
+                                        if let raw { model.set(raw, for: key) }
+                                    })
+                        Spacer()
+                    }
+                }
+                if !model.clashing.isEmpty {
+                    Text("\(model.clashing.joined(separator: " and ")) are on the same "
+                       + "combination. Only one of them will work.")
+                        .font(.system(size: 11)).foregroundStyle(c(.clay))
+                }
+            }
+        }
+    }
+
+    // MARK: - Transcription
+
+    private var transcriptionSection: some View {
+        section("Transcription", "What turns your voice into text.") {
+            VStack(alignment: .leading, spacing: 10) {
+                picker(EngineKind.allCases.map { ($0.rawValue, engineName($0)) },
+                       selected: model.config.engine.rawValue) { raw in
+                    model.config.engine = EngineKind(rawValue: raw) ?? .whispercpp
+                    model.save()
+                }
+                if model.config.engine == .whispercpp {
+                    if model.whisperModels.isEmpty {
+                        Text("No models found in \(ModelStore.directory.path)")
+                            .font(.system(size: 11)).foregroundStyle(c(.clay))
+                    } else {
+                        picker(model.whisperModels.map { ($0.id, $0.displayName) },
+                               selected: model.currentWhisperModel?.id ?? "") { id in
+                            guard let picked = ModelStore.model(id: id) else { return }
+                            model.config.whispercpp.model = ModelStore.url(for: picked).path
+                            // An English-only model cannot hear Arabic at all, so the
+                            // language setting follows the model rather than fighting it.
+                            model.config.whispercpp.language = picked.multilingual ? "auto" : "en"
+                            model.save()
+                        }
+                    }
+                } else {
+                    Text("Audio leaves your machine with this engine. The key comes from "
+                       + "~/.config/rawi/.env.")
+                        .font(.system(size: 11)).foregroundStyle(c(.saffron))
+                }
+            }
+        }
+    }
+
+    private func engineName(_ kind: EngineKind) -> String {
+        switch kind {
+        case .whispercpp: "whisper.cpp — on this Mac"
+        case .groq: "Groq API"
+        case .openai: "OpenAI API"
+        }
+    }
+
+    // MARK: - Cleanup
+
+    private var cleanupSection: some View {
+        section("Cleanup and transforms", "The language model that removes fillers, fixes "
+                                        + "punctuation, and runs transforms. Transforms "
+                                        + "always use the Arabic-capable model — rewriting "
+                                        + "is harder than cleaning.") {
+            VStack(alignment: .leading, spacing: 10) {
+                picker(CleanupKind.allCases.map { ($0.rawValue, cleanupName($0)) },
+                       selected: model.config.cleanup.provider.rawValue) { raw in
+                    let kind = CleanupKind(rawValue: raw) ?? .off
+                    model.config.cleanup.provider = kind
+                    if kind != .off {
+                        model.config.cleanup.models = CleanupProviderFactory.defaultModels(for: kind)
+                    }
+                    model.save()
+                }
+
+                switch model.config.cleanup.provider {
+                case .off:
+                    Text("Whisper's raw output is inserted, and transforms are unavailable.")
+                        .font(.system(size: 11)).foregroundStyle(c(.faint))
+                case .ollama:
+                    if !model.ollamaReachable {
+                        Text("Ollama is not answering on localhost:11434.")
+                            .font(.system(size: 11)).foregroundStyle(c(.clay))
+                    }
+                    modelRow("English and other Latin", keyPath: \.latin)
+                    modelRow("Arabic, mixed speech, and every transform", keyPath: \.arabic)
+                case .openai, .anthropic:
+                    Text("Transcripts leave your machine with this provider. One model "
+                       + "serves both scripts: \(model.config.cleanup.models.latin)")
+                        .font(.system(size: 11)).foregroundStyle(c(.saffron))
+                }
+            }
+        }
+    }
+
+    private func cleanupName(_ kind: CleanupKind) -> String {
+        switch kind {
+        case .off: "Off — insert exactly what was heard"
+        case .ollama: "Ollama — on this Mac"
+        case .openai: "OpenAI API"
+        case .anthropic: "Anthropic API"
+        }
+    }
+
+    private func modelRow(_ label: String,
+                          keyPath: WritableKeyPath<CleanupModels, String>) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label.uppercased())
+                .font(.system(size: 8.5, weight: .medium).monospaced()).tracking(1.1)
+                .foregroundStyle(c(.faint))
+            if model.installedOllama.isEmpty {
+                Text(model.config.cleanup.models[keyPath: keyPath])
+                    .font(.system(size: 11.5).monospaced()).foregroundStyle(c(.muted))
+            } else {
+                picker(model.installedOllama.map { ($0, $0) },
+                       selected: model.config.cleanup.models[keyPath: keyPath]) { picked in
+                    model.config.cleanup.models[keyPath: keyPath] = picked
+                    model.save()
+                }
+            }
+        }
+    }
+
+    // MARK: - The file itself
+
+    private var fileSection: some View {
+        section("The file", "This screen does not cover everything — the cleanup prompt, "
+                          + "the history cap and the excluded apps live in the file.") {
+            HStack(spacing: 9) {
+                Button {
+                    NSWorkspace.shared.open(Config.configFile)
+                } label: {
+                    Text("Open config.json").font(.system(size: 11.5))
+                        .foregroundStyle(c(.ink))
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 7).fill(c(.bone)))
+                }.buttonStyle(.plain)
+                Button { model.reload() } label: {
+                    Text("Reload from disk").font(.system(size: 11.5))
+                        .foregroundStyle(c(.muted))
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 7).fill(c(.raised)))
+                }.buttonStyle(.plain)
+                Text(Config.configFile.path)
+                    .font(.system(size: 10.5).monospaced()).foregroundStyle(c(.faint))
+                    .lineLimit(1).truncationMode(.head)
+            }
+        }
+    }
+
+    // MARK: - Pieces
+
+    private func section<Content: View>(_ title: String, _ detail: String,
+                                        @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(c(.bone))
+                Text(detail).font(.system(size: 11)).foregroundStyle(c(.faint))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            content()
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+    }
+
+    private func picker(_ options: [(String, String)], selected: String,
+                        onPick: @escaping (String) -> Void) -> some View {
+        Menu {
+            ForEach(options, id: \.0) { option in
+                Button(option.1) { onPick(option.0) }
+            }
+        } label: {
+            HStack(spacing: 7) {
+                Text(options.first { $0.0 == selected }?.1 ?? selected)
+                    .font(.system(size: 12)).foregroundStyle(c(.bone))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9)).foregroundStyle(c(.faint))
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .padding(.horizontal, 11).padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 7).fill(c(.surface))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(c(.edge))))
+    }
+}
+
+/// A shortcut you set by pressing it.
+///
+/// The key monitor is local — it sees events only while this window has focus —
+/// so it needs no permission, unlike the global monitors the hotkeys themselves
+/// use. Escape cancels the capture rather than binding Escape.
+struct HotkeyField: View {
+    let raw: String
+    let recording: Bool
+    let clashes: Bool
+    let appearance: ResolvedAppearance
+    let onStart: () -> Void
+    let onCapture: (String?) -> Void
+
+    @State private var monitor: Any?
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
+
+    var body: some View {
+        Button(action: onStart) {
+            Text(recording ? "Press keys…" : HotkeyConfig.symbolic(raw))
+                .font(.system(size: 12, weight: .medium).monospaced())
+                .foregroundStyle(recording ? c(.saffron) : (clashes ? c(.clay) : c(.bone)))
+                .frame(minWidth: 104)
+                .padding(.horizontal, 11).padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 7).fill(c(.surface))
+                    .overlay(RoundedRectangle(cornerRadius: 7)
+                        .strokeBorder(recording ? c(.saffron)
+                                                : (clashes ? c(.clay) : c(.edge)))))
+        }
+        .buttonStyle(.plain)
+        .help(recording ? "Press a combination, or Escape to keep the current one"
+                        : "Click, then press the combination you want")
+        .onChange(of: recording) { _, isRecording in
+            isRecording ? start() : stop()
+        }
+        .onDisappear(perform: stop)
+    }
+
+    private func start() {
+        stop()
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == HotkeyConfig.escapeKeyCode, event.modifierFlags.isEmpty {
+                onCapture(nil)                       // keep what was there
+                return nil
+            }
+            let flags = CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))
+            onCapture(HotkeyConfig.string(keyCode: event.keyCode, modifiers: flags))
+            return nil                                // never let it reach the app
+        }
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
+}

@@ -84,3 +84,103 @@ public enum HotkeyConfig {
         }
     }
 }
+
+// MARK: - Recording and display
+
+public extension HotkeyConfig {
+    /// The config-file spelling of a key press, or nil if it is not usable as a
+    /// shortcut. Used by the settings screen: you press the combination you want
+    /// and it writes the string, rather than you learning the vocabulary.
+    static func string(keyCode: UInt16, modifiers: CGEventFlags) -> String? {
+        guard let name = keyName(for: keyCode) else { return nil }
+        // Caps lock and the "this came from the keypad" flag are states of the
+        // keyboard, not part of a chord.
+        var parts: [String] = []
+        if modifiers.contains(.maskControl) { parts.append("ctrl") }
+        if modifiers.contains(.maskAlternate) { parts.append("option") }
+        if modifiers.contains(.maskShift) { parts.append("shift") }
+        if modifiers.contains(.maskCommand) { parts.append("cmd") }
+        // A shortcut with no modifier would take that key away from every app.
+        guard !parts.isEmpty else { return nil }
+        return (parts + [name]).joined(separator: "+")
+    }
+
+    /// How macOS itself writes a shortcut: modifiers in the fixed order it uses,
+    /// then the key.
+    static func symbolic(_ raw: String) -> String {
+        switch parse(raw) {
+        case .modifierFlag(let flag):
+            return bareModifierSymbol(flag) ?? raw
+        case .keyCode(let code, let modifiers):
+            var out = ""
+            if modifiers.contains(.maskControl) { out += "⌃" }
+            if modifiers.contains(.maskAlternate) { out += "⌥" }
+            if modifiers.contains(.maskShift) { out += "⇧" }
+            if modifiers.contains(.maskCommand) { out += "⌘" }
+            return out + (keySymbol(for: code) ?? raw)
+        case .none:
+            // Never swallow it: a shortcut we cannot read is still the one the
+            // user has, and showing nothing would look like it was unset.
+            return raw
+        }
+    }
+
+    /// The labels of any two shortcuts bound to the same combination.
+    ///
+    /// Two registrations of one chord means the second silently loses, so this is
+    /// worth saying out loud before it is saved.
+    static func clashes(in assignments: [(label: String, raw: String)]) -> [String] {
+        var seen: [HotkeyMatcher: [String]] = [:]
+        for assignment in assignments {
+            guard let matcher = parse(assignment.raw) else { continue }
+            seen[matcher, default: []].append(assignment.label)
+        }
+        return assignments
+            .map(\.label)
+            .filter { label in seen.values.contains { $0.count > 1 && $0.contains(label) } }
+    }
+
+    private static func keyName(for code: UInt16) -> String? {
+        // The first spelling wins, so "escape" beats "esc" and "return" beats "enter".
+        keyCodes.first { $0.value == code }.map(\.key).flatMap { _ in
+            keyCodes.sorted { $0.key < $1.key }.first { $0.value == code }?.key
+        }
+    }
+
+    private static func keySymbol(for code: UInt16) -> String? {
+        let named: [UInt16: String] = [
+            // "esc" rather than ⎋: the symbol is unreadable at 12pt, and the Mac
+            // itself writes esc on the key.
+            49: "Space", 48: "⇥", 36: "↩", 53: "esc", 51: "⌫",
+            122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6",
+            98: "F7", 100: "F8", 101: "F9", 109: "F10", 103: "F11", 111: "F12",
+        ]
+        if let symbol = named[code] { return symbol }
+        return keyName(for: code)?.uppercased()
+    }
+
+    private static func bareModifierSymbol(_ flag: CGEventFlags) -> String? {
+        switch flag {
+        case .maskSecondaryFn: "fn"
+        case .maskAlternate: "⌥"
+        case .maskCommand: "⌘"
+        case .maskControl: "⌃"
+        case .maskShift: "⇧"
+        default: nil
+        }
+    }
+}
+
+extension HotkeyMatcher: Hashable {
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case .modifierFlag(let flag):
+            hasher.combine(0)
+            hasher.combine(flag.rawValue)
+        case .keyCode(let code, let modifiers):
+            hasher.combine(1)
+            hasher.combine(code)
+            hasher.combine(modifiers.rawValue)
+        }
+    }
+}

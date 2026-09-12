@@ -21,9 +21,11 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
     private var state: DictationState = .idle
 
     public var onAction: ((String) -> Void)?
-    public var onAppearanceChange: ((Appearance) -> Void)?
     public var onQuit: (() -> Void)?
     public var onOpenWindow: (() -> Void)?
+    /// Opens the window on its Settings screen. The gear keeps the few items that
+    /// belong in a menu — the ones that act rather than configure.
+    public var onOpenSettings: (() -> Void)?
 
     public init(controller: DictationController, log: any Logging) {
         self.controller = controller
@@ -140,24 +142,16 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
     private func showSettingsMenu() {
         let menu = NSMenu()
 
+        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings),
+                                  keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
+        menu.addItem(.separator())
+
         let enabled = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
         enabled.target = self
         enabled.state = controller.isEnabled ? .on : .off
         menu.addItem(enabled)
-
-        menu.addItem(.separator())
-        let appearanceItem = NSMenuItem(title: "Appearance", action: nil, keyEquivalent: "")
-        let appearanceMenu = NSMenu()
-        for option in Appearance.allCases {
-            let item = NSMenuItem(title: option.displayName,
-                                  action: #selector(pickAppearance(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = option.rawValue
-            item.state = controller.currentConfig.appearance == option ? .on : .off
-            appearanceMenu.addItem(item)
-        }
-        appearanceItem.submenu = appearanceMenu
-        menu.addItem(appearanceItem)
 
         if !permissions.allGranted {
             menu.addItem(.separator())
@@ -203,17 +197,15 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
 
     // MARK: - Actions
 
+    @objc private func openSettings() {
+        popover.performClose(nil)
+        onOpenSettings?()
+    }
+
     @objc private func toggleEnabled() {
         controller.isEnabled.toggle()
         log.info("Dictation \(controller.isEnabled ? "enabled" : "disabled")")
         refresh(state: state, permissions: permissions)
-    }
-
-    @objc private func pickAppearance(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let appearance = Appearance(rawValue: raw) else { return }
-        log.info("Appearance set to \(appearance.rawValue)")
-        onAppearanceChange?(appearance)
     }
 
     @objc private func openPane(_ sender: NSMenuItem) {

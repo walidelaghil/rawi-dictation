@@ -193,13 +193,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.menuBar.setRecent(self.recentFromHistory())
         }
         menuBar = MenuBarController(controller: controller, log: log)
-        menuBar.onAppearanceChange = { [weak self] appearance in
-            guard let self else { return }
-            self.config.appearance = appearance
-            try? self.config.save()
-            self.applyAppearance()
-        }
         menuBar.onOpenWindow = { [weak self] in self?.mainWindow.show() }
+        menuBar.onOpenSettings = { [weak self] in self?.mainWindow.show(.settings) }
         menuBar.onAction = { [weak self] id in
             guard let self else { return }
             switch id {

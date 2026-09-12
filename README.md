@@ -233,9 +233,17 @@ Grants now survive rebuilds. Put it in your shell profile if you like:
 
 ## 5. Configuration
 
-`~/.config/rawi/config.json`, created on first launch and re-read whenever
-you save it — no restart needed. Open it from the menu bar with **Open Config
-File…**.
+Most of it has a screen: open Rawi from the menu bar and pick **Settings** (or
+the gear in the menu panel, or ⌘, with the window open). Appearance, all three
+shortcuts, the transcription engine and model, and the cleanup provider and its
+two models are there. Shortcuts are set by pressing the combination you want,
+and a clash between two of them is reported rather than silently losing one.
+
+The screen writes `~/.config/rawi/config.json` and nothing else, so a hand edit
+and a click do exactly the same thing. The file is created on first launch and
+re-read whenever it changes — no restart either way. A few things have no
+control on the screen and live only in the file: the cleanup prompt, the history
+cap, and the excluded apps.
 
 Any key you leave out falls back to its default, so a three-line config is fine.
 An *invalid* value is reported rather than silently ignored.
