@@ -7,6 +7,15 @@ import Foundation
 /// remember what you *said*, which is what search needs to match against.
 ///
 /// Audio is never recorded. The WAV is deleted as soon as the text is inserted.
+public enum EntryKind: String, Codable, Sendable {
+    case dictation
+    /// The clipboard text as it was *before* a transform rewrote it. Written
+    /// before the model is called, so a transform can never be the thing that
+    /// loses your words — and excluded from the spoken-word statistics, because
+    /// nobody spoke it.
+    case transform
+}
+
 public struct HistoryEntry: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     public let at: Date
@@ -23,10 +32,13 @@ public struct HistoryEntry: Codable, Sendable, Equatable, Identifiable {
     /// Cleanup was discarded and the raw transcript used instead.
     public let guardRejected: Bool
 
+    public let kind: EntryKind
+
     public init(id: UUID = UUID(), at: Date, cleaned: String, raw: String,
                 destination: String? = nil, script: Script,
                 appName: String?, bundleID: String?, durationSeconds: Double,
-                peakLevel: Double, guardRejected: Bool) {
+                peakLevel: Double, guardRejected: Bool,
+                kind: EntryKind = .dictation) {
         self.id = id
         self.at = at
         self.cleaned = cleaned
@@ -38,6 +50,25 @@ public struct HistoryEntry: Codable, Sendable, Equatable, Identifiable {
         self.durationSeconds = durationSeconds
         self.peakLevel = peakLevel
         self.guardRejected = guardRejected
+        self.kind = kind
+    }
+
+    /// `kind` is decoded tolerantly: every line written before transforms existed
+    /// is a dictation, and a history file must keep reading after an upgrade.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        at = try c.decode(Date.self, forKey: .at)
+        cleaned = try c.decode(String.self, forKey: .cleaned)
+        raw = try c.decode(String.self, forKey: .raw)
+        script = try c.decode(Script.self, forKey: .script)
+        destination = try c.decodeIfPresent(String.self, forKey: .destination)
+        appName = try c.decodeIfPresent(String.self, forKey: .appName)
+        bundleID = try c.decodeIfPresent(String.self, forKey: .bundleID)
+        durationSeconds = try c.decode(Double.self, forKey: .durationSeconds)
+        peakLevel = try c.decode(Double.self, forKey: .peakLevel)
+        guardRejected = try c.decode(Bool.self, forKey: .guardRejected)
+        kind = try c.decodeIfPresent(EntryKind.self, forKey: .kind) ?? .dictation
     }
 
     public var wasCleaned: Bool { cleaned != raw }

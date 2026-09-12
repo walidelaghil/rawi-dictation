@@ -12,15 +12,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var history: HistoryStore!
     private var vocabulary: VocabularyStore!
     private var destinations: DestinationStore!
+    private var transforms: TransformStore!
     private var mainWindow: MainWindow!
 
     private var config = Config.default
     private var controller: DictationController!
     private var menuBar: MenuBarController!
     private var monitor: (any HotkeyBackend)?
+    /// Separate from `monitor` because the transform key is always Carbon, whichever
+    /// backend dictation uses — Carbon needs no permission, and the transform key
+    /// should not be the one feature that depends on one.
+    private var transformMonitor: CarbonHotkeyMonitor?
+    /// What dictation actually bound to, which is not always `config.hotkey` — the
+    /// Carbon path substitutes the fallback. Needed to spot a clash.
+    private var activeDictateKey: HotkeyMatcher?
     private var watcher: ConfigWatcher?
     private var tapPattern = TapPattern(doubleTapWindow: .milliseconds(350),
                                         minHold: .milliseconds(250))
+    /// Its own pattern: a transform hold must not be read as the second tap of a
+    /// dictation, and vice versa.
+    private var transformTapPattern = TapPattern(doubleTapWindow: .milliseconds(350),
+                                                 minHold: .milliseconds(250))
 
     private var pendingTapTimer: Timer?
     private var pushToTalkSafetyTimer: Timer?
@@ -75,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        transformMonitor?.stop()
         monitor?.stop()
         watcher?.stop()
         log.info("Rawi stopping")
@@ -123,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         history = HistoryStore(limit: config.history.limit)
         vocabulary = VocabularyStore()
         destinations = DestinationStore()
+        transforms = TransformStore()
         mainWindow = MainWindow(
             store: history, vocabularyStore: vocabulary, destinationStore: destinations,
             appearance: config.appearance.resolved(systemIsDark: Appearance.systemIsDark))
@@ -158,6 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 """)
             return rule
         }
+        wireTransforms(env: env)
         controller.onRecord = { [weak self] entry in
             guard let self else { return }
             guard self.config.history.enabled else { return }
@@ -181,14 +196,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onAction = { [weak self] id in
             guard let self else { return }
             switch id {
-            case "dictate": Task { @MainActor in await self.controller.handle(.beganHold) }
-            case "transform": self.log.info("Transform is Phase 6; the hotkey is reserved")
+            case "dictate", "transform":
+                let intent: RecordingIntent = id == "transform" ? .transform : .dictate
+                Task { @MainActor in
+                    // Clicked twice, it stops — from a menu there is no key to release.
+                    if self.controller.state.recordingMode != nil {
+                        await self.controller.handle(.endedHold)
+                    } else {
+                        await self.controller.handle(.beganHold, intent: intent)
+                    }
+                }
             default: break
             }
         }
         applyAppearance()
         tapPattern = TapPattern(doubleTapWindow: .milliseconds(config.doubleTapWindowMs),
                                 minHold: .milliseconds(config.minHoldMs))
+    }
+
+    /// Transforms need a model. With cleanup off there is nothing to ask, and the
+    /// transform key says so on the pill rather than doing nothing.
+    private func wireTransforms(env: DotEnv) {
+        let rewriter: (any CleanupProvider)?
+        do {
+            rewriter = try CleanupProviderFactory.makeTransformer(config: config, env: env)
+        } catch {
+            log.error("Transforms disabled: \(error.localizedDescription)")
+            rewriter = nil
+        }
+        guard let rewriter else {
+            controller.transformRunner = nil
+            log.info("Transforms disabled — cleanup.provider is off")
+            return
+        }
+        controller.transformRunner = TransformRunner(store: transforms, rewriter: rewriter)
+        controller.onTransform = { [weak self] outcome in
+            self?.mainWindow.reload()
+            _ = outcome
+        }
+        log.info("Transforms via \(config.cleanup.provider.rawValue) "
+                 + "\(config.cleanup.models.arabic)")
     }
 
     /// A misconfigured provider must not prevent the app from launching — it degrades
@@ -235,6 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startMonitoring() {
         monitor?.stop()
+        activeDictateKey = nil
         let granted = Permissions.current().inputMonitoring
         let backend = config.hotkeyBackend.resolved(inputMonitoringGranted: granted)
 
@@ -249,6 +297,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             log.error("Hotkey setup failed: \(error.localizedDescription)")
         }
+        // Outside the catch on purpose: dictation failing to bind is no reason for
+        // transforms to lose their key too.
+        startTransformHotkey(dictateKey: activeDictateKey)
     }
 
     private func startEventTap() throws {
@@ -263,6 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try monitor.start()
         self.monitor = monitor
         log.info("Listening for \(config.hotkey) (listen-only tap)")
+        activeDictateKey = HotkeyConfig.parse(config.hotkey)
     }
 
     /// Used when Input Monitoring cannot be granted — on a managed Mac the user may
@@ -297,13 +349,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try monitor.start()
         self.monitor = monitor
         log.info("Listening for \(hotkey); cancel with \(config.cancelHotkey)")
+        activeDictateKey = .keyCode(code, modifiers: mods)
     }
 
-    private func feed(_ outcome: TapOutcome) {
+    /// Registers the transform key on its own Carbon monitor. Skipped when it would
+    /// claim the same combination dictation is already using: two registrations of
+    /// one chord means the second silently loses, and a dead key is worse than an
+    /// absent one.
+    private func startTransformHotkey(dictateKey: HotkeyMatcher?) {
+        transformMonitor?.stop()
+        transformMonitor = nil
+        guard case .keyCode(let code, let mods)? = HotkeyConfig.parse(config.transformHotkey) else {
+            log.warn("""
+                transformHotkey “\(config.transformHotkey)” is not a modifier+key                 combination; transforms have no key.
+                """)
+            return
+        }
+        if case .keyCode(let dc, let dm)? = dictateKey, dc == code, dm == mods {
+            log.warn("""
+                transformHotkey “\(config.transformHotkey)” is the dictation hotkey;                 transforms have no key until one of them changes.
+                """)
+            return
+        }
+        let monitor = CarbonHotkeyMonitor(
+            keyCode: nil, modifiers: [],
+            transformKeyCode: code, transformModifiers: mods,
+            onTransformPress: {
+                MainActor.assumeIsolated {
+                    self.feed(self.transformTapPattern.press(at: .now), intent: .transform)
+                }
+            },
+            onTransformRelease: {
+                MainActor.assumeIsolated {
+                    self.feed(self.transformTapPattern.release(at: .now), intent: .transform)
+                }
+            })
+        do {
+            try monitor.start()
+        } catch {
+            log.warn("Transform hotkey failed to register: \(error.localizedDescription)")
+            return
+        }
+        guard monitor.transformRegistered else {
+            log.warn("""
+                Another app already owns \(config.transformHotkey);                 change transformHotkey in \(Config.configFile.path).
+                """)
+            return
+        }
+        transformMonitor = monitor
+        log.info("Transform on \(config.transformHotkey) (no permissions required)")
+    }
+
+    private func feed(_ outcome: TapOutcome, intent: RecordingIntent = .dictate) {
         if outcome == .pendingShortTap { schedulePendingTapTimer() }
         if outcome == .beganDoubleTap || outcome == .beganHold { pendingTapTimer?.invalidate() }
         guard outcome != .ignored else { return }
-        Task { @MainActor in await controller.handle(outcome) }
+        Task { @MainActor in await controller.handle(outcome, intent: intent) }
     }
 
     private func escapePressed() {
@@ -419,6 +520,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard controller.state == .idle else { return }   // never swap mid-dictation
 
         let hotkeyChanged = reloaded.hotkey != config.hotkey
+            || reloaded.transformHotkey != config.transformHotkey
+        let transformsChanged = reloaded.cleanup != config.cleanup
         config = reloaded
         let env = DotEnv.load(from: Config.envFile)
         controller.reconfigure(config: config,
@@ -427,6 +530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tapPattern = TapPattern(doubleTapWindow: .milliseconds(config.doubleTapWindowMs),
                                 minHold: .milliseconds(config.minHoldMs))
         if hotkeyChanged { startMonitoring() }
+        if transformsChanged { wireTransforms(env: env) }
         applyAppearance()
         log.info("Config reloaded (engine=\(config.engine.rawValue), "
                  + "cleanup=\(config.cleanup.provider.rawValue), hotkey=\(config.hotkey))")

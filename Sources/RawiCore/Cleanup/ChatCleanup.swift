@@ -11,17 +11,23 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
     private let apiKey: String?
     private let model: String
     private let prompt: String
+    /// How the payload is delimited for the model. Cleanup wraps a transcript;
+    /// a transform arrives already wrapped as instruction plus text.
+    private let wrap: @Sendable (String) -> String
     private let session: URLSession
 
     private let lock = NSLock()
     private var currentTask: URLSessionDataTask?
 
     public init(kind: CleanupKind, apiKey: String?, model: String,
-                prompt: String, session: URLSession = .shared) {
+                prompt: String,
+                wrap: @escaping @Sendable (String) -> String = wrapTranscript,
+                session: URLSession = .shared) {
         self.kind = kind
         self.apiKey = apiKey
         self.model = model
         self.prompt = prompt
+        self.wrap = wrap
         self.session = session
     }
 
@@ -47,7 +53,7 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
             ? prompt
             : prompt + "\n\nSHAPE FOR THIS DESTINATION: " + instruction
         request.httpBody = try Self.requestBody(kind: kind, model: model,
-                                                prompt: composed, transcript: trimmed)
+                                                prompt: composed, user: wrap(trimmed))
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -116,9 +122,9 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
     }
 
     static func requestBody(kind: CleanupKind, model: String,
-                            prompt: String, transcript: String) throws -> Data {
-        // Delimited so the model can distinguish dictated content from instructions.
-        let user = wrapTranscript(transcript)
+                            prompt: String, user: String) throws -> Data {
+        // `user` is already delimited, so the model can distinguish content from
+        // instructions.
         let payload: [String: Any]
         switch kind {
         case .openai:

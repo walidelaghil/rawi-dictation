@@ -9,6 +9,8 @@ public enum PillLabel {
         case .transcribing: "Transcribing…"
         case .cleaning: "Cleaning up…"
         case .inserting: "Inserting…"
+        case .transforming: "Rewriting…"
+        case .notice(let message): message
         case .error(let message): message
         }
     }
@@ -31,9 +33,9 @@ public enum PillLabel {
     public static func token(for state: DictationState) -> ColorToken {
         switch state {
         case .recording: .saffron
-        case .transcribing, .cleaning, .inserting: .lapis
+        case .transcribing, .cleaning, .inserting, .transforming: .lapis
         case .error: .clay
-        case .idle: .verdigris
+        case .idle, .notice: .verdigris
         }
     }
 }
@@ -101,9 +103,9 @@ public struct PillView: View {
         switch model.state {
         case .recording:
             Circle().fill(accent).frame(width: 8, height: 8)
-        case .transcribing, .cleaning, .inserting:
+        case .transcribing, .cleaning, .inserting, .transforming:
             ProgressView().controlSize(.small).scaleEffect(0.62).frame(width: 13, height: 13)
-        case .error:
+        case .error, .notice:
             Circle().fill(accent).frame(width: 8, height: 8)
         case .idle:
             RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 8, height: 8)

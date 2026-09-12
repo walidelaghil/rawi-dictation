@@ -60,6 +60,38 @@ public enum CleanupProviderFactory {
         }
     }
 
+    /// The provider a transform runs through.
+    ///
+    /// Two deliberate differences from cleanup: the transform system prompt (the
+    /// cleaner's prompt forbids the rewriting a transform exists to do), and no
+    /// `<transcript>` wrapping, because the runner delimits instruction and text
+    /// itself. Always the stronger local model regardless of script — rewriting is
+    /// harder than cleaning, and the 1.5b is visibly weaker at it. `nil` when
+    /// cleanup is off: there is no model to ask.
+    public static func makeTransformer(config: Config, env: DotEnv) throws
+        -> (any CleanupProvider)? {
+        let model = config.cleanup.models.arabic
+        switch config.cleanup.provider {
+        case .off:
+            return nil
+        case .ollama:
+            return ChatCleanup(kind: .ollama, apiKey: nil, model: model,
+                               prompt: transformSystemPrompt, wrap: { $0 })
+        case .openai:
+            guard let key = env["OPENAI_API_KEY"], !key.isEmpty else {
+                throw CleanupError.missingAPIKey("OPENAI_API_KEY")
+            }
+            return ChatCleanup(kind: .openai, apiKey: key, model: model,
+                               prompt: transformSystemPrompt, wrap: { $0 })
+        case .anthropic:
+            guard let key = env["ANTHROPIC_API_KEY"], !key.isEmpty else {
+                throw CleanupError.missingAPIKey("ANTHROPIC_API_KEY")
+            }
+            return ChatCleanup(kind: .anthropic, apiKey: key, model: model,
+                               prompt: transformSystemPrompt, wrap: { $0 })
+        }
+    }
+
     /// Default model per script for a provider, used by first-run detection.
     ///
     /// The local pair is the benchmarked outcome: 1.5b is faithful and fast on

@@ -3,12 +3,21 @@ import Foundation
 
 public enum RecordingMode: Equatable, Sendable { case pushToTalk, handsFree }
 
+/// What the recording is for. Captured at key-press, because it is the key you
+/// pressed that decides — not anything discoverable later from the audio.
+public enum RecordingIntent: Equatable, Sendable { case dictate, transform }
+
 public enum DictationState: Equatable, Sendable {
     case idle
     case recording(mode: RecordingMode, startedAt: ContinuousClock.Instant)
     case transcribing
     case cleaning
     case inserting
+    /// Rewriting the clipboard, rather than typing something new.
+    case transforming
+    /// Something finished and the user should know. Clears itself, like an error,
+    /// but it is not one — a transform succeeds on the clipboard, not on screen.
+    case notice(String)
     case error(String)
 
     public var isBusy: Bool { self != .idle }
@@ -62,6 +71,13 @@ public final class DictationController {
     }
 
     private var captured: (name: String?, bundleID: String?) = (nil, nil)
+    private var capturedIntent: RecordingIntent = .dictate
+
+    /// Set when transforms are wired. Absent, the transform key does nothing but say so.
+    public var transformRunner: TransformRunner?
+
+    /// Fired with the transform that ran, for the log and the menu.
+    public var onTransform: ((TransformRunner.Outcome) -> Void)?
 
     /// Read at key-press so a dictation uses the vocabulary as it was when you
     /// started speaking, not as it might be by the time you stop.
@@ -105,13 +121,13 @@ public final class DictationController {
 
     // MARK: - Input
 
-    public func handle(_ outcome: TapOutcome) async {
+    public func handle(_ outcome: TapOutcome, intent: RecordingIntent = .dictate) async {
         guard isEnabled else { return }
         switch outcome {
         case .beganHold:
-            startRecording(mode: .pushToTalk)
+            startRecording(mode: .pushToTalk, intent: intent)
         case .beganDoubleTap:
-            promoteToHandsFree()
+            promoteToHandsFree(intent: intent)
         case .endedHold, .stopHandsFree:
             await finishRecording()
         case .discardShortTap:
@@ -124,14 +140,15 @@ public final class DictationController {
     /// Esc. Drops a recording, or aborts work already running.
     public func cancelRequested() async {
         switch state {
-        case .idle, .error:
+        case .idle, .error, .notice:
             return
         case .recording:
             discardRecording(reason: "cancelled")
-        case .transcribing, .cleaning, .inserting:
+        case .transcribing, .cleaning, .inserting, .transforming:
             cancelled = true
             engine.cancel()
             cleanup.cancel()
+            transformRunner?.cancel()
             log.info("Cancelled in-flight transcription")
             state = .idle
         }
@@ -146,7 +163,7 @@ public final class DictationController {
 
     // MARK: - Recording
 
-    private func startRecording(mode: RecordingMode) {
+    private func startRecording(mode: RecordingMode, intent: RecordingIntent = .dictate) {
         guard state == .idle else { return }        // ignore key repeat / re-entry
         let url = Config.recordingsDirectory
             .appendingPathComponent("dictation-\(Int(Date().timeIntervalSince1970)).wav")
@@ -155,6 +172,7 @@ public final class DictationController {
             // Captured at key-press, not at insert: focus can move while you speak,
             // and the app you were looking at is the one that shaped the dictation.
             captured = frontmostApp()
+            capturedIntent = intent
             capturedVocabulary = vocabulary()
             capturedDestination = destination(captured.bundleID)
             try recorder.start(to: url)
@@ -186,11 +204,13 @@ public final class DictationController {
 
     /// A double tap arrives while the short first tap is still recording, so the
     /// audio continues seamlessly rather than restarting.
-    private func promoteToHandsFree() {
+    private func promoteToHandsFree(intent: RecordingIntent = .dictate) {
         if case .recording(_, let startedAt) = state {
             state = .recording(mode: .handsFree, startedAt: startedAt)
         } else {
-            startRecording(mode: .handsFree)
+            // The intent travels with the press: a double-tapped transform key must
+            // not quietly become a dictation.
+            startRecording(mode: .handsFree, intent: intent)
         }
     }
 
@@ -261,6 +281,15 @@ public final class DictationController {
             return
         }
 
+        // A transform diverges here: what you just said is the *instruction*, and
+        // the material is the clipboard. Nothing below this line applies to it —
+        // not the cleanup prompt, not the guard, not the dictionary.
+        if capturedIntent == .transform {
+            try? FileManager.default.removeItem(at: recording.url)
+            await runTransform(spoken: raw)
+            return
+        }
+
         // 2. Clean up. A cleanup failure must never lose the dictation, so the raw
         //    transcript is inserted instead.
         var text = raw
@@ -327,6 +356,51 @@ public final class DictationController {
         currentRecordingURL = nil
     }
 
+    /// Applies a spoken instruction to the clipboard. See `TransformRunner` for why
+    /// `CleanupGuard` is deliberately absent.
+    private func runTransform(spoken: String) async {
+        guard let runner = transformRunner else {
+            log.warn("Transform requested but no provider is configured")
+            state = .error("Transforms need a cleanup provider")
+            scheduleErrorClear()
+            return
+        }
+        state = .transforming
+
+        // The clipboard as it was goes to history before the model is called, so
+        // an unwanted rewrite is always recoverable. The *result* is not recorded:
+        // it is on the clipboard, and one row per transform beats two.
+        runner.onOriginal = { [weak self] original in
+            guard let self else { return }
+            self.onRecord?(HistoryEntry(
+                at: Date(), cleaned: original, raw: original,
+                script: ScriptDetector.detect(original),
+                appName: self.captured.name, bundleID: self.captured.bundleID,
+                durationSeconds: 0, peakLevel: 0, guardRejected: false,
+                kind: .transform))
+        }
+
+        do {
+            let outcome = try await runner.run(spoken: spoken)
+            if cancelled { state = .idle; return }
+            log.info("""
+                Transform “\(outcome.transform?.name ?? spoken)”:                 \(outcome.before.count) characters → \(outcome.after.count)
+                """)
+            remember(outcome.after)
+            onTransform?(outcome)
+            state = .notice("Rewritten — press ⌘V")
+            scheduleErrorClear()
+        } catch {
+            if cancelled { state = .idle; return }
+            // The clipboard still holds the original: the runner writes only on
+            // success. Saying so is the whole reassurance the user needs.
+            log.warn("Transform failed (\(error.localizedDescription)); clipboard unchanged")
+            let message = (error as? TransformError)?.errorDescription ?? "Transform failed"
+            state = .error(message)
+            scheduleErrorClear()
+        }
+    }
+
     private func remember(_ text: String) {
         let script = ScriptDetector.detect(text)
         lastDetectedLanguage = script == .arabic ? "AR" : "EN"
@@ -347,7 +421,10 @@ public final class DictationController {
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.5))
             guard let self else { return }
-            if case .error = self.state { self.state = .idle }
+            switch self.state {
+            case .error, .notice: self.state = .idle
+            default: break
+            }
         }
     }
 }

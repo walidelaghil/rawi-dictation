@@ -142,7 +142,7 @@ import Foundation
         let direct = ChatCleanup(kind: .ollama, apiKey: nil, model: "m",
                                  prompt: "BASE" + "\n\nSpell exactly: Salla.")
         let body = try! ChatCleanup.requestBody(kind: .ollama, model: "m",
-            prompt: "BASE" + "\n\nSpell exactly: Salla.", transcript: "t")
+            prompt: "BASE" + "\n\nSpell exactly: Salla.", user: wrapTranscript("t"))
         let json = try! JSONSerialization.jsonObject(with: body) as! [String: Any]
         let msgs = json["messages"] as! [[String: String]]
         #expect(msgs[0]["content"]!.contains("Salla"))

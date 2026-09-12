@@ -146,6 +146,10 @@ public struct Config: Codable, Sendable, Equatable {
     public var hotkeyBackend: HotkeyBackendKind
     public var fallbackHotkey: String
     public var cancelHotkey: String
+    /// Hold to speak an instruction that rewrites whatever is on the clipboard.
+    /// Registered through Carbon whichever backend dictation uses, because Carbon
+    /// needs no permission — the transform key should not depend on one.
+    public var transformHotkey: String
     public var engine: EngineKind
     public var whispercpp: WhisperCppSettings
     public var api: APISettings
@@ -159,6 +163,7 @@ public struct Config: Codable, Sendable, Equatable {
                 hotkeyBackend: HotkeyBackendKind = .auto,
                 fallbackHotkey: String = "ctrl+option+space",
                 cancelHotkey: String = "ctrl+option+escape",
+                transformHotkey: String = "ctrl+option+space",
                 engine: EngineKind,
                 whispercpp: WhisperCppSettings, api: APISettings,
                 cleanup: CleanupSettings, output: OutputSettings,
@@ -172,6 +177,7 @@ public struct Config: Codable, Sendable, Equatable {
         self.hotkeyBackend = hotkeyBackend
         self.fallbackHotkey = fallbackHotkey
         self.cancelHotkey = cancelHotkey
+        self.transformHotkey = transformHotkey
         self.engine = engine
         self.whispercpp = whispercpp
         self.api = api
@@ -199,6 +205,8 @@ public struct Config: Codable, Sendable, Equatable {
         fallbackHotkey = try c.decodeIfPresent(String.self, forKey: .fallbackHotkey)
             ?? d.fallbackHotkey
         cancelHotkey = try c.decodeIfPresent(String.self, forKey: .cancelHotkey) ?? d.cancelHotkey
+        transformHotkey = try c.decodeIfPresent(String.self, forKey: .transformHotkey)
+            ?? d.transformHotkey
         engine = try c.decodeIfPresent(EngineKind.self, forKey: .engine) ?? d.engine
         whispercpp = try c.decodeIfPresent(WhisperCppSettings.self, forKey: .whispercpp)
             ?? d.whispercpp
@@ -248,6 +256,7 @@ public struct Config: Codable, Sendable, Equatable {
         hotkeyBackend: .auto,
         fallbackHotkey: "ctrl+option+space",
         cancelHotkey: "ctrl+option+escape",
+        transformHotkey: "ctrl+option+space",
         engine: .whispercpp,
         whispercpp: defaultWhisperCpp,
         api: defaultAPI,

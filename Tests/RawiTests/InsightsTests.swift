@@ -111,3 +111,53 @@ import Foundation
         #expect(i.minutesSavedVersusTyping() == 0)
     }
 }
+
+@Suite("Insights and transforms") struct InsightsTransformTests {
+    func transformEntry(_ text: String, at: Date = Date()) -> HistoryEntry {
+        HistoryEntry(at: at, cleaned: text, raw: text, script: .latin,
+                     appName: "Brave", bundleID: "com.brave.Browser",
+                     durationSeconds: 0, peakLevel: 0, guardRejected: false,
+                     kind: .transform)
+    }
+
+    @Test("a transform's clipboard text is not counted as words you spoke") func excluded() {
+        let spoken = HistoryEntry(at: Date(), cleaned: "one two three", raw: "one two three",
+                                  script: .latin, appName: "Slack", bundleID: "slack",
+                                  durationSeconds: 6, peakLevel: 0.3, guardRejected: false)
+        let long = Array(repeating: "word", count: 500).joined(separator: " ")
+        let i = Insights.compute(from: [spoken, transformEntry(long)])
+        #expect(i.wordsDictated == 3)
+        #expect(i.dictations == 1)
+        // 3 words in 6 seconds is 30 wpm. Counting the 500 pasted words would
+        // report 5030 — a number the history list would flatly contradict.
+        #expect(i.wordsPerMinute == 30)
+    }
+
+    @Test("a day you only transformed still counts toward the streak") func streakCounts() {
+        let now = Date()
+        let day = { (o: Int) in Calendar.current.date(byAdding: .day, value: o,
+                        to: Calendar.current.startOfDay(for: now))! }
+        let i = Insights.compute(from: [transformEntry("x", at: day(0)),
+                                        transformEntry("y", at: day(-1))], now: now)
+        #expect(i.currentStreak == 2)
+    }
+
+    @Test("a history of nothing but transforms reports no rate, not a crash") func onlyTransforms() {
+        let i = Insights.compute(from: [transformEntry("a b c")])
+        #expect(i.wordsDictated == 0)
+        #expect(i.wordsPerMinute == 0)
+        #expect(i.minutesSavedVersusTyping() == 0)
+    }
+
+    @Test("an entry written before transforms existed still decodes as a dictation")
+    func backCompat() throws {
+        let line = """
+            {"id":"\(UUID().uuidString)","at":760000000,"cleaned":"hello there",\
+            "raw":"hello there","script":"latin","durationSeconds":2,\
+            "peakLevel":0.4,"guardRejected":false}
+            """
+        let entry = try JSONDecoder().decode(HistoryEntry.self, from: Data(line.utf8))
+        #expect(entry.kind == .dictation)
+        #expect(Insights.compute(from: [entry]).wordsDictated == 2)
+    }
+}

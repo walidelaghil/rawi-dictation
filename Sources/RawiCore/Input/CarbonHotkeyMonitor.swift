@@ -15,45 +15,71 @@ import Foundation
 /// Because a release event can be missed if the modifiers are lifted before the key,
 /// a safety timeout stops a push-to-talk recording that never saw its release.
 public final class CarbonHotkeyMonitor: HotkeyBackend {
-    private let keyCode: UInt16
+    private let keyCode: UInt16?
     private let modifiers: CGEventFlags
     private let cancelKeyCode: UInt16?
     private let cancelModifiers: CGEventFlags
+    private let transformKeyCode: UInt16?
+    private let transformModifiers: CGEventFlags
 
     private let onPress: () -> Void
     private let onRelease: () -> Void
     private let onCancel: () -> Void
+    private let onTransformPress: () -> Void
+    private let onTransformRelease: () -> Void
 
     private var hotKeyRef: EventHotKeyRef?
     private var cancelRef: EventHotKeyRef?
+    private var transformRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
 
     private static let signature = OSType(0x57464C57)     // 'WFLW'
-    private static let dictateID: UInt32 = 1
-    private static let cancelID: UInt32 = 2
 
-    public init(keyCode: UInt16, modifiers: CGEventFlags,
-                cancelKeyCode: UInt16?, cancelModifiers: CGEventFlags,
-                onPress: @escaping () -> Void,
-                onRelease: @escaping () -> Void,
-                onCancel: @escaping () -> Void) {
+    /// Hotkey ids are unique per signature across the whole process, so two
+    /// monitors — dictation on the event tap, transform on Carbon — would collide
+    /// on a fixed id. Each instance takes its own block of three.
+    private static let counter = Counter()
+    private let idBase: UInt32
+    private var dictateID: UInt32 { idBase + 1 }
+    private var cancelID: UInt32 { idBase + 2 }
+    private var transformID: UInt32 { idBase + 3 }
+
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var next: UInt32 = 0
+        func take() -> UInt32 { lock.withLock { next += 10; return next } }
+    }
+
+    public init(keyCode: UInt16?, modifiers: CGEventFlags,
+                cancelKeyCode: UInt16? = nil, cancelModifiers: CGEventFlags = [],
+                transformKeyCode: UInt16? = nil, transformModifiers: CGEventFlags = [],
+                onPress: @escaping () -> Void = {},
+                onRelease: @escaping () -> Void = {},
+                onCancel: @escaping () -> Void = {},
+                onTransformPress: @escaping () -> Void = {},
+                onTransformRelease: @escaping () -> Void = {}) {
         self.keyCode = keyCode
         self.modifiers = modifiers
         self.cancelKeyCode = cancelKeyCode
         self.cancelModifiers = cancelModifiers
+        self.transformKeyCode = transformKeyCode
+        self.transformModifiers = transformModifiers
         self.onPress = onPress
         self.onRelease = onRelease
         self.onCancel = onCancel
+        self.onTransformPress = onTransformPress
+        self.onTransformRelease = onTransformRelease
+        self.idBase = Self.counter.take()
     }
 
-    public var isRunning: Bool { hotKeyRef != nil }
+    public var isRunning: Bool { hotKeyRef != nil || transformRef != nil }
 
     public var describeBackend: String {
         "Carbon hotkey (no permissions required)"
     }
 
     public func start() throws {
-        guard hotKeyRef == nil else { return }
+        guard handlerRef == nil else { return }
 
         var types = [
             EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
@@ -82,32 +108,52 @@ public final class CarbonHotkeyMonitor: HotkeyBackend {
                                                 types.count, &types, context, &handlerRef)
         guard installStatus == noErr else { throw HotkeyError.carbonRegistrationFailed(installStatus) }
 
-        let status = RegisterEventHotKey(UInt32(keyCode), Self.carbonModifiers(modifiers),
-                                         EventHotKeyID(signature: Self.signature, id: Self.dictateID),
-                                         GetApplicationEventTarget(), 0, &hotKeyRef)
-        guard status == noErr else { throw HotkeyError.carbonRegistrationFailed(status) }
+        if let keyCode {
+            let status = RegisterEventHotKey(
+                UInt32(keyCode), Self.carbonModifiers(modifiers),
+                EventHotKeyID(signature: Self.signature, id: dictateID),
+                GetApplicationEventTarget(), 0, &hotKeyRef)
+            guard status == noErr else { throw HotkeyError.carbonRegistrationFailed(status) }
+        }
 
         if let cancelKeyCode {
             _ = RegisterEventHotKey(UInt32(cancelKeyCode), Self.carbonModifiers(cancelModifiers),
-                                    EventHotKeyID(signature: Self.signature, id: Self.cancelID),
+                                    EventHotKeyID(signature: Self.signature, id: cancelID),
                                     GetApplicationEventTarget(), 0, &cancelRef)
         }
+
+        // Transform is deliberately allowed to fail quietly: a clash with another
+        // app costs the transform key, and must not cost dictation too.
+        if let transformKeyCode {
+            _ = RegisterEventHotKey(UInt32(transformKeyCode),
+                                    Self.carbonModifiers(transformModifiers),
+                                    EventHotKeyID(signature: Self.signature, id: transformID),
+                                    GetApplicationEventTarget(), 0, &transformRef)
+        }
     }
+
+    /// False when the transform combination could not be claimed — another app
+    /// already owns it — so the caller can say so instead of leaving a dead key.
+    public var transformRegistered: Bool { transformRef != nil }
 
     public func stop() {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         if let cancelRef { UnregisterEventHotKey(cancelRef) }
+        if let transformRef { UnregisterEventHotKey(transformRef) }
         if let handlerRef { RemoveEventHandler(handlerRef) }
         hotKeyRef = nil
         cancelRef = nil
+        transformRef = nil
         handlerRef = nil
     }
 
     private func handle(id: UInt32, kind: UInt32) {
         switch (id, Int(kind)) {
-        case (Self.dictateID, kEventHotKeyPressed): onPress()
-        case (Self.dictateID, kEventHotKeyReleased): onRelease()
-        case (Self.cancelID, kEventHotKeyPressed): onCancel()
+        case (dictateID, kEventHotKeyPressed): onPress()
+        case (dictateID, kEventHotKeyReleased): onRelease()
+        case (cancelID, kEventHotKeyPressed): onCancel()
+        case (transformID, kEventHotKeyPressed): onTransformPress()
+        case (transformID, kEventHotKeyReleased): onTransformRelease()
         default: break
         }
     }

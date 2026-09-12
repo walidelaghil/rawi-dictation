@@ -41,8 +41,12 @@ public struct Insights: Sendable, Equatable {
     public static func compute(from entries: [HistoryEntry], now: Date = Date()) -> Insights {
         guard !entries.isEmpty else { return .empty }
 
-        let words = entries.reduce(0) { $0 + wordCount($1.cleaned) }
-        let seconds = entries.reduce(0.0) { $0 + max(0, $1.durationSeconds) }
+        // Spoken-word statistics count dictations only. A transform's row holds
+        // clipboard text nobody said, and counting it would inflate both the word
+        // total and — because its duration is zero — words per minute.
+        let spoken = entries.filter { $0.kind == .dictation }
+        let words = spoken.reduce(0) { $0 + wordCount($1.cleaned) }
+        let seconds = spoken.reduce(0.0) { $0 + max(0, $1.durationSeconds) }
         // Guard the divide: a history of zero-duration entries must not produce
         // an infinite rate.
         let wpm = seconds > 0 ? Int((Double(words) / (seconds / 60)).rounded()) : 0
@@ -64,9 +68,9 @@ public struct Insights: Sendable, Equatable {
             wordsDictated: words,
             secondsSpoken: seconds,
             wordsPerMinute: wpm,
-            dictations: entries.count,
-            cleanupsRejected: entries.filter(\.guardRejected).count,
-            entriesCleaned: entries.filter(\.wasCleaned).count,
+            dictations: spoken.count,
+            cleanupsRejected: spoken.filter(\.guardRejected).count,
+            entriesCleaned: spoken.filter(\.wasCleaned).count,
             byApp: shares,
             activeDays: days,
             currentStreak: streak(endingAt: now, days: days, formatter: formatter),
