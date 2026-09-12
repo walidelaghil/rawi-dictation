@@ -37,3 +37,44 @@ import AppKit
         }
     }
 }
+
+@MainActor
+@Suite("View menu") struct ViewMenuTests {
+    final class Target: NSObject {
+        @objc func screen(_ sender: NSMenuItem) {}
+        @objc func find() {}
+    }
+
+    /// NSMenuItem holds its target weakly, so the test has to keep it alive. In
+    /// the app the target is the app delegate, which outlives everything.
+    func viewMenu(_ target: Target) -> NSMenu? {
+        EditMenu.make(viewTarget: target,
+                             screenAction: #selector(Target.screen(_:)),
+                             findAction: #selector(Target.find))
+            .items.compactMap(\.submenu).first { $0.title == "View" }
+    }
+
+    @Test("every screen in the rail has a number key") func screens() throws {
+        let target = Target()
+        let menu = try #require(viewMenu(target))
+        for (index, screen) in Screen.allCases.enumerated() {
+            let item = menu.items.first { $0.title == screen.rawValue }
+            #expect(item?.keyEquivalent == "\(index + 1)")
+            #expect(item?.keyEquivalentModifierMask == .command)
+            #expect(item?.representedObject as? String == screen.rawValue)
+        }
+    }
+
+    @Test("find is ⌘F and reaches the app, not the first responder") func find() throws {
+        let target = Target()
+        let item = try #require(viewMenu(target)?.items.first { $0.title == "Find" })
+        #expect(item.target === target)
+        #expect(item.keyEquivalent == "f")
+        #expect(item.target != nil)
+    }
+
+    @Test("without a target there is no View menu rather than a dead one") func noTarget() {
+        let menu = EditMenu.make().items.compactMap(\.submenu).first { $0.title == "View" }
+        #expect(menu == nil)
+    }
+}

@@ -7,6 +7,13 @@ public final class HistoryViewModel: ObservableObject {
     @Published public var showInfo = false
     @Published public var confirmingPurge = false
     @Published public var appearance: ResolvedAppearance = .dark
+    /// The row the keyboard is on. Kept as an id rather than an index so a filter
+    /// or a delete cannot silently move the selection to a different dictation.
+    @Published public var selectedID: UUID?
+    /// Bumped to ask the view to put the caret in the search field.
+    @Published public var focusSearchToken = 0
+    /// Bumped to ask the view to scroll the selection into sight.
+    @Published public var scrollToken = 0
 
     private let store: HistoryStore
     public init(store: HistoryStore) {
@@ -17,6 +24,59 @@ public final class HistoryViewModel: ObservableObject {
     public func reload() { entries = store.all() }
 
     public var visible: [HistoryEntry] { HistorySearch.apply(filter, to: entries) }
+
+    /// Nil whenever the selected row is not on screen, so the highlight can never
+    /// point at something the filter is hiding.
+    public var selected: HistoryEntry? {
+        guard let selectedID else { return nil }
+        return visible.first { $0.id == selectedID }
+    }
+
+    public enum EscapeOutcome: Equatable { case clearedSearch, clearedSelection, nothingToClear }
+
+    /// Escape, in the order you want it: the search box first, then the selection.
+    @discardableResult
+    public func escape() -> EscapeOutcome {
+        if !filter.query.isEmpty { filter.query = ""; return .clearedSearch }
+        if selected != nil { selectedID = nil; return .clearedSelection }
+        return .nothingToClear
+    }
+
+    /// Arrow keys. Stops at the ends: wrapping loses your place in a list you are
+    /// scanning.
+    public func moveSelection(by step: Int) {
+        let rows = visible
+        guard !rows.isEmpty else { selectedID = nil; return }
+        guard let current = selected, let index = rows.firstIndex(of: current) else {
+            selectedID = (step > 0 ? rows.first : rows.last)?.id
+            scrollToken += 1
+            return
+        }
+        let next = min(max(index + step, 0), rows.count - 1)
+        selectedID = rows[next].id
+        scrollToken += 1
+    }
+
+    @discardableResult
+    public func copySelected() -> Bool {
+        guard let entry = selected else { return false }
+        copy(entry)
+        return true
+    }
+
+    /// Deleting keeps your place: the row below takes the selection, or the row
+    /// above when you were at the bottom.
+    public func deleteSelected() {
+        guard let entry = selected else { return }
+        let rows = visible
+        let index = rows.firstIndex(of: entry)
+        delete(entry)
+        let remaining = visible
+        guard !remaining.isEmpty, let index else { selectedID = nil; return }
+        selectedID = remaining[min(index, remaining.count - 1)].id
+    }
+
+    public func focusSearch() { focusSearchToken += 1 }
     public var apps: [(id: String, name: String)] { HistorySearch.apps(in: entries) }
 
     public func copy(_ entry: HistoryEntry) {
@@ -29,6 +89,7 @@ public final class HistoryViewModel: ObservableObject {
 
 public struct HistoryView: View {
     @ObservedObject var model: HistoryViewModel
+    @FocusState private var searchFocused: Bool
     public init(model: HistoryViewModel) { self.model = model }
 
     private func c(_ token: ColorToken) -> Color { RawiColors.color(token, model.appearance) }
@@ -45,6 +106,16 @@ public struct HistoryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(c(.surface))
         .overlay(alignment: .topLeading) { if model.showInfo { infoOverlay } }
+        // The list owns the arrows, Return and Delete once the search box does not.
+        .focusable(!searchFocused)
+        .onKeyPress(.upArrow) { model.moveSelection(by: -1); return .handled }
+        .onKeyPress(.downArrow) { model.moveSelection(by: 1); return .handled }
+        .onKeyPress(.return) { model.copySelected() ? .handled : .ignored }
+        .onKeyPress(.delete) { model.deleteSelected(); return .handled }
+        .onKeyPress(.escape) {
+            model.escape() == .nothingToClear ? .ignored : .handled
+        }
+        .onChange(of: model.focusSearchToken) { _, _ in searchFocused = true }
     }
 
     // MARK: - Header
@@ -117,10 +188,23 @@ public struct HistoryView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .foregroundStyle(c(.bone))
+                .focused($searchFocused)
+                .onSubmit { searchFocused = false }
+                .onExitCommand { model.escape(); searchFocused = false }
             if !model.filter.query.isEmpty {
                 Text("\(model.visible.count)")
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(c(.faint))
+                Button { model.escape() } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 12))
+                        .foregroundStyle(c(.faint))
+                }
+                .buttonStyle(.plain)
+                .help("Clear")
+            } else {
+                Text("⌘F")
+                    .font(.system(size: 10).monospaced())
+                    .foregroundStyle(c(.faint).opacity(0.7))
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
@@ -178,9 +262,18 @@ public struct HistoryView: View {
     }
 
     private var list: some View {
-        RowGroup(appearance: model.appearance) {
-            ForEach(model.visible) { entry in
-                Row(appearance: model.appearance) { row(entry) }
+        ScrollViewReader { proxy in
+            RowGroup(appearance: model.appearance) {
+                ForEach(model.visible) { entry in
+                    Row(appearance: model.appearance,
+                        selected: entry.id == model.selectedID) { row(entry) }
+                        .id(entry.id)
+                        .onTapGesture { model.selectedID = entry.id }
+                }
+            }
+            .onChange(of: model.scrollToken) { _, _ in
+                guard let id = model.selected?.id else { return }
+                withAnimation(.easeOut(duration: 0.14)) { proxy.scrollTo(id, anchor: .center) }
             }
         }
     }

@@ -58,12 +58,21 @@ public struct RowGroup<Content: View>: View {
 /// list of this size needs.
 public struct Row<Content: View>: View {
     let appearance: ResolvedAppearance
+    var selected: Bool = false
     @ViewBuilder var content: Content
     @State private var hovered = false
 
-    public init(appearance: ResolvedAppearance, @ViewBuilder content: () -> Content) {
+    public init(appearance: ResolvedAppearance, selected: Bool = false,
+                @ViewBuilder content: () -> Content) {
         self.appearance = appearance
+        self.selected = selected
         self.content = content()
+    }
+
+    private var fill: Color {
+        if selected { return RawiColors.color(.saffron, appearance).opacity(0.16) }
+        if hovered { return RawiColors.color(.surface, appearance).opacity(0.55) }
+        return .clear
     }
 
     public var body: some View {
@@ -71,10 +80,16 @@ public struct Row<Content: View>: View {
             .padding(.horizontal, 13)
             .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Radius.control)
-                .fill(hovered ? RawiColors.color(.surface, appearance).opacity(0.55) : .clear))
+            .background(
+                RoundedRectangle(cornerRadius: Radius.control).fill(fill)
+                    .overlay(RoundedRectangle(cornerRadius: Radius.control)
+                        .strokeBorder(selected
+                            ? RawiColors.color(.saffron, appearance).opacity(0.55)
+                            : .clear))
+            )
             .padding(.horizontal, 6)
             .onHover { hovered = $0 }
             .animation(.easeOut(duration: 0.12), value: hovered)
+            .animation(.easeOut(duration: 0.12), value: selected)
     }
 }

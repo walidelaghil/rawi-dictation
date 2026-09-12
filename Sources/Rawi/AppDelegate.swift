@@ -53,7 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Without this, an accessory app's own windows have no ⌘A, ⌘C or ⌘V:
         // AppKit resolves those through the main menu, which an LSUIElement app
         // does not get by default.
-        EditMenu.install()
+        EditMenu.install(viewTarget: self,
+                         screenAction: #selector(showScreen(_:)),
+                         findAction: #selector(findInHistory))
         log.info("Rawi starting")
 
         Task { @MainActor in
@@ -93,6 +95,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                      permissions: Permissions.current())
             }
         }
+    }
+
+    @objc private func showScreen(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let screen = Screen(rawValue: raw) else { return }
+        mainWindow.show(screen)
+    }
+
+    @objc private func findInHistory() {
+        mainWindow.show(.history)
+        mainWindow.focusSearch()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// The app window: a left rail and a content pane.
@@ -44,11 +45,18 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     /// Opens on a particular screen — the gear in the menu panel opens Settings.
     public func show(_ screen: Screen? = nil) {
         if let screen { selected = screen }
+        observeClose()
         reload()
         let window = window ?? makeWindow()
         self.window = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// ⌘F: the search box, wherever you were.
+    public func focusSearch() {
+        show(.history)
+        model.focusSearch()
     }
 
     public func setAppearance(_ appearance: ResolvedAppearance) {
@@ -70,6 +78,16 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         settings.reload()
     }
 
+    /// Esc reaches AppKit through the model, because a SwiftUI view cannot close
+    /// the window it is hosted in.
+    private var closeObserver: AnyCancellable?
+    private func observeClose() {
+        guard closeObserver == nil else { return }
+        closeObserver = selection.$closeToken
+            .dropFirst()
+            .sink { [weak self] _ in self?.window?.performClose(nil) }
+    }
+
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 980, height: 620),
@@ -81,6 +99,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         window.delegate = self
         window.minSize = NSSize(width: 760, height: 460)
         window.center()
+        selection.closeToken = 0
         window.contentView = NSHostingView(
             rootView: MainWindowView(history: model, vocabulary: vocabulary,
                                      destinations: destinations, transforms: transforms,
@@ -94,8 +113,10 @@ public final class MainWindow: NSObject, NSWindowDelegate {
 
 /// Which screen is showing, held outside the view so the menu bar can open one.
 @MainActor
-final class ScreenSelection: ObservableObject {
+public final class ScreenSelection: ObservableObject {
     @Published var screen: Screen = .history
+    /// Bumped to ask the window to close itself from inside SwiftUI.
+    @Published var closeToken = 0
 }
 
 public enum Screen: String, CaseIterable {
@@ -149,6 +170,7 @@ struct MainWindowView: View {
             }
         }
         .background(c(.surface))
+        .onExitCommand { selection.closeToken += 1 }
     }
 
     private var rail: some View {
@@ -170,7 +192,8 @@ struct MainWindowView: View {
             // UI that teaches you to stop reading the rail.
             ForEach(Screen.allCases, id: \.self) { item in
                 Button { selection.screen = item } label: {
-                    railRow(item.rawValue, symbol: item.symbol, selected: screen == item)
+                    railRow(item.rawValue, symbol: item.symbol, selected: screen == item,
+                            shortcut: (Screen.allCases.firstIndex(of: item) ?? 0) + 1)
                 }
                 .buttonStyle(.plain)
             }
@@ -194,11 +217,17 @@ struct MainWindowView: View {
         .background(c(.ink))
     }
 
-    private func railRow(_ title: String, symbol: String, selected: Bool) -> some View {
+    private func railRow(_ title: String, symbol: String, selected: Bool,
+                         shortcut: Int) -> some View {
         HStack(spacing: 10) {
             Image(systemName: symbol).font(.system(size: 14))
             Text(title).font(.system(size: 12.5, weight: selected ? .medium : .regular))
             Spacer()
+            // The shortcut lives next to the thing it opens, which is how anyone
+            // ever learns one.
+            Text("⌘\(shortcut)")
+                .font(.system(size: 10).monospaced())
+                .foregroundStyle(c(.faint).opacity(selected ? 0.9 : 0.5))
         }
         .foregroundStyle(selected ? c(.bone) : c(.muted))
         .padding(.horizontal, 9).padding(.vertical, 7)

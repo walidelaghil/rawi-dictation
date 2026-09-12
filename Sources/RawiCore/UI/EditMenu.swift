@@ -10,12 +10,16 @@ import AppKit
 ///
 /// The menu is never displayed. It exists only so the key equivalents resolve.
 public enum EditMenu {
-    public static func install(appName: String = "Rawi") {
+    public static func install(appName: String = "Rawi", viewTarget: AnyObject? = nil,
+                               screenAction: Selector? = nil, findAction: Selector? = nil) {
         guard NSApp.mainMenu == nil else { return }
-        NSApp.mainMenu = make(appName: appName)
+        NSApp.mainMenu = make(appName: appName, viewTarget: viewTarget,
+                              screenAction: screenAction, findAction: findAction)
     }
 
-    public static func make(appName: String = "Rawi") -> NSMenu {
+    public static func make(appName: String = "Rawi", viewTarget: AnyObject? = nil,
+                            screenAction: Selector? = nil,
+                            findAction: Selector? = nil) -> NSMenu {
         let main = NSMenu()
 
         let appItem = NSMenuItem()
@@ -50,6 +54,26 @@ public enum EditMenu {
         edit.addItem(find)
         editItem.submenu = edit
         main.addItem(editItem)
+
+        // View: the screens, numbered in rail order. A Mac app that cannot be
+        // driven from the keyboard feels generated however it looks.
+        if let target = viewTarget {
+            let viewItem = NSMenuItem()
+            let view = NSMenu(title: "View")
+            let find = NSMenuItem(title: "Find", action: findAction, keyEquivalent: "f")
+            find.target = target
+            view.addItem(find)
+            view.addItem(.separator())
+            for (index, screen) in Screen.allCases.enumerated() where index < 9 {
+                let item = NSMenuItem(title: screen.rawValue, action: screenAction,
+                                      keyEquivalent: "\(index + 1)")
+                item.target = target
+                item.representedObject = screen.rawValue
+                view.addItem(item)
+            }
+            viewItem.submenu = view
+            main.addItem(viewItem)
+        }
 
         let windowItem = NSMenuItem()
         let window = NSMenu(title: "Window")
