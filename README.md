@@ -450,7 +450,28 @@ whether audio was actually captured.
 
 ---
 
-## 9. Development
+## 9. History
+
+Every dictation is kept locally: the cleaned text, what whisper actually heard,
+which app you were in, the language, and whether the cleanup guard fired. Open
+the window from the menu bar.
+
+Search covers **both** the cleaned text and the raw transcript, because you
+remember what you said rather than what came out — searching a filler word that
+cleanup removed still finds the dictation.
+
+Privacy is a default rather than a setting to find:
+
+- capped at 500 entries
+- password managers and private-message clients are never recorded
+- **Clear all** deletes the file outright
+- audio is never stored; the WAV goes as soon as the text is produced
+
+The file is `~/Library/Application Support/Rawi/history.jsonl` — one JSON object
+per line, so `grep` and `tail` work on it directly. To disable it entirely, set
+`"history": { "enabled": false }` in your config.
+
+## 10. Development
 
 ```bash
 make test        # 111 tests
@@ -468,7 +489,7 @@ a protocol so it is swappable and testable with fakes. Design notes are in
 [`docs/superpowers/specs/`](docs/superpowers/specs/) and the build plan in
 [`docs/superpowers/plans/`](docs/superpowers/plans/).
 
-## 10. Privacy
+## 11. Privacy
 
 - No account, no sign-in, no telemetry, no analytics, no crash reporting.
 - With `engine: whispercpp` and `cleanup.provider` of `ollama` or `off`, **nothing
