@@ -275,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.log.info("Remote trigger: \(action.rawValue)")
                 switch action {
                 case .start: await self.controller.handle(.beganHold)
+                case .transform: await self.controller.handle(.beganHold, intent: .transform)
                 case .handsFree: await self.controller.handle(.beganDoubleTap)
                 case .stop: await self.controller.handle(.endedHold)
                 case .cancel: await self.controller.cancelRequested()

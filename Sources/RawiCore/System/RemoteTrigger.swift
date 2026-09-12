@@ -9,11 +9,14 @@ import Foundation
 /// itself. Posting a notification needs no permission, and the app that receives it
 /// runs with its own identity and its own grants.
 ///
-/// Only start/stop/cancel — it drives the same controller entry points the hotkey
-/// does, so it cannot do anything the hotkey could not.
+/// Only the actions the hotkeys already have — it drives the same controller entry
+/// points, so it cannot do anything a key press could not.
 public enum RemoteTrigger {
     public enum Action: String, Sendable, CaseIterable {
         case start, stop, cancel, handsFree, window
+        /// Begins a recording whose transcript is an instruction for the clipboard,
+        /// exactly as holding the transform key does. Ended with `stop`.
+        case transform
     }
 
     private static let name = "com.welaghil.rawi.trigger"
