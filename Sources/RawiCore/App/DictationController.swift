@@ -155,6 +155,23 @@ public final class DictationController {
             let now = ContinuousClock.now
             recordingStartedAt = now
             state = .recording(mode: mode, startedAt: now)
+        } catch AudioError.microphonePermissionDenied {
+            // Usually means the app was rebuilt: TCC grants bind to the code
+            // signature, and an ad-hoc signature changes every build. Asking again
+            // re-prompts, rather than leaving the user with a dead hotkey and an
+            // error they have to go and read in a log.
+            log.warn("Microphone access denied — requesting it again. "
+                   + "This usually means Rawi was rebuilt and macOS sees a new app.")
+            state = .error("Allow microphone access")
+            scheduleErrorClear()
+            Task { @MainActor [weak self] in
+                let granted = await Permissions.requestMicrophone()
+                self?.log.info("Microphone access \(granted ? "granted" : "still denied")")
+                if !granted {
+                    self?.log.warn("Open System Settings → Privacy & Security → Microphone "
+                                 + "and enable Rawi.")
+                }
+            }
         } catch {
             report(error, context: "start recording")
         }
