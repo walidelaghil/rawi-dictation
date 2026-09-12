@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// What dictation actually bound to, which is not always `config.hotkey` — the
     /// Carbon path substitutes the fallback. Needed to spot a clash.
     private var activeDictateKey: HotkeyMatcher?
+    /// True when the Carbon monitor took the transform key too, so it does not also
+    /// get its own.
+    private var carbonCarriesTransform = false
     private var watcher: ConfigWatcher?
     private var tapPattern = TapPattern(doubleTapWindow: .milliseconds(350),
                                         minHold: .milliseconds(250))
@@ -195,6 +198,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar = MenuBarController(controller: controller, log: log)
         menuBar.onOpenWindow = { [weak self] in self?.mainWindow.show() }
         menuBar.onOpenSettings = { [weak self] in self?.mainWindow.show(.settings) }
+        // Let go of the global hotkeys while one is being recorded, or the key you
+        // are trying to assign is swallowed by the key it is already assigned to.
+        mainWindow.settings.onCapture = { [weak self] capturing in
+            guard let self else { return }
+            if capturing {
+                self.monitor?.stop()
+                self.transformMonitor?.stop()
+                self.log.info("Hotkeys released while a shortcut is recorded")
+            } else {
+                self.startMonitoring()
+            }
+        }
         menuBar.onAction = { [weak self] id in
             guard let self else { return }
             switch id {
@@ -306,6 +321,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startMonitoring() {
         monitor?.stop()
         activeDictateKey = nil
+        carbonCarriesTransform = false
         let granted = Permissions.current().inputMonitoring
         let backend = config.hotkeyBackend.resolved(inputMonitoringGranted: granted)
 
@@ -363,15 +379,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             cancelMods = cm
         }
 
+        // The transform key rides on this same monitor when dictation is on Carbon
+        // too — one registration, one handler. It only needs its own monitor when
+        // dictation is using the event tap instead.
+        var transformCode: UInt16?
+        var transformMods = CGEventFlags()
+        if case .keyCode(let tc, let tm)? = HotkeyConfig.parse(config.transformHotkey),
+           !(tc == code && tm == mods) {
+            transformCode = tc
+            transformMods = tm
+        }
+
         let monitor = CarbonHotkeyMonitor(
             keyCode: code, modifiers: mods,
             cancelKeyCode: cancelCode, cancelModifiers: cancelMods,
+            transformKeyCode: transformCode, transformModifiers: transformMods,
             onPress: { MainActor.assumeIsolated { self.feed(self.tapPattern.press(at: .now)) } },
             onRelease: { MainActor.assumeIsolated { self.feed(self.tapPattern.release(at: .now)) } },
-            onCancel: { MainActor.assumeIsolated { self.escapePressed() } })
+            onCancel: { MainActor.assumeIsolated { self.escapePressed() } },
+            onTransformPress: {
+                MainActor.assumeIsolated {
+                    self.feed(self.transformTapPattern.press(at: .now), intent: .transform)
+                }
+            },
+            onTransformRelease: {
+                MainActor.assumeIsolated {
+                    self.feed(self.transformTapPattern.release(at: .now), intent: .transform)
+                }
+            })
         try monitor.start()
         self.monitor = monitor
-        log.info("Listening for \(hotkey); cancel with \(config.cancelHotkey)")
+        carbonCarriesTransform = transformCode != nil && monitor.transformRegistered
+        log.info("""
+            Listening for \(hotkey); cancel with \(config.cancelHotkey)\
+            \(carbonCarriesTransform ? "; transform on \(config.transformHotkey)" : "")
+            """)
         activeDictateKey = .keyCode(code, modifiers: mods)
     }
 
@@ -382,6 +424,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startTransformHotkey(dictateKey: HotkeyMatcher?) {
         transformMonitor?.stop()
         transformMonitor = nil
+        // Already bound alongside dictation on the one Carbon monitor.
+        guard !carbonCarriesTransform else { return }
         guard case .keyCode(let code, let mods)? = HotkeyConfig.parse(config.transformHotkey) else {
             log.warn("""
                 transformHotkey “\(config.transformHotkey)” is not a modifier+key                 combination; transforms have no key.

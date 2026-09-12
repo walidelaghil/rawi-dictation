@@ -12,7 +12,7 @@ import SwiftUI
         let out = URL(fileURLWithPath: ProcessInfo.processInfo.environment["RAWI_PROOF"]!)
         var images: [NSImage] = []
         for appearance in [ResolvedAppearance.dark, .light] {
-            let model = SettingsViewModel(config: .default)
+            let model = scratchSettings()
             model.appearance = appearance
             let view = NSHostingView(rootView: SettingsView(model: model))
             view.frame = NSRect(x: 0, y: 0, width: 700, height: 940)

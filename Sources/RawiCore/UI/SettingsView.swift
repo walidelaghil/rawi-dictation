@@ -11,6 +11,22 @@ public final class SettingsViewModel: ObservableObject {
     @Published public var recording: String?
     @Published public var saveError: String?
 
+    /// Called with true while a shortcut is being recorded.
+    ///
+    /// The global hotkeys have to be released for the duration. A Carbon hotkey is
+    /// consumed application-wide — including inside this app — so with dictation
+    /// bound to ⌥Space, pressing ⌥Space here started a dictation and the recorder
+    /// never saw the key at all. It looked exactly like the keyboard was dead.
+    public var onCapture: ((Bool) -> Void)?
+
+    private var captureTimeout: Task<Void, Never>?
+
+    /// Where this screen reads and writes. Injectable, and injected by every test:
+    /// a view model that defaults to the real config file will eventually be
+    /// constructed by a test, and then the test edits the user's live settings. It
+    /// has happened once — a hotkey test changed the running app's shortcut.
+    private let url: URL
+
     /// Which keys exist, in the order the screen lists them. The label is what a
     /// clash is reported against, so it is the user's word for the key.
     public enum Key: String, CaseIterable {
@@ -33,8 +49,31 @@ public final class SettingsViewModel: ObservableObject {
         }
     }
 
-    public init(config: Config = .default) {
+    public init(config: Config = .default, url: URL = Config.configFile) {
         self.config = config
+        self.url = url
+    }
+
+    public func beginCapture(_ key: Key) {
+        guard recording != key.rawValue else { return }
+        recording = key.rawValue
+        onCapture?(true)
+        // A capture left armed would leave the hotkeys released, which is worse
+        // than a shortcut not set. It gives up on its own.
+        captureTimeout?.cancel()
+        captureTimeout = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            self?.endCapture()
+        }
+    }
+
+    public func endCapture() {
+        captureTimeout?.cancel()
+        captureTimeout = nil
+        guard recording != nil else { return }
+        recording = nil
+        onCapture?(false)
     }
 
     public func value(for key: Key) -> String {
@@ -70,7 +109,7 @@ public final class SettingsViewModel: ObservableObject {
     /// through exactly the path a hand edit would take. No second mechanism.
     public func save() {
         do {
-            try config.save()
+            try config.save(to: url)
             saveError = nil
         } catch {
             saveError = error.localizedDescription
@@ -78,7 +117,7 @@ public final class SettingsViewModel: ObservableObject {
     }
 
     public func reload() {
-        if let loaded = try? Config.load() { config = loaded }
+        if let loaded = try? Config.load(from: url) { config = loaded }
         Task { await probeOllama() }
     }
 
@@ -87,6 +126,8 @@ public final class SettingsViewModel: ObservableObject {
         installedOllama = OllamaModels.preferred(from: models)
         ollamaReachable = !models.isEmpty
     }
+
+    public var configPath: String { url.path }
 
     public var whisperModels: [WhisperModel] { ModelStore.installed() }
 
@@ -127,6 +168,7 @@ public struct SettingsView: View {
         }
         .background(c(.surface))
         .onAppear { model.reload() }
+        .onDisappear { model.endCapture() }
     }
 
     // MARK: - Appearance
@@ -177,9 +219,9 @@ public struct SettingsView: View {
                                     recording: model.recording == key.rawValue,
                                     clashes: model.clashes(key),
                                     appearance: model.appearance,
-                                    onStart: { model.recording = key.rawValue },
+                                    onStart: { model.beginCapture(key) },
                                     onCapture: { raw in
-                                        model.recording = nil
+                                        model.endCapture()
                                         if let raw { model.set(raw, for: key) }
                                     })
                         Spacer()
@@ -309,7 +351,7 @@ public struct SettingsView: View {
                           + "the history cap and the excluded apps live in the file.") {
             HStack(spacing: 9) {
                 Button {
-                    NSWorkspace.shared.open(Config.configFile)
+                    NSWorkspace.shared.open(URL(fileURLWithPath: model.configPath))
                 } label: {
                     Text("Open config.json").font(.system(size: 11.5))
                         .foregroundStyle(c(.ink))
@@ -322,7 +364,7 @@ public struct SettingsView: View {
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: 7).fill(c(.raised)))
                 }.buttonStyle(.plain)
-                Text(Config.configFile.path)
+                Text(model.configPath)
                     .font(.system(size: 10.5).monospaced()).foregroundStyle(c(.faint))
                     .lineLimit(1).truncationMode(.head)
             }
@@ -389,7 +431,7 @@ struct HotkeyField: View {
 
     var body: some View {
         Button(action: onStart) {
-            Text(recording ? "Press keys…" : HotkeyConfig.symbolic(raw))
+            Text(recording ? "Press a combination…" : HotkeyConfig.symbolic(raw))
                 .font(.system(size: 12, weight: .medium).monospaced())
                 .foregroundStyle(recording ? c(.saffron) : (clashes ? c(.clay) : c(.bone)))
                 .frame(minWidth: 104)

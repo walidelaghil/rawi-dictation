@@ -100,8 +100,12 @@ public final class CarbonHotkeyMonitor: HotkeyBackend {
                                            MemoryLayout<EventHotKeyID>.size, nil, &id)
             guard status == noErr else { return OSStatus(eventNotHandledErr) }
 
-            monitor.handle(id: id.id, kind: GetEventKind(event))
-            return noErr
+            // Not ours: say so, or the event stops here. Carbon calls application
+            // handlers in order and a handler returning noErr consumes the event —
+            // which is how a second monitor (transform on Carbon while dictation
+            // runs on the event tap) ended up never hearing its own key.
+            return monitor.handle(id: id.id, kind: GetEventKind(event))
+                ? noErr : OSStatus(eventNotHandledErr)
         }
 
         let installStatus = InstallEventHandler(GetApplicationEventTarget(), callback,
@@ -147,15 +151,24 @@ public final class CarbonHotkeyMonitor: HotkeyBackend {
         handlerRef = nil
     }
 
-    private func handle(id: UInt32, kind: UInt32) {
+    /// True when this monitor owns the hotkey and acted on it.
+    @discardableResult
+    func handle(id: UInt32, kind: UInt32) -> Bool {
         switch (id, Int(kind)) {
         case (dictateID, kEventHotKeyPressed): onPress()
         case (dictateID, kEventHotKeyReleased): onRelease()
         case (cancelID, kEventHotKeyPressed): onCancel()
         case (transformID, kEventHotKeyPressed): onTransformPress()
         case (transformID, kEventHotKeyReleased): onTransformRelease()
-        default: break
+        default: return false
         }
+        return true
+    }
+
+    /// Whether an id belongs to this monitor at all. Exposed for the tests, which
+    /// cannot post a real Carbon event.
+    func owns(id: UInt32) -> Bool {
+        id == dictateID || id == cancelID || id == transformID
     }
 
     static func carbonModifiers(_ flags: CGEventFlags) -> UInt32 {
