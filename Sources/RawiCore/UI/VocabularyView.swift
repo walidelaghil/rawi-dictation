@@ -1,0 +1,287 @@
+import SwiftUI
+
+@MainActor
+public final class VocabularyViewModel: ObservableObject {
+    @Published public var terms: [DictionaryTerm] = []
+    @Published public var snippets: [Snippet] = []
+    @Published public var suggestions: [TermSuggestion] = []
+    @Published public var appearance: ResolvedAppearance = .dark
+    @Published public var showInfo = false
+    @Published public var newTerm = ""
+    @Published public var newTrigger = ""
+    @Published public var newExpansion = ""
+
+    private let store: VocabularyStore
+    private let history: HistoryStore
+
+    public init(store: VocabularyStore, history: HistoryStore) {
+        self.store = store
+        self.history = history
+        reload()
+    }
+
+    public func reload() {
+        terms = store.terms
+        snippets = store.snippets
+        suggestions = TermSuggester.suggestions(from: history.all(), known: store.terms)
+    }
+
+    public func addTerm() {
+        guard store.addTerm(newTerm) else { return }
+        newTerm = ""
+        reload()
+    }
+    public func accept(_ suggestion: TermSuggestion) {
+        store.addTerm(suggestion.token.capitalized,
+                      note: "seen \(suggestion.occurrences) times", automatic: true)
+        reload()
+    }
+    public func removeTerm(_ term: DictionaryTerm) { store.removeTerm(term.id); reload() }
+
+    public func addSnippet() {
+        guard store.addSnippet(trigger: newTrigger, expansion: newExpansion) else { return }
+        newTrigger = ""; newExpansion = ""
+        reload()
+    }
+    public func removeSnippet(_ snippet: Snippet) { store.removeSnippet(snippet.id); reload() }
+}
+
+public struct DictionaryScreen: View {
+    @ObservedObject var model: VocabularyViewModel
+    public init(model: VocabularyViewModel) { self.model = model }
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, model.appearance) }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ScreenHeader(title: "Dictionary", appearance: model.appearance,
+                         showInfo: $model.showInfo,
+                         info: "Your terms are applied three ways: as a hint to whisper, as a "
+                             + "glossary for the cleanup model, and — the one that always works — "
+                             + "a direct correction in code. The first two depend on the model; "
+                             + "the third does not.")
+
+            HStack(spacing: 9) {
+                TextField("Add a term Rawi keeps getting wrong", text: $model.newTerm)
+                    .textFieldStyle(.plain).font(.system(size: 13))
+                    .foregroundStyle(c(.bone))
+                    .onSubmit { model.addTerm() }
+                Button("Add") { model.addTerm() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12)).foregroundStyle(c(.saffron))
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(c(.ink))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c(.edge))))
+
+            if !model.suggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("SEEN OFTEN — ADD?")
+                        .font(.system(size: 9, weight: .medium).monospaced()).tracking(1.4)
+                        .foregroundStyle(c(.faint))
+                    FlowRow(spacing: 7) {
+                        ForEach(model.suggestions) { s in
+                            Button { model.accept(s) } label: {
+                                HStack(spacing: 6) {
+                                    Text(s.token).font(.system(size: 11.5))
+                                    Text("\(s.occurrences)×")
+                                        .font(.system(size: 9.5).monospaced())
+                                        .foregroundStyle(c(.faint))
+                                }
+                                .padding(.horizontal, 9).padding(.vertical, 4)
+                                .background(Capsule().fill(c(.raised))
+                                    .overlay(Capsule().strokeBorder(
+                                        s.looksLikeName ? c(.saffron) : c(.edge))))
+                                .foregroundStyle(c(.muted))
+                            }
+                            .buttonStyle(.plain)
+                            .help("Add “\(s.token)” to the dictionary")
+                        }
+                    }
+                }
+            }
+
+            if model.terms.isEmpty {
+                EmptyHint(title: "No terms yet.",
+                          detail: "Add the names and jargon Rawi mishears. "
+                                + "Suggestions appear here once a word recurs.",
+                          appearance: model.appearance)
+            } else {
+                RowList(appearance: model.appearance) {
+                    ForEach(model.terms) { term in
+                        HStack(spacing: 11) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(term.term).font(.system(size: 13))
+                                    .foregroundStyle(c(.bone))
+                                if !term.note.isEmpty {
+                                    Text(term.note).font(.system(size: 10.5).monospaced())
+                                        .foregroundStyle(c(.faint))
+                                }
+                            }
+                            Spacer()
+                            if term.addedAutomatically {
+                                Text("SUGGESTED")
+                                    .font(.system(size: 9, weight: .medium).monospaced())
+                                    .foregroundStyle(c(.saffron))
+                            }
+                            Button { model.removeTerm(term) } label: {
+                                Image(systemName: "xmark").font(.system(size: 9))
+                                    .foregroundStyle(c(.faint))
+                            }.buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 11)
+                        Divider().overlay(c(.edge))
+                    }
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 24).padding(.vertical, 22)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(c(.surface))
+    }
+}
+
+public struct SnippetsScreen: View {
+    @ObservedObject var model: VocabularyViewModel
+    public init(model: VocabularyViewModel) { self.model = model }
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, model.appearance) }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ScreenHeader(title: "Snippets", appearance: model.appearance,
+                         showInfo: $model.showInfo,
+                         info: "Say the phrase mid-dictation and it expands in place. Unlike a "
+                             + "keyboard expander this only fires while you are speaking, so it "
+                             + "cannot surprise you inside a word or a password field.")
+
+            HStack(spacing: 9) {
+                TextField("When I say…", text: $model.newTrigger)
+                    .textFieldStyle(.plain).font(.system(size: 13)).foregroundStyle(c(.bone))
+                    .frame(width: 170)
+                Text("→").foregroundStyle(c(.faint))
+                TextField("…type this", text: $model.newExpansion)
+                    .textFieldStyle(.plain).font(.system(size: 13)).foregroundStyle(c(.bone))
+                    .onSubmit { model.addSnippet() }
+                Button("Add") { model.addSnippet() }
+                    .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(c(.saffron))
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(c(.ink))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c(.edge))))
+
+            if model.snippets.isEmpty {
+                EmptyHint(title: "No snippets yet.",
+                          detail: "Try “my email” or “my calendar” — anything you say often.",
+                          appearance: model.appearance)
+            } else {
+                RowList(appearance: model.appearance) {
+                    ForEach(model.snippets) { snippet in
+                        HStack(spacing: 11) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("“\(snippet.trigger)”").font(.system(size: 13))
+                                    .foregroundStyle(c(.bone))
+                                Text("→ \(snippet.expansion)")
+                                    .font(.system(size: 10.5).monospaced())
+                                    .foregroundStyle(c(.faint)).lineLimit(1)
+                            }
+                            Spacer()
+                            Button { model.removeSnippet(snippet) } label: {
+                                Image(systemName: "xmark").font(.system(size: 9))
+                                    .foregroundStyle(c(.faint))
+                            }.buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 11)
+                        Divider().overlay(c(.edge))
+                    }
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 24).padding(.vertical, 22)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(c(.surface))
+    }
+}
+
+// MARK: - Shared pieces
+
+struct ScreenHeader: View {
+    let title: String
+    let appearance: ResolvedAppearance
+    @Binding var showInfo: Bool
+    let info: String
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 10) {
+                Text(title).font(.system(size: 21, weight: .semibold)).foregroundStyle(c(.bone))
+                Button { showInfo.toggle() } label: {
+                    Image(systemName: "info.circle").font(.system(size: 14))
+                        .foregroundStyle(c(.faint))
+                }.buttonStyle(.plain).help("About \(title.lowercased())")
+                Spacer()
+            }
+            if showInfo {
+                Text(info)
+                    .font(.system(size: 11.5)).foregroundStyle(c(.muted))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(13)
+                    .frame(maxWidth: 520, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+            }
+        }
+    }
+}
+
+struct EmptyHint: View {
+    let title: String, detail: String, appearance: ResolvedAppearance
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.system(size: 13)).foregroundStyle(c(.muted))
+            Text(detail).font(.system(size: 11.5)).foregroundStyle(c(.faint))
+        }.padding(.top, 14)
+    }
+}
+
+struct RowList<Content: View>: View {
+    let appearance: ResolvedAppearance
+    @ViewBuilder var content: Content
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
+    var body: some View {
+        ScrollView { LazyVStack(spacing: 0) { content } }
+            .background(RoundedRectangle(cornerRadius: 10).fill(c(.raised))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c(.edge))))
+    }
+}
+
+/// Wraps chips onto as many lines as they need.
+struct FlowRow: Layout {
+    var spacing: CGFloat = 7
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 400
+        var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x + size.width > width, x > 0 { x = 0; y += lineHeight + spacing; lineHeight = 0 }
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+        return CGSize(width: width, height: y + lineHeight)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize,
+                       subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, lineHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x + size.width > bounds.maxX, x > bounds.minX {
+                x = bounds.minX; y += lineHeight + spacing; lineHeight = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+    }
+}

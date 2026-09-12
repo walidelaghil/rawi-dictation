@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.welaghil.whisperflow</string>
+    <string>com.welaghil.rawi</string>
     <key>CFBundleName</key>
-    <string>WhisperFlow</string>
+    <string>Rawi</string>
     <key>CFBundleDisplayName</key>
-    <string>WhisperFlow</string>
+    <string>Rawi</string>
     <key>CFBundleExecutable</key>
-    <string>WhisperFlow</string>
+    <string>Rawi</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -25,8 +25,8 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>WhisperFlow records your voice while you hold the dictation hotkey, so it can transcribe it to text.</string>
+    <string>Rawi records your voice while you hold the dictation hotkey, so it can transcribe it to text.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>WhisperFlow pastes transcribed text into the app you are using.</string>
+    <string>Rawi pastes transcribed text into the app you are using.</string>
 </dict>
 </plist>

@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "WhisperFlow",
+    name: "Rawi",
     platforms: [.macOS(.v14)],
     targets: [
-        .target(name: "WhisperFlowCore"),
-        .executableTarget(name: "WhisperFlow", dependencies: ["WhisperFlowCore"]),
-        .testTarget(name: "WhisperFlowTests", dependencies: ["WhisperFlowCore"]),
+        .target(name: "RawiCore"),
+        .executableTarget(name: "Rawi", dependencies: ["RawiCore"]),
+        .testTarget(name: "RawiTests", dependencies: ["RawiCore"]),
     ]
 )
