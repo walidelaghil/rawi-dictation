@@ -57,9 +57,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.startWatchingConfig()
             self.watchSystemAppearance()
             self.startRemoteTriggers()
-            _ = await Permissions.requestMicrophone()
+            // Log and finish wiring BEFORE asking for the microphone. The request
+            // does not return until the user answers the system dialog, so
+            // awaiting it here left the menu bar unrefreshed and the permission
+            // state unlogged for as long as the prompt sat on screen.
             self.logPermissions()
             self.menuBar.refresh(state: .idle, permissions: Permissions.current())
+            Task { @MainActor [weak self] in
+                let granted = await Permissions.requestMicrophone()
+                guard let self else { return }
+                self.log.info("Microphone \(granted ? "granted" : "not granted")")
+                self.menuBar.refresh(state: self.controller.state,
+                                     permissions: Permissions.current())
+            }
         }
     }
 
