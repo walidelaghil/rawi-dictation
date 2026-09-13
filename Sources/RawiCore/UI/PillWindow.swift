@@ -40,6 +40,8 @@ public final class PillWindow {
         model.remaining = remaining
     }
 
+    public func setLabels(_ labels: HotkeyLabels) { model.labels = labels }
+
     public func hide() {
         stopCursorTracking()
         proximity.reset()

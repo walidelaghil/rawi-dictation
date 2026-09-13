@@ -216,6 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.menuBar.setRecent(self.recentFromHistory())
         }
         menuBar = MenuBarController(controller: controller, log: log)
+        publishHotkeyLabels()
         menuBar.onOpenWindow = { [weak self] in self?.mainWindow.show() }
         menuBar.onOpenSettings = { [weak self] in self?.mainWindow.show(.settings) }
         // Let go of the global hotkeys while one is being recorded, or the key you
@@ -249,6 +250,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyAppearance()
         tapPattern = TapPattern(doubleTapWindow: .milliseconds(config.doubleTapWindowMs),
                                 minHold: .milliseconds(config.minHoldMs))
+    }
+
+    /// One source of truth for every printed shortcut, refreshed whenever the
+    /// config or the permission state changes.
+    private func publishHotkeyLabels() {
+        let granted = Permissions.current().inputMonitoring
+        let labels = HotkeyLabels(config: config, inputMonitoringGranted: granted)
+        menuBar.setLabels(labels)
+        pill.setLabels(labels)
+        mainWindow.setLabels(labels)
+        mainWindow.settings.inputMonitoringGranted = granted
+
+        // Checked at launch, not only when someone edits a key: the shipped
+        // defaults once put dictate and transform on the same chord, and nothing
+        // in the app said so.
+        let bound = config.effectiveDictateHotkey(inputMonitoringGranted: granted)
+        let assignments = [("Dictate", bound), ("Transform clipboard", config.transformHotkey),
+                           ("Cancel", config.cancelHotkey)]
+        let clashing = HotkeyConfig.clashes(in: assignments)
+        if !clashing.isEmpty {
+            log.warn("""
+                \(clashing.joined(separator: " and ")) are on the same combination, \
+                so only one of them works. Change one in Settings.
+                """)
+        }
     }
 
     /// Keeps the dictionary in step with what you actually say.
@@ -655,6 +681,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tapPattern = TapPattern(doubleTapWindow: .milliseconds(config.doubleTapWindowMs),
                                 minHold: .milliseconds(config.minHoldMs))
         if hotkeyChanged { startMonitoring() }
+        publishHotkeyLabels()
         if transformsChanged { wireTransforms(env: env) }
         applyAppearance()
         log.info("Config reloaded (engine=\(config.engine.rawValue), "

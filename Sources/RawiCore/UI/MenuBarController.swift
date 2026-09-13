@@ -116,6 +116,8 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
 
     public func setRecent(_ recent: [RecentDictation]) { panel.recent = recent }
 
+    public func setLabels(_ labels: HotkeyLabels) { panel.labels = labels }
+
     public func setAppearance(_ appearance: ResolvedAppearance) { panel.appearance = appearance }
 
     // MARK: - Popover

@@ -67,6 +67,7 @@ public final class PillModel: ObservableObject {
     /// Accessibility was never granted.
     @Published public var pasteHint: Bool = false
     @Published public var motion: MarkMotion = .rest
+    @Published public var labels: HotkeyLabels = .placeholder
     public init() {}
 }
 
@@ -110,7 +111,7 @@ public struct PillView: View {
             }
 
             if model.armed {
-                Text("⌃⌥Esc to cancel")
+                Text("\(model.labels.cancel) to cancel")
                     .font(.system(size: TypeScale.small))
                     .foregroundStyle(RawiColors.pill(.faint))
                     .transition(.opacity)

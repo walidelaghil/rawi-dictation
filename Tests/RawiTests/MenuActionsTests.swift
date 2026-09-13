@@ -3,13 +3,26 @@ import Foundation
 @testable import RawiCore
 
 @Suite("MenuActions") struct MenuActionsTests {
+    let labels = HotkeyLabels(config: .default, inputMonitoringGranted: false)
+
     @Test("the shipped actions are dictate and transform only") func shipped() {
         // Commands is designed but deferred — see docs/BACKLOG.md.
-        #expect(MenuActions.all.map(\.id) == ["dictate", "transform"])
+        #expect(MenuActions.all(labels).map(\.id) == ["dictate", "transform"])
+    }
+
+    @Test("the shortcuts shown are the ones actually bound") func boundKeys() {
+        // They were glyph literals, so rebinding a key changed the key and not the
+        // label — and on a Mac without Input Monitoring the literal was wrong from
+        // the first launch.
+        var config = Config.default
+        config.hotkey = "fn"
+        config.fallbackHotkey = "shift+cmd+d"
+        let bound = HotkeyLabels(config: config, inputMonitoringGranted: false)
+        #expect(MenuActions.all(bound).first { $0.id == "dictate" }?.shortcut == "⇧⌘D")
     }
 
     @Test("every action names a title, a shortcut and a symbol") func complete() {
-        for a in MenuActions.all {
+        for a in MenuActions.all(labels) {
             #expect(!a.title.isEmpty)
             #expect(!a.shortcut.isEmpty)
             #expect(!a.symbol.isEmpty)
@@ -17,7 +30,7 @@ import Foundation
     }
 
     @Test("ids are unique") func unique() {
-        #expect(Set(MenuActions.all.map(\.id)).count == MenuActions.all.count)
+        #expect(Set(MenuActions.all(labels).map(\.id)).count == MenuActions.all(labels).count)
     }
 }
 

@@ -10,6 +10,8 @@ public final class MenuPanelModel: ObservableObject {
     @Published public var appearance: ResolvedAppearance = .dark
     @Published public var recentOpen: Bool = false
     @Published public var motion: MarkMotion = .rest
+    /// The shortcuts as bound, not as defaulted.
+    @Published public var labels: HotkeyLabels = .placeholder
 
     public var onAction: ((String) -> Void)?
     public var onCopy: ((RecentDictation) -> Void)?
@@ -56,7 +58,7 @@ public struct MenuPanelView: View {
                     .font(.system(size: TypeScale.heading, weight: .semibold))
                     .foregroundStyle(c(.bone))
                 Spacer()
-                Text(isLive ? PillLabel.elapsed(model.elapsed) : "⌥Space")
+                Text(isLive ? PillLabel.elapsed(model.elapsed) : model.labels.dictate)
                     .font(.system(size: TypeScale.small).monospacedDigit())
                     .foregroundStyle(isLive ? c(.muted) : c(.faint))
             }
@@ -75,7 +77,7 @@ public struct MenuPanelView: View {
                     }
                 }
             } else {
-                Text("Hold the key anywhere. Language is detected for you.")
+                Text("Hold \(model.labels.dictate) anywhere. Language is detected for you.")
                     .font(.system(size: TypeScale.small))
                     .foregroundStyle(c(.faint))
                     .fixedSize(horizontal: false, vertical: true)
@@ -102,7 +104,8 @@ public struct MenuPanelView: View {
 
     private var actionStrip: some View {
         HStack(spacing: 0) {
-            ForEach(Array(MenuActions.all.enumerated()), id: \.element.id) { index, action in
+            ForEach(Array(MenuActions.all(model.labels).enumerated()),
+                    id: \.element.id) { index, action in
                 if index > 0 { Rectangle().fill(c(.edge)).frame(width: 1, height: 34) }
                 actionCell(action)
             }
@@ -111,13 +114,18 @@ public struct MenuPanelView: View {
 
     private func actionCell(_ action: MenuAction) -> some View {
         Button { model.onAction?(action.id) } label: {
-            HStack(spacing: 7) {
-                Image(systemName: action.symbol)
-                    .font(.system(size: TypeScale.heading))
-                    .foregroundStyle(action.id == "dictate" ? c(.saffron) : c(.faint))
+            VStack(spacing: 3) {
+                HStack(spacing: 7) {
+                    Image(systemName: action.symbol)
+                        .font(.system(size: TypeScale.body))
+                        .foregroundStyle(action.id == "dictate" ? c(.saffron) : c(.muted))
+                    Text(action.title == "Transform clipboard" ? "Transform" : action.title)
+                        .font(.system(size: TypeScale.small, weight: .medium))
+                        .foregroundStyle(c(.bone))
+                }
                 Text(action.shortcut)
                     .font(.system(size: TypeScale.micro).monospaced())
-                    .foregroundStyle(c(.faint))
+                    .foregroundStyle(c(.muted))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 9)

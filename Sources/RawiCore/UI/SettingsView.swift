@@ -62,9 +62,15 @@ public final class SettingsViewModel: ObservableObject {
         }
     }
 
-    public init(config: Config = .default, url: URL = Config.configFile) {
+    /// Whether Input Monitoring is granted, which decides which of the two
+    /// dictation keys is really listening.
+    public var inputMonitoringGranted: Bool = Permissions.current().inputMonitoring
+
+    public init(config: Config = .default, url: URL = Config.configFile,
+                inputMonitoringGranted: Bool = Permissions.current().inputMonitoring) {
         self.config = config
         self.url = url
+        self.inputMonitoringGranted = inputMonitoringGranted
     }
 
     /// True when a capture gave up on its own rather than being used.
@@ -99,7 +105,11 @@ public final class SettingsViewModel: ObservableObject {
 
     public func value(for key: Key) -> String {
         switch key {
-        case .dictate: config.hotkey
+        // The bound key, not the requested one: on a Mac without Input Monitoring
+        // the Carbon backend substitutes the fallback, and a settings screen that
+        // shows the other value is showing a shortcut that does nothing.
+        case .dictate: config.effectiveDictateHotkey(
+            inputMonitoringGranted: inputMonitoringGranted)
         case .transform: config.transformHotkey
         case .cancel: config.cancelHotkey
         }
@@ -150,6 +160,12 @@ public final class SettingsViewModel: ObservableObject {
         case .cancel: config.cancelHotkey = raw
         }
         save()
+    }
+
+    /// True when the key you asked for could not be bound and the fallback took
+    /// over, which is the normal case on a managed Mac.
+    public var dictateIsSubstituted: Bool {
+        value(for: .dictate) != config.hotkey
     }
 
     public var clashing: [String] {
@@ -268,8 +284,9 @@ public struct SettingsView: View {
                                 .foregroundStyle(c(.bone))
                             Text(key.detail).font(.system(size: TypeScale.small))
                                 .foregroundStyle(c(.faint))
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .frame(width: 230, alignment: .leading)
+                        .frame(minWidth: 230, maxWidth: 260, alignment: .leading)
 
                         HotkeyField(raw: model.value(for: key),
                                     recording: model.recording == key.rawValue,
@@ -320,6 +337,12 @@ public struct SettingsView: View {
                 }
 
                 // A config edited by hand can still hold a collision.
+                if model.dictateIsSubstituted {
+                    Text("Input Monitoring is not granted, so “\(HotkeyConfig.symbolic(model.config.hotkey))” "
+                       + "cannot be bound. Dictate is listening on the key above instead.")
+                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
+                }
+
                 if !model.clashing.isEmpty {
                     Text("\(model.clashing.joined(separator: " and ")) are on the same "
                        + "combination, so only one of them works. Click either and press "

@@ -19,12 +19,14 @@ public enum MenuActions {
     /// Two, not three. Commands is designed but deferred — see docs/BACKLOG.md.
     /// Adding a third here is also the point at which the hover-only labels stop
     /// being defensible and need to come back on screen.
-    public static let all: [MenuAction] = [
-        MenuAction(id: "dictate", title: "Dictate",
-                   shortcut: "⌥Space", symbol: "mic"),
-        MenuAction(id: "transform", title: "Transform clipboard",
-                   shortcut: "⌃⌥Space", symbol: "wand.and.sparkles"),
-    ]
+    public static func all(_ labels: HotkeyLabels) -> [MenuAction] {
+        [
+            MenuAction(id: "dictate", title: "Dictate",
+                       shortcut: labels.dictate, symbol: "mic"),
+            MenuAction(id: "transform", title: "Transform clipboard",
+                       shortcut: labels.transform, symbol: "wand.and.sparkles"),
+        ]
+    }
 }
 
 /// A dictation recent enough to still be worth re-copying.

@@ -172,10 +172,21 @@ import SwiftUI
                                 destinationStore: destinations, transformStore: transforms,
                                 appearance: .dark)
         var images: [NSImage] = []
-        for screen in [Screen.transforms, .history, .destinations] {
+        let appearance: ResolvedAppearance =
+            ProcessInfo.processInfo.environment["RAWI_LIGHT"] != nil ? .light : .dark
+        window.setAppearance(appearance)
+        for screen in Screen.allCases {
             window.show(screen)
             let view = window.testRootView()
-            images.append(shot(view, width: 980, height: 620))
+            let image = shot(view, width: 980, height: 620)
+            images.append(image)
+            // Each screen also lands on its own, so a review can look closely.
+            if let dir = ProcessInfo.processInfo.environment["RAWI_WINDOW_DIR"] {
+                let file = URL(fileURLWithPath: dir)
+                    .appendingPathComponent("screen-\(screen.rawValue.lowercased()).png")
+                try NSBitmapImageRep(data: image.tiffRepresentation!)!
+                    .representation(using: .png, properties: [:])!.write(to: file)
+            }
         }
         window.close()
         let gap: CGFloat = 14

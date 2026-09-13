@@ -17,7 +17,10 @@ func scratchSettings(_ config: Config = .default) -> SettingsViewModel {
 @Suite("Settings") struct SettingsViewModelTests {
     @Test("each key reads and writes its own config field") func fields() {
         let model = scratchSettings()
-        #expect(model.value(for: .dictate) == Config.default.hotkey)
+        // Dictate shows the key that is bound, which on a Mac without Input
+        // Monitoring is the fallback rather than the bare modifier requested.
+        #expect(model.value(for: .dictate)
+                == Config.default.effectiveDictateHotkey(inputMonitoringGranted: false))
         #expect(model.value(for: .transform) == Config.default.transformHotkey)
         #expect(model.value(for: .cancel) == Config.default.cancelHotkey)
     }

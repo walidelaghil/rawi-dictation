@@ -14,6 +14,7 @@ public final class HistoryViewModel: ObservableObject {
     @Published public var focusSearchToken = 0
     /// Bumped to ask the view to scroll the selection into sight.
     @Published public var scrollToken = 0
+    @Published public var labels: HotkeyLabels = .placeholder
 
     private let store: HistoryStore
     public init(store: HistoryStore) {
@@ -254,7 +255,7 @@ public struct HistoryView: View {
             Text(model.entries.isEmpty ? "Nothing dictated yet." : "No matches.")
                 .font(.system(size: TypeScale.heading)).foregroundStyle(c(.muted))
             Text(model.entries.isEmpty
-                 ? "Hold ⌥Space anywhere and speak."
+                 ? "Hold \(model.labels.dictate) anywhere and speak."
                  : "Try a word you remember saying. Search covers the raw transcript too.")
                 .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
         }

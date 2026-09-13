@@ -17,6 +17,7 @@ public final class TransformsViewModel: ObservableObject {
     @Published public var tryResult = ""
     @Published public var tryError: String?
     @Published public var trying = false
+    @Published public var labels: HotkeyLabels = .placeholder
 
     private let store: TransformStore
 
@@ -79,8 +80,9 @@ public struct TransformsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(title: "Transforms", appearance: model.appearance,
                              showInfo: $model.showInfo,
-                             info: "Copy some text, hold ⌃⌥Space and say what to do with it. "
-                                 + "the clipboard comes back rewritten. Saying a transform's "
+                             info: "Copy some text, hold \(model.labels.transform) and say what "
+                                 + "to do with it. The clipboard comes back rewritten. Saying a "
+                                 + "transform's "
                                  + "name uses its tuned instruction; anything else is used as "
                                  + "you said it. The original goes to History before the model "
                                  + "runs, and a failed transform leaves your clipboard exactly "

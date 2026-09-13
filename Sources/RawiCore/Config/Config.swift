@@ -163,7 +163,7 @@ public struct Config: Codable, Sendable, Equatable {
                 hotkeyBackend: HotkeyBackendKind = .auto,
                 fallbackHotkey: String = "ctrl+option+space",
                 cancelHotkey: String = "ctrl+option+escape",
-                transformHotkey: String = "ctrl+option+space",
+                transformHotkey: String = "ctrl+option+t",
                 engine: EngineKind,
                 whispercpp: WhisperCppSettings, api: APISettings,
                 cleanup: CleanupSettings, output: OutputSettings,
@@ -256,13 +256,28 @@ public struct Config: Codable, Sendable, Equatable {
         hotkeyBackend: .auto,
         fallbackHotkey: "ctrl+option+space",
         cancelHotkey: "ctrl+option+escape",
-        transformHotkey: "ctrl+option+space",
+        transformHotkey: "ctrl+option+t",
         engine: .whispercpp,
         whispercpp: defaultWhisperCpp,
         api: defaultAPI,
         cleanup: defaultCleanup,
         output: defaultOutput,
         history: defaultHistory)
+
+    /// The dictation key that is actually listening.
+    ///
+    /// `hotkey` is what you asked for; on a Mac that cannot grant Input Monitoring
+    /// the Carbon backend cannot bind a bare modifier and substitutes
+    /// `fallbackHotkey`. Every screen that prints a shortcut has to print this one,
+    /// or it teaches a gesture that does nothing on the machine it is running on.
+    public func effectiveDictateHotkey(inputMonitoringGranted: Bool) -> String {
+        switch hotkeyBackend.resolved(inputMonitoringGranted: inputMonitoringGranted) {
+        case .carbon:
+            return HotkeyConfig.isCarbonCompatible(hotkey) ? hotkey : fallbackHotkey
+        case .eventTap, .auto:
+            return hotkey
+        }
+    }
 
     // MARK: - Locations
 
