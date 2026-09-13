@@ -18,9 +18,10 @@ public final class PillWindow {
     public init() {}
 
     public func show(state: DictationState, level: Double,
-                     elapsed: Duration, remaining: Duration?, pasteHint: Bool = false) {
+                     elapsed: Duration, remaining: Duration?, pasteHint: Bool = false,
+                     motion: MarkMotion = .rest) {
         update(state: state, level: level, elapsed: elapsed, remaining: remaining,
-               pasteHint: pasteHint)
+               pasteHint: pasteHint, motion: motion)
         let panel = panel ?? makePanel()
         self.panel = panel
         reposition(panel)
@@ -29,7 +30,9 @@ public final class PillWindow {
     }
 
     public func update(state: DictationState, level: Double,
-                       elapsed: Duration, remaining: Duration?, pasteHint: Bool = false) {
+                       elapsed: Duration, remaining: Duration?, pasteHint: Bool = false,
+                       motion: MarkMotion = .rest) {
+        model.motion = motion
         model.pasteHint = pasteHint
         model.state = state
         model.level = level

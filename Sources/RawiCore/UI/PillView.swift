@@ -66,6 +66,7 @@ public final class PillModel: ObservableObject {
     /// Whether the text still needs pasting by hand, which is only true where
     /// Accessibility was never granted.
     @Published public var pasteHint: Bool = false
+    @Published public var motion: MarkMotion = .rest
     public init() {}
 }
 
@@ -80,19 +81,19 @@ public struct PillView: View {
         HStack(spacing: 10) {
             mark
             Text(PillLabel.text(for: model.state))
-                .font(.system(size: 12.5, weight: .medium))
+                .font(.system(size: TypeScale.body, weight: .medium))
                 .foregroundStyle(RawiColors.pill(.bone))
                 .fixedSize()
 
             if isRecording {
                 LevelMeter(level: model.level, accent: accent)
                 Text(PillLabel.elapsed(model.elapsed))
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(.system(size: TypeScale.small).monospacedDigit())
                     .foregroundStyle(RawiColors.pill(.muted))
                 if let remaining = model.remaining,
                    let countdown = PillLabel.countdown(remaining) {
                     Text(countdown)
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .font(.system(size: TypeScale.small, weight: .semibold).monospacedDigit())
                         .foregroundStyle(RawiColors.pill(.saffron))
                 }
             }
@@ -101,7 +102,7 @@ public struct PillView: View {
             // on a Mac that can auto-paste, there is nothing to press.
             if model.pasteHint, case .notice = model.state {
                 Text("⌘V")
-                    .font(.system(size: 10.5, weight: .medium).monospaced())
+                    .font(.system(size: TypeScale.small, weight: .medium).monospaced())
                     .foregroundStyle(RawiColors.pill(.saffron))
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Capsule().fill(RawiColors.pill(.raised)))
@@ -110,7 +111,7 @@ public struct PillView: View {
 
             if model.armed {
                 Text("⌃⌥Esc to cancel")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: TypeScale.small))
                     .foregroundStyle(RawiColors.pill(.faint))
                     .transition(.opacity)
             }
@@ -128,17 +129,14 @@ public struct PillView: View {
         .animation(.easeOut(duration: 0.16), value: model.state)
     }
 
-    @ViewBuilder private var mark: some View {
-        switch model.state {
-        case .recording:
-            Circle().fill(accent).frame(width: 8, height: 8)
-        case .transcribing, .cleaning, .inserting, .transforming:
-            ProgressView().controlSize(.small).scaleEffect(0.62).frame(width: 13, height: 13)
-        case .error, .notice:
-            Circle().fill(accent).frame(width: 8, height: 8)
-        case .idle:
-            RoundedRectangle(cornerRadius: Radius.mark).fill(accent).frame(width: 8, height: 8)
-        }
+    /// The mark, all the way through. The spinner that used to sit here while the
+    /// model worked was furniture every app owns; this is the same seven points
+    /// the menu bar draws, flattening to a line and springing back.
+    private var mark: some View {
+        RawiMarkShape(level: isRecording ? model.level : 0, motion: model.motion)
+            .stroke(accent, style: RawiMarkShape.stroke(for: 17))
+            .frame(width: 17, height: 17)
+            .accessibilityHidden(true)
     }
 }
 

@@ -9,6 +9,7 @@ public final class MenuPanelModel: ObservableObject {
     @Published public var recent: [RecentDictation] = []
     @Published public var appearance: ResolvedAppearance = .dark
     @Published public var recentOpen: Bool = false
+    @Published public var motion: MarkMotion = .rest
 
     public var onAction: ((String) -> Void)?
     public var onCopy: ((RecentDictation) -> Void)?
@@ -52,11 +53,11 @@ public struct MenuPanelView: View {
             HStack(spacing: 10) {
                 stateMark
                 Text(PillLabel.text(for: model.state))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: TypeScale.heading, weight: .semibold))
                     .foregroundStyle(c(.bone))
                 Spacer()
                 Text(isLive ? PillLabel.elapsed(model.elapsed) : "⌥Space")
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(.system(size: TypeScale.small).monospacedDigit())
                     .foregroundStyle(isLive ? c(.muted) : c(.faint))
             }
 
@@ -65,17 +66,17 @@ public struct MenuPanelView: View {
                 if let language = model.detectedLanguage {
                     HStack(spacing: 7) {
                         Text("DETECTED")
-                            .font(.system(size: 9, weight: .medium).monospaced())
+                            .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
                             .tracking(1.4)
                             .foregroundStyle(c(.faint))
                         Text(language)
-                            .font(.system(size: 10.5, weight: .semibold).monospaced())
+                            .font(.system(size: TypeScale.small, weight: .semibold).monospaced())
                             .foregroundStyle(c(.lapis))
                     }
                 }
             } else {
                 Text("Hold the key anywhere. Language is detected for you.")
-                    .font(.system(size: 11.5))
+                    .font(.system(size: TypeScale.small))
                     .foregroundStyle(c(.faint))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -91,7 +92,7 @@ public struct MenuPanelView: View {
     /// what is happening, which is why it replaced the plain status dot.
     private var stateMark: some View {
         let token = model.state == .idle ? ColorToken.faint : PillLabel.token(for: model.state)
-        return RawiMarkShape()
+        return RawiMarkShape(level: isLive ? model.level : 0, motion: model.motion)
             .stroke(c(token), style: RawiMarkShape.stroke(for: 18))
             .frame(width: 18, height: 18)
             .accessibilityHidden(true)
@@ -112,10 +113,10 @@ public struct MenuPanelView: View {
         Button { model.onAction?(action.id) } label: {
             HStack(spacing: 7) {
                 Image(systemName: action.symbol)
-                    .font(.system(size: 13))
+                    .font(.system(size: TypeScale.heading))
                     .foregroundStyle(action.id == "dictate" ? c(.saffron) : c(.faint))
                 Text(action.shortcut)
-                    .font(.system(size: 9.5).monospaced())
+                    .font(.system(size: TypeScale.micro).monospaced())
                     .foregroundStyle(c(.faint))
             }
             .frame(maxWidth: .infinity)
@@ -132,7 +133,7 @@ public struct MenuPanelView: View {
         .overlay(alignment: .top) {
             if hovered == action.id {
                 Text(action.title)
-                    .font(.system(size: 10.5))
+                    .font(.system(size: TypeScale.small))
                     .foregroundStyle(c(.bone))
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
@@ -157,23 +158,23 @@ public struct MenuPanelView: View {
         Button { model.recentOpen.toggle() } label: {
             HStack(spacing: 8) {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: TypeScale.micro, weight: .semibold))
                     .foregroundStyle(c(.muted))
                     .rotationEffect(.degrees(model.recentOpen ? 90 : 0))
                 Text("RECENT")
-                    .font(.system(size: 9.5, weight: .medium).monospaced())
+                    .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
                     .tracking(1.4)
                     .foregroundStyle(c(.muted))
                 if !model.recent.isEmpty {
                     Text("\(model.recent.count)")
-                        .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+                        .font(.system(size: TypeScale.micro, weight: .medium).monospacedDigit())
                         .foregroundStyle(c(.bone))
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .background(Capsule().fill(c(.raised)))
                 }
                 Spacer()
                 Text(model.recentOpen ? "Hide" : "Show")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: TypeScale.small))
                     .foregroundStyle(c(.faint))
             }
             .padding(.horizontal, 15).padding(.vertical, 9)
@@ -188,7 +189,7 @@ public struct MenuPanelView: View {
     @ViewBuilder private var recentList: some View {
         if model.recent.isEmpty {
             Text("Nothing dictated yet.")
-                .font(.system(size: 11.5))
+                .font(.system(size: TypeScale.small))
                 .foregroundStyle(c(.faint))
                 .padding(.horizontal, 15).padding(.bottom, 9)
         } else {
@@ -197,18 +198,18 @@ public struct MenuPanelView: View {
                     Button { model.onCopy?(item) } label: {
                         HStack(spacing: 10) {
                             Text(item.script == .arabic ? "AR" : "EN")
-                                .font(.system(size: 9, weight: .medium).monospaced())
+                                .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
                                 .foregroundStyle(item.script == .arabic ? c(.lapis) : c(.faint))
                                 .frame(width: 22, alignment: .leading)
                             Text(item.oneLine)
-                                .font(.system(size: 12))
+                                .font(.system(size: TypeScale.body))
                                 .foregroundStyle(c(.bone))
                                 .lineLimit(1)
                                 .environment(\.layoutDirection,
                                              item.script == .arabic ? .rightToLeft : .leftToRight)
                             Spacer(minLength: 8)
                             Text(item.timestamp)
-                                .font(.system(size: 9.5).monospaced())
+                                .font(.system(size: TypeScale.micro).monospaced())
                                 .foregroundStyle(c(.faint))
                         }
                         .padding(.horizontal, 15).padding(.vertical, 6)
@@ -227,19 +228,19 @@ public struct MenuPanelView: View {
     private var footer: some View {
         HStack(spacing: 14) {
             Button { model.onOpenWindow?() } label: {
-                Text("Open Rawi").font(.system(size: 12)).foregroundStyle(c(.muted))
+                Text("Open Rawi").font(.system(size: TypeScale.body)).foregroundStyle(c(.muted))
             }
             .buttonStyle(.plain)
             Button { model.onSettings?() } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 12))
+                    .font(.system(size: TypeScale.body))
                     .foregroundStyle(c(.muted))
             }
             .buttonStyle(.plain)
             .help("Settings")
             Spacer()
             Button { model.onQuit?() } label: {
-                Text("Quit").font(.system(size: 12)).foregroundStyle(c(.faint))
+                Text("Quit").font(.system(size: TypeScale.body)).foregroundStyle(c(.faint))
             }
             .buttonStyle(.plain)
         }

@@ -27,17 +27,41 @@ public enum RawiMark {
     /// Only the two interior points move. The ends are pinned so the silhouette
     /// stays the same glyph rather than becoming an animation that happens to
     /// start from the logo.
-    public static func svgPoints(level: Double) -> [CGPoint] {
-        let amount = min(max(level, 0), 1)
-        guard amount > 0 else { return svgPoints }
+    public static func svgPoints(level: Double, motion: MarkMotion = .rest) -> [CGPoint] {
         var points = svgPoints
-        // Point 2 is the trough at y=7, point 3 the crest at y=17. A loud frame
-        // pushes them apart; the travel is small on purpose, because a menu bar
-        // icon that flails is noise.
-        points[2].y = 7 - amount * 4
-        points[3].y = 17 + amount * 4
+        let amount = min(max(level, 0), 1)
+        if amount > 0 {
+            // Point 2 is the crest at y=7, point 3 the trough at y=17. A loud
+            // frame pushes them apart; the travel is small on purpose, because a
+            // menu bar icon that flails is noise.
+            points[2].y = 7 - amount * 4
+            points[3].y = 17 + amount * 4
+        }
+
+        guard motion != .rest else { return points }
+
+        // The amplitude collapses toward the centre line, and the landing spring
+        // swells it by 6% on the way back. Both act on the distance from centre,
+        // so the ends — which are already on it — cannot move.
+        let scale = 1 + motion.spring * 0.06
+        for index in points.indices.dropFirst().dropLast() {
+            points[index].y = midline + (points[index].y - midline) * (1 - motion.flatten) * scale
+        }
+
+        // One bump travels the flat line. Gaussian rather than a moving dot, so
+        // the line bends around it instead of something sliding along it.
+        if motion.flatten > 0.02 {
+            let head = 2 + motion.bump * 20
+            for index in points.indices.dropFirst().dropLast() {
+                let distance = points[index].x - head
+                points[index].y -= exp(-(distance * distance) / 7) * 3.2 * motion.flatten
+            }
+        }
         return points
     }
+
+    /// The centre line the waveform collapses onto: both ends already sit on it.
+    private static let midline: CGFloat = 12
 
     /// Stroke width in the 24-unit space. The canvas draws 1.7 at 22px; this is the
     /// same optical weight at 18px, the menu-bar size.
@@ -49,12 +73,12 @@ public enum RawiMark {
     /// purely with the box disappears at 16pt — the icon becomes a smudge — so the
     /// small sizes get a heavier line, which is what hinting does for type.
     public static func path(in rect: CGRect, strokeScale: CGFloat = 1,
-                            level: Double = 0) -> NSBezierPath {
+                            level: Double = 0, motion: MarkMotion = .rest) -> NSBezierPath {
         let scale = min(rect.width, rect.height) / 24
         let offsetX = rect.minX + (rect.width - 24 * scale) / 2
         let offsetY = rect.minY + (rect.height - 24 * scale) / 2
         let path = NSBezierPath()
-        for (index, point) in svgPoints(level: level).enumerated() {
+        for (index, point) in svgPoints(level: level, motion: motion).enumerated() {
             // 24 - y: SVG counts down from the top, AppKit up from the bottom.
             let mapped = CGPoint(x: offsetX + point.x * scale,
                                  y: offsetY + (24 - point.y) * scale)
@@ -73,11 +97,12 @@ public enum RawiMark {
     /// the states where colour *is* the message — recording, or a missing
     /// permission — and those deliberately stop being templates.
     public static func image(size: CGFloat = 18, tint: NSColor? = nil,
-                             alpha: CGFloat = 1, level: Double = 0) -> NSImage {
+                             alpha: CGFloat = 1, level: Double = 0,
+                             motion: MarkMotion = .rest) -> NSImage {
         let image = NSImage(size: NSSize(width: size, height: size),
                             flipped: false) { rect in
             (tint ?? .black).withAlphaComponent(alpha).setStroke()
-            path(in: rect, level: level).stroke()
+            path(in: rect, level: level, motion: motion).stroke()
             return true
         }
         image.isTemplate = tint == nil
@@ -92,7 +117,8 @@ public enum RawiMark {
     /// cannot hear you is worse than one with no icon at all.
     public static func statusImage(state: DictationState, enabled: Bool,
                                    microphoneGranted: Bool, size: CGFloat = 18,
-                                   level: Double = 0) -> NSImage {
+                                   level: Double = 0,
+                                   motion: MarkMotion = .rest) -> NSImage {
         guard enabled else { return image(size: size, alpha: 0.35) }
         guard microphoneGranted else {
             return image(size: size, tint: RawiColors.nsColor(.clay, .dark))
@@ -103,11 +129,14 @@ public enum RawiMark {
             // room noise would be a distraction rather than feedback.
             return image(size: size, tint: RawiColors.nsColor(.saffron, .dark), level: level)
         case .transcribing, .cleaning, .inserting, .transforming:
-            return image(size: size, tint: RawiColors.nsColor(.lapis, .dark))
+            return image(size: size, tint: RawiColors.nsColor(.lapis, .dark), motion: motion)
         case .error:
             return image(size: size, tint: RawiColors.nsColor(.clay, .dark))
-        case .idle, .notice:
-            return image(size: size)
+        case .notice:
+            return image(size: size, tint: RawiColors.nsColor(.verdigris, .dark),
+                         motion: motion)
+        case .idle:
+            return image(size: size, motion: motion)
         }
     }
 
@@ -160,7 +189,23 @@ import SwiftUI
 /// The same mark for SwiftUI. Stroke it rather than fill it:
 /// `RawiMarkShape().stroke(color, style: RawiMarkShape.stroke(for: 22))`.
 public struct RawiMarkShape: Shape {
-    public init() {}
+    public var level: Double
+    public var motion: MarkMotion
+
+    public init(level: Double = 0, motion: MarkMotion = .rest) {
+        self.level = level
+        self.motion = motion
+    }
+
+    /// Lets SwiftUI interpolate the shape between frames rather than stepping it.
+    public var animatableData: AnimatablePair<Double, AnimatablePair<Double, Double>> {
+        get { AnimatablePair(level, AnimatablePair(motion.flatten, motion.bump)) }
+        set {
+            level = newValue.first
+            motion.flatten = newValue.second.first
+            motion.bump = newValue.second.second
+        }
+    }
 
     public func path(in rect: CGRect) -> Path {
         let scale = min(rect.width, rect.height) / 24
@@ -168,7 +213,7 @@ public struct RawiMarkShape: Shape {
         let offsetY = rect.minY + (rect.height - 24 * scale) / 2
         var path = Path()
         // SwiftUI counts y downward, exactly as the SVG does, so no flip here.
-        for (index, point) in RawiMark.svgPoints.enumerated() {
+        for (index, point) in RawiMark.svgPoints(level: level, motion: motion).enumerated() {
             let mapped = CGPoint(x: offsetX + point.x * scale, y: offsetY + point.y * scale)
             if index == 0 { path.move(to: mapped) } else { path.addLine(to: mapped) }
         }

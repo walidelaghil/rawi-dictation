@@ -23,6 +23,7 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
     /// redrawn when the shape would visibly change — the menu bar is not a place
     /// to repaint sixty times a second.
     private var drawnLevel: Double = 0
+    private var motion: MarkMotion = .rest
 
     public var onAction: ((String) -> Void)?
     public var onQuit: (() -> Void)?
@@ -87,20 +88,27 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
         drawnLevel = state.recordingMode == nil ? 0 : drawnLevel
         button.image = RawiMark.statusImage(state: state, enabled: controller.isEnabled,
                                             microphoneGranted: permissions.microphone,
-                                            level: drawnLevel)
+                                            level: drawnLevel, motion: motion)
         button.toolTip = "Rawi: \(PillLabel.text(for: state))"
     }
 
-    public func updateLive(level: Double, elapsed: Duration, detectedLanguage: String?) {
-        // The icon follows your voice while you hold the key. Redrawn only when
-        // the change is large enough to see: at 30 updates a second, repainting
-        // the status item for a 0.01 difference is battery spent on nothing.
-        if state.recordingMode != nil, abs(level - drawnLevel) > 0.08 {
-            drawnLevel = level
+    public func updateLive(level: Double, elapsed: Duration, detectedLanguage: String?,
+                           motion: MarkMotion = .rest) {
+        // Redrawn only when something would actually look different: at 30 updates
+        // a second, repainting the status item for a 0.01 change is battery spent
+        // on nothing. While the model works the mark is morphing, so every frame
+        // counts; while you speak, only a visible change in level does.
+        let morphing = !motion.isSettled || !self.motion.isSettled
+        let spoke = state.recordingMode != nil && abs(level - drawnLevel) > 0.08
+        if morphing || spoke {
+            self.motion = motion
+            if spoke { drawnLevel = level }
             statusItem.button?.image = RawiMark.statusImage(
                 state: state, enabled: controller.isEnabled,
-                microphoneGranted: permissions.microphone, level: level)
+                microphoneGranted: permissions.microphone,
+                level: drawnLevel, motion: motion)
         }
+        panel.motion = motion
         panel.level = level
         panel.elapsed = elapsed
         panel.detectedLanguage = detectedLanguage

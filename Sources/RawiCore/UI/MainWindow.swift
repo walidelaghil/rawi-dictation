@@ -180,9 +180,9 @@ struct MainWindowView: View {
                     .stroke(c(.saffron), style: RawiMarkShape.stroke(for: 20))
                     .frame(width: 20, height: 20)
                     .accessibilityHidden(true)
-                Text("Rawi").font(.system(size: 16, weight: .semibold))
+                Text("Rawi").font(.system(size: TypeScale.heading, weight: .semibold))
                     .foregroundStyle(c(.bone))
-                Text("راوي").font(.system(size: 14))
+                Text("راوي").font(.system(size: TypeScale.heading))
                     .foregroundStyle(c(.faint))
                     .environment(\.layoutDirection, .rightToLeft)
             }
@@ -202,10 +202,10 @@ struct MainWindowView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Stays on this Mac")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: TypeScale.small, weight: .semibold))
                     .foregroundStyle(c(.verdigris))
                 Text("No account, no upload, no sync")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: TypeScale.small))
                     .foregroundStyle(c(.faint))
             }
             .padding(.horizontal, 10).padding(.top, 11)
@@ -220,13 +220,13 @@ struct MainWindowView: View {
     private func railRow(_ title: String, symbol: String, selected: Bool,
                          shortcut: Int) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: symbol).font(.system(size: 14))
-            Text(title).font(.system(size: 12.5, weight: selected ? .medium : .regular))
+            Image(systemName: symbol).font(.system(size: TypeScale.heading))
+            Text(title).font(.system(size: TypeScale.body, weight: selected ? .medium : .regular))
             Spacer()
             // The shortcut lives next to the thing it opens, which is how anyone
             // ever learns one.
             Text("⌘\(shortcut)")
-                .font(.system(size: 10).monospaced())
+                .font(.system(size: TypeScale.micro).monospaced())
                 .foregroundStyle(c(.faint).opacity(selected ? 0.9 : 0.5))
         }
         .foregroundStyle(selected ? c(.bone) : c(.muted))

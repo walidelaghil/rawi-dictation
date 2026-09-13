@@ -92,3 +92,37 @@ func contrastRatio(_ a: String, _ b: String) -> Double {
         #expect(luminance(RawiColors.pillHex(.bone)) > 0.7)
     }
 }
+
+@Suite("Type scale") struct TypeScaleTests {
+    static let uiSources: [URL] = {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Sources/RawiCore/UI")
+        return (try? FileManager.default.contentsOfDirectory(at: root,
+            includingPropertiesForKeys: nil))?.filter { $0.pathExtension == "swift" } ?? []
+    }()
+
+    @Test("no view picks a font size by hand") func noLooseSizes() {
+        // Fifteen sizes between 8 and 34 is what this replaced. Nobody sees the
+        // difference between 10.5 and 11; everybody sees a screen measured
+        // against itself.
+        let pattern = try! Regex("size: [0-9]")
+        for file in Self.uiSources where file.lastPathComponent != "DesignTokens.swift" {
+            let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+            for line in text.split(separator: "\n") where line.contains(pattern) {
+                Issue.record(Comment(rawValue: "\(file.lastPathComponent): \(line)"))
+            }
+        }
+    }
+
+    @Test("the steps stay far enough apart to be worth having") func distinct() {
+        let steps: [CGFloat] = [TypeScale.micro, TypeScale.small, TypeScale.body,
+                                TypeScale.heading, TypeScale.title, TypeScale.figure,
+                                TypeScale.hero]
+        for (a, b) in zip(steps, steps.dropFirst()) {
+            #expect(b > a)
+            // A step you cannot see is a step that will be picked at random.
+            #expect(b - a >= 1)
+        }
+    }
+}

@@ -41,23 +41,23 @@ public struct DestinationsView: View {
                     HStack(alignment: .top, spacing: 12) {
                         Button { model.toggle(rule) } label: {
                             Image(systemName: rule.enabled ? "checkmark.square.fill" : "square")
-                                .font(.system(size: 13))
+                                .font(.system(size: TypeScale.heading))
                                 .foregroundStyle(rule.enabled ? c(.saffron) : c(.faint))
                         }
                         .buttonStyle(.plain)
                         .help(rule.enabled ? "Disable" : "Enable")
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(rule.name).font(.system(size: 13))
+                            Text(rule.name).font(.system(size: TypeScale.heading))
                                 .foregroundStyle(rule.enabled ? c(.bone) : c(.faint))
                             Text(rule.matchDescription)
-                                .font(.system(size: 10.5).monospaced())
+                                .font(.system(size: TypeScale.small).monospaced())
                                 .foregroundStyle(c(.faint))
                         }
                         .frame(width: 210, alignment: .leading)
 
                         Text(rule.instruction)
-                            .font(.system(size: 11.5))
+                            .font(.system(size: TypeScale.small))
                             .foregroundStyle(rule.enabled ? c(.muted) : c(.faint))
                             .fixedSize(horizontal: false, vertical: true)
 
@@ -65,7 +65,7 @@ public struct DestinationsView: View {
 
                         if !rule.isBuiltIn {
                             Button { model.remove(rule) } label: {
-                                Image(systemName: "xmark").font(.system(size: 9))
+                                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
                                     .foregroundStyle(c(.faint))
                             }.buttonStyle(.plain)
                         }
@@ -96,13 +96,13 @@ public struct DestinationsView: View {
                         _ token: ColorToken, _ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 7) {
-                Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(c(.bone))
+                Text(title).font(.system(size: TypeScale.body, weight: .semibold)).foregroundStyle(c(.bone))
                 Spacer()
                 Text(badge.uppercased())
-                    .font(.system(size: 8.5, weight: .medium).monospaced()).tracking(1.1)
+                    .font(.system(size: TypeScale.micro, weight: .medium).monospaced()).tracking(1.1)
                     .foregroundStyle(c(token))
             }
-            Text(detail).font(.system(size: 11)).foregroundStyle(c(.muted))
+            Text(detail).font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(13)

@@ -132,3 +132,59 @@ import AppKit
         try png.write(to: out)
     }
 }
+
+
+@Suite("Morph proof") struct MorphProofTests {
+    /// A filmstrip of the real Swift rendering, so the morph is judged on what
+    /// ships rather than on the web prototype that specified it.
+    @Test("morph filmstrip",
+          .enabled(if: ProcessInfo.processInfo.environment["RAWI_MORPH"] != nil))
+    func filmstrip() throws {
+        let out = URL(fileURLWithPath: ProcessInfo.processInfo.environment["RAWI_MORPH"]!)
+        let cell: CGFloat = 46, pad: CGFloat = 10
+        var frames: [(MarkMotion, Double, NSColor)] = []
+        let saffron = RawiColors.nsColor(.saffron, .dark)
+        let lapis = RawiColors.nsColor(.lapis, .dark)
+        let verdigris = RawiColors.nsColor(.verdigris, .dark)
+
+        // Listening, then flattening, then the bump travelling, then the return.
+        for level in [0.15, 0.55, 0.9, 0.4] {
+            frames.append((.rest, level, saffron))
+        }
+        var motion = MarkMotion.rest
+        var elapsed = 0.0
+        for _ in 0..<7 {
+            for _ in 0..<4 {
+                motion.advance(to: .transcribing, dt: 1.0 / 30, elapsed: elapsed)
+                elapsed += 1.0 / 30
+            }
+            frames.append((motion, 0, lapis))
+        }
+        var landing = MarkMotion.rest
+        landing.flatten = 1
+        var t = 0.0
+        for _ in 0..<5 {
+            for _ in 0..<3 {
+                landing.advance(to: .notice("x"), dt: 1.0 / 30, elapsed: t)
+                t += 1.0 / 30
+            }
+            frames.append((landing, 0, verdigris))
+        }
+
+        let width = CGFloat(frames.count) * (cell + pad) + pad
+        let sheet = NSImage(size: NSSize(width: width, height: cell + pad * 2),
+                            flipped: false) { _ in
+            RawiColors.nsColor(.ink, .dark).setFill()
+            NSRect(x: 0, y: 0, width: width, height: cell + pad * 2).fill()
+            for (index, frame) in frames.enumerated() {
+                let box = NSRect(x: pad + CGFloat(index) * (cell + pad), y: pad,
+                                 width: cell, height: cell)
+                frame.2.setStroke()
+                RawiMark.path(in: box, level: frame.1, motion: frame.0).stroke()
+            }
+            return true
+        }
+        try NSBitmapImageRep(data: sheet.tiffRepresentation!)!
+            .representation(using: .png, properties: [:])!.write(to: out)
+    }
+}

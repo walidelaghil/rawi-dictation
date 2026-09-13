@@ -42,6 +42,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var sessionTimer: Timer?
     private var pillTimer: Timer?
     private var recordingStart: ContinuousClock.Instant?
+    /// One timeline for the mark, shared by the menu bar, the pill and the panel.
+    /// Three separate animations would drift apart within a second.
+    private var markMotion = MarkMotion.rest
+    private var stateEnteredAt = Date()
+    private var lastFrameAt = Date()
 
     override init() {
         inserter = TextInserter()
@@ -525,6 +530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - State
 
     private func stateChanged(_ state: DictationState) {
+        stateEnteredAt = Date()
         menuBar.refresh(state: state, permissions: Permissions.current())
         menuBar.setRecent(recentFromHistory())
 
@@ -544,9 +550,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recordingStart = nil
             sessionTimer?.invalidate()
             pushToTalkSafetyTimer?.invalidate()
-            pillTimer?.invalidate()
-            pillTimer = nil
-            pill.hide()
+            // Keep the frame timer alive while the mark unflattens: cutting it at
+            // idle would snap the line back to a waveform instead of returning it.
+            if markMotion.isSettled {
+                pillTimer?.invalidate()
+                pillTimer = nil
+                pill.hide()
+            }
         }
     }
 
@@ -577,6 +587,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startPillUpdates() {
         guard pillTimer == nil || !(pillTimer?.isValid ?? false) else { return }
+        lastFrameAt = Date()
         updatePill()
         pillTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { _ in
             MainActor.assumeIsolated { self.updatePill() }
@@ -585,6 +596,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updatePill() {
         let state = controller.state
+        let now = Date()
+        let dt = max(0, now.timeIntervalSince(lastFrameAt))
+        lastFrameAt = now
+        markMotion.advance(to: state, dt: dt,
+                           elapsed: now.timeIntervalSince(stateEnteredAt))
         let elapsed: Duration = recordingStart.map { $0.duration(to: .now) } ?? .zero
         var remaining: Duration?
         if state.recordingMode == .handsFree {
@@ -593,10 +609,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // The ⌘V hint only appears where it is true: with Accessibility granted
         // the text is already in the document.
-        pill.show(state: state, level: recorder.level, elapsed: elapsed,
-                  remaining: remaining, pasteHint: !Permissions.current().accessibility)
         menuBar?.updateLive(level: recorder.level, elapsed: elapsed,
-                            detectedLanguage: controller.lastDetectedLanguage)
+                            detectedLanguage: controller.lastDetectedLanguage,
+                            motion: markMotion)
+        // Once the mark has finished returning to a waveform there is nothing left
+        // to draw, so the frame timer stops and the pill goes away.
+        if state == .idle, markMotion.isSettled {
+            pillTimer?.invalidate()
+            pillTimer = nil
+            pill.hide()
+            return
+        }
+        pill.show(state: state, level: recorder.level, elapsed: elapsed,
+                  remaining: remaining, pasteHint: !Permissions.current().accessibility,
+                  motion: markMotion)
     }
 
     // MARK: - Config reload

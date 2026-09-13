@@ -63,9 +63,9 @@ public struct InsightsView: View {
                 tile("\(i.wordsDictated.formatted())", "words dictated",
                      "across \(i.dictations.formatted()) dictations", .bone)
                 tile("\(i.wordsPerMinute)", "words per minute",
-                     "spoken, not wall clock", .saffron)
+                     "spoken, not wall clock", .bone)
                 tile(spokenTime, "time speaking",
-                     "microphone open, transcribing excluded", .lapis)
+                     "microphone open, transcribing excluded", .bone)
             }
             HStack(spacing: 10) {
                 savedTile
@@ -92,18 +92,18 @@ public struct InsightsView: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(saved < 60 ? "\(saved)m" : "\(saved / 60)h \(saved % 60)m")
-                    .font(.system(size: 26, weight: .semibold))
+                    .font(.system(size: TypeScale.figure, weight: .semibold))
                     .foregroundStyle(c(.saffron))
                 Text("ESTIMATE")
-                    .font(.system(size: 8, weight: .medium).monospaced()).tracking(1.1)
+                    .font(.system(size: TypeScale.micro, weight: .medium).monospaced()).tracking(1.1)
                     .foregroundStyle(c(.faint))
             }
-            Text("saved versus typing").font(.system(size: 11.5)).foregroundStyle(c(.muted))
+            Text("saved versus typing").font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
             HStack(spacing: 6) {
-                Text("at").font(.system(size: 10.5)).foregroundStyle(c(.faint))
+                Text("at").font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
                 Stepper(value: $model.typingWPM, in: 20...120, step: 1) {
                     Text("\(model.typingWPM) wpm")
-                        .font(.system(size: 10.5).monospacedDigit())
+                        .font(.system(size: TypeScale.small).monospacedDigit())
                         .foregroundStyle(c(.muted))
                 }
                 .controlSize(.mini)
@@ -119,10 +119,10 @@ public struct InsightsView: View {
                       _ detail: String, _ token: ColorToken) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(value)
-                .font(.system(size: 26, weight: .semibold).monospacedDigit())
+                .font(.system(size: TypeScale.figure, weight: .semibold).monospacedDigit())
                 .foregroundStyle(c(token))
-            Text(label).font(.system(size: 11.5)).foregroundStyle(c(.muted))
-            Text(detail).font(.system(size: 10.5)).foregroundStyle(c(.faint))
+            Text(label).font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
+            Text(detail).font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
@@ -137,15 +137,15 @@ public struct InsightsView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text("\(i.currentStreak)")
-                    .font(.system(size: 34, weight: .semibold).monospacedDigit())
+                    .font(.system(size: TypeScale.hero, weight: .semibold).monospacedDigit())
                     .foregroundStyle(c(.saffron))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(i.currentStreak == 1 ? "day running" : "days running")
-                        .font(.system(size: 12.5)).foregroundStyle(c(.bone))
+                        .font(.system(size: TypeScale.body)).foregroundStyle(c(.bone))
                     Text(i.currentStreak >= i.longestStreak
                             ? "your longest run so far"
                             : "your longest was \(i.longestStreak)")
-                        .font(.system(size: 11)).foregroundStyle(c(.faint))
+                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
                 }
                 Spacer()
             }
@@ -193,11 +193,11 @@ public struct InsightsView: View {
 
     private var apps: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Where you dictate").font(.system(size: 12, weight: .semibold))
+            Text("Where you dictate").font(.system(size: TypeScale.body, weight: .semibold))
                 .foregroundStyle(c(.bone))
             ForEach(i.byApp.prefix(8)) { share in
                 HStack(spacing: 10) {
-                    Text(share.name).font(.system(size: 11.5))
+                    Text(share.name).font(.system(size: TypeScale.small))
                         .foregroundStyle(c(.muted))
                         .frame(width: 150, alignment: .leading)
                         .lineLimit(1)
@@ -209,7 +209,7 @@ public struct InsightsView: View {
                     }
                     .frame(height: 8)
                     Text("\(Int((share.share * 100).rounded()))%")
-                        .font(.system(size: 10.5).monospacedDigit())
+                        .font(.system(size: TypeScale.small).monospacedDigit())
                         .foregroundStyle(c(.faint))
                         .frame(width: 38, alignment: .trailing)
                 }

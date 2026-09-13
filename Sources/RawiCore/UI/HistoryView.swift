@@ -123,18 +123,18 @@ public struct HistoryView: View {
     private var header: some View {
         HStack(alignment: .lastTextBaseline, spacing: 10) {
             Text("History")
-                .font(.system(size: 21, weight: .semibold))
+                .font(.system(size: TypeScale.title, weight: .semibold))
                 .foregroundStyle(c(.bone))
             Button { model.showInfo.toggle() } label: {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 14))
+                    .font(.system(size: TypeScale.heading))
                     .foregroundStyle(c(.faint))
             }
             .buttonStyle(.plain)
             .help("About history")
             Spacer()
             Button { model.confirmingPurge = true } label: {
-                Text("Clear all").font(.system(size: 12)).foregroundStyle(c(.clay))
+                Text("Clear all").font(.system(size: TypeScale.body)).foregroundStyle(c(.clay))
             }
             .buttonStyle(.plain)
             .confirmationDialog("Delete every stored dictation?",
@@ -154,11 +154,11 @@ public struct HistoryView: View {
     private var infoOverlay: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .firstTextBaseline) {
-                Text("About history").font(.system(size: 12.5, weight: .semibold))
+                Text("About history").font(.system(size: TypeScale.body, weight: .semibold))
                     .foregroundStyle(c(.bone))
                 Spacer()
                 Button { model.showInfo = false } label: {
-                    Text("×").font(.system(size: 15)).foregroundStyle(c(.faint))
+                    Text("×").font(.system(size: TypeScale.heading)).foregroundStyle(c(.faint))
                 }.buttonStyle(.plain)
             }
             Text("Both the cleaned text and what whisper actually heard. Search covers "
@@ -166,7 +166,7 @@ public struct HistoryView: View {
                + "than what came out. "
                + "Capped at \(model.entries.count > 0 ? "500" : "500") entries; password "
                + "managers and private messages are never recorded.")
-                .font(.system(size: 11.5))
+                .font(.system(size: TypeScale.small))
                 .foregroundStyle(c(.muted))
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -183,27 +183,27 @@ public struct HistoryView: View {
     private var search: some View {
         HStack(spacing: 9) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12)).foregroundStyle(c(.faint))
+                .font(.system(size: TypeScale.body)).foregroundStyle(c(.faint))
             TextField("Search what you said or what was typed", text: $model.filter.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(.system(size: TypeScale.heading))
                 .foregroundStyle(c(.bone))
                 .focused($searchFocused)
                 .onSubmit { searchFocused = false }
                 .onExitCommand { model.escape(); searchFocused = false }
             if !model.filter.query.isEmpty {
                 Text("\(model.visible.count)")
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(.system(size: TypeScale.small).monospacedDigit())
                     .foregroundStyle(c(.faint))
                 Button { model.escape() } label: {
-                    Image(systemName: "xmark.circle.fill").font(.system(size: 12))
+                    Image(systemName: "xmark.circle.fill").font(.system(size: TypeScale.body))
                         .foregroundStyle(c(.faint))
                 }
                 .buttonStyle(.plain)
                 .help("Clear")
             } else {
                 Text("⌘F")
-                    .font(.system(size: 10).monospaced())
+                    .font(.system(size: TypeScale.micro).monospaced())
                     .foregroundStyle(c(.faint).opacity(0.7))
             }
         }
@@ -230,7 +230,7 @@ public struct HistoryView: View {
             }
             Spacer()
             Text("\(model.entries.count) kept")
-                .font(.system(size: 11).monospacedDigit())
+                .font(.system(size: TypeScale.small).monospacedDigit())
                 .foregroundStyle(c(.faint))
         }
     }
@@ -238,7 +238,7 @@ public struct HistoryView: View {
     private func chip(_ title: String, active: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 11.5))
+                .font(.system(size: TypeScale.small))
                 .foregroundStyle(active ? c(.bone) : c(.muted))
                 .padding(.horizontal, 10).padding(.vertical, 4)
                 .background(Capsule().fill(active ? c(.raised) : .clear)
@@ -252,11 +252,11 @@ public struct HistoryView: View {
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(model.entries.isEmpty ? "Nothing dictated yet." : "No matches.")
-                .font(.system(size: 13)).foregroundStyle(c(.muted))
+                .font(.system(size: TypeScale.heading)).foregroundStyle(c(.muted))
             Text(model.entries.isEmpty
                  ? "Hold ⌥Space anywhere and speak."
                  : "Try a word you remember saying. Search covers the raw transcript too.")
-                .font(.system(size: 11.5)).foregroundStyle(c(.faint))
+                .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
         }
         .padding(.top, 20)
     }
@@ -281,31 +281,31 @@ public struct HistoryView: View {
     private func row(_ entry: HistoryEntry) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(entry.timestamp)
-                .font(.system(size: 10.5).monospacedDigit())
+                .font(.system(size: TypeScale.small).monospacedDigit())
                 .foregroundStyle(c(.faint))
                 .frame(width: 36, alignment: .leading)
                 .padding(.top, 1)
 
             Text(entry.script == .arabic ? "AR" : "EN")
-                .font(.system(size: 9, weight: .medium).monospaced())
+                .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
                 .foregroundStyle(entry.script == .arabic ? c(.lapis) : c(.faint))
                 .frame(width: 22, alignment: .leading)
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.oneLine)
-                    .font(.system(size: 12.5))
+                    .font(.system(size: TypeScale.body))
                     .foregroundStyle(c(.bone))
                     .environment(\.layoutDirection,
                                  entry.script == .arabic ? .rightToLeft : .leftToRight)
                     .fixedSize(horizontal: false, vertical: true)
                 if entry.guardRejected {
                     Text("cleanup rejected, your words were kept")
-                        .font(.system(size: 10.5).monospaced())
+                        .font(.system(size: TypeScale.small).monospaced())
                         .foregroundStyle(c(.clay))
                 } else if entry.wasCleaned {
                     Text("heard · \(entry.raw)")
-                        .font(.system(size: 10.5).monospaced())
+                        .font(.system(size: TypeScale.small).monospaced())
                         .foregroundStyle(c(.faint))
                         .lineLimit(2)
                 }
@@ -314,17 +314,17 @@ public struct HistoryView: View {
             Spacer(minLength: 8)
 
             if let app = entry.appName {
-                Text(app).font(.system(size: 11)).foregroundStyle(c(.faint)).padding(.top, 1)
+                Text(app).font(.system(size: TypeScale.small)).foregroundStyle(c(.faint)).padding(.top, 1)
             }
             Button { model.copy(entry) } label: {
-                Text("Copy").font(.system(size: 11)).foregroundStyle(c(.muted))
+                Text("Copy").font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
                     .padding(.horizontal, 9).padding(.vertical, 3)
                     .background(RoundedRectangle(cornerRadius: Radius.control)
                         .strokeBorder(c(.edge)))
             }
             .buttonStyle(.plain)
             Button { model.delete(entry) } label: {
-                Image(systemName: "xmark").font(.system(size: 9))
+                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
                     .foregroundStyle(c(.faint))
             }
             .buttonStyle(.plain)

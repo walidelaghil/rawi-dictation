@@ -93,3 +93,32 @@ public struct Row<Content: View>: View {
             .animation(.easeOut(duration: 0.12), value: selected)
     }
 }
+
+/// The type scale, in one place because it is a scale.
+///
+/// Rawi had fifteen sizes between 8 and 34 point, most of them within half a
+/// point of a neighbour. Nobody can see the difference between 10.5 and 11, but
+/// everybody can see a page that was measured against itself rather than picked
+/// a line at a time.
+///
+/// Seven steps, each with a job:
+///
+///   - `hero` the one number a screen is about. At most one per screen.
+///   - `figure` the tile numbers beside it.
+///   - `title` a screen's name.
+///   - `heading` a row's subject, a section's name, the wordmark.
+///   - `body` everything you read.
+///   - `small` what supports it: evidence, timestamps, detail.
+///   - `micro` labels and shortcuts, usually uppercase or monospaced.
+///
+/// Weights stop at three. Anything louder than semibold on a 13 point screen is
+/// shouting.
+public enum TypeScale {
+    public static let hero: CGFloat = 30
+    public static let figure: CGFloat = 24
+    public static let title: CGFloat = 20
+    public static let heading: CGFloat = 13
+    public static let body: CGFloat = 12
+    public static let small: CGFloat = 11
+    public static let micro: CGFloat = 9.5
+}

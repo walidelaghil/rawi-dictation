@@ -102,16 +102,16 @@ public struct TransformsView: View {
     private var tryIt: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text("Try one").font(.system(size: 12, weight: .semibold))
+                Text("Try one").font(.system(size: TypeScale.body, weight: .semibold))
                     .foregroundStyle(c(.bone))
                 Spacer()
                 if let matched = model.matched {
                     Text(matched.name.uppercased())
-                        .font(.system(size: 8.5, weight: .medium).monospaced()).tracking(1.1)
+                        .font(.system(size: TypeScale.micro, weight: .medium).monospaced()).tracking(1.1)
                         .foregroundStyle(c(.saffron))
                 } else if !model.trySpoken.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text("USED AS SPOKEN")
-                        .font(.system(size: 8.5, weight: .medium).monospaced()).tracking(1.1)
+                        .font(.system(size: TypeScale.micro, weight: .medium).monospaced()).tracking(1.1)
                         .foregroundStyle(c(.lapis))
                 }
             }
@@ -124,7 +124,7 @@ public struct TransformsView: View {
             HStack(spacing: 10) {
                 Button { Task { await model.runTry() } } label: {
                     Text(model.trying ? "Rewriting…" : "Rewrite")
-                        .font(.system(size: 11.5, weight: .medium))
+                        .font(.system(size: TypeScale.small, weight: .medium))
                         .foregroundStyle(c(.ink))
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.saffron)))
@@ -135,17 +135,17 @@ public struct TransformsView: View {
 
                 if model.preview == nil {
                     Text("Set cleanup.provider in config.json to use transforms")
-                        .font(.system(size: 11)).foregroundStyle(c(.faint))
+                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
                 }
                 if let error = model.tryError {
-                    Text(error).font(.system(size: 11)).foregroundStyle(c(.clay))
+                    Text(error).font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                 }
                 Spacer()
             }
 
             if !model.tryResult.isEmpty {
                 Text(model.tryResult)
-                    .font(.system(size: 12))
+                    .font(.system(size: TypeScale.body))
                     .foregroundStyle(c(.bone))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -164,10 +164,10 @@ public struct TransformsView: View {
     private func field(_ label: String, text: Binding<String>, lines: Int) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(label.uppercased())
-                .font(.system(size: 8.5, weight: .medium).monospaced()).tracking(1.1)
+                .font(.system(size: TypeScale.micro, weight: .medium).monospaced()).tracking(1.1)
                 .foregroundStyle(c(.faint))
             TextEditor(text: text)
-                .font(.system(size: 12))
+                .font(.system(size: TypeScale.body))
                 .scrollContentBackground(.hidden)
                 .frame(height: CGFloat(lines) * 17)
                 .padding(7)
@@ -183,16 +183,16 @@ public struct TransformsView: View {
             ForEach(model.transforms) { transform in
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(transform.name).font(.system(size: 13))
+                        Text(transform.name).font(.system(size: TypeScale.heading))
                             .foregroundStyle(c(.bone))
                         Text(transform.isBuiltIn ? "built in" : "yours")
-                            .font(.system(size: 8.5, weight: .medium).monospaced()).tracking(1.1)
+                            .font(.system(size: TypeScale.micro, weight: .medium).monospaced()).tracking(1.1)
                             .foregroundStyle(transform.isBuiltIn ? c(.faint) : c(.verdigris))
                     }
                     .frame(width: 190, alignment: .leading)
 
                     Text(transform.instruction)
-                        .font(.system(size: 11.5))
+                        .font(.system(size: TypeScale.small))
                         .foregroundStyle(c(.muted))
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -200,7 +200,7 @@ public struct TransformsView: View {
 
                     if !transform.isBuiltIn {
                         Button { model.remove(transform) } label: {
-                            Image(systemName: "xmark").font(.system(size: 9))
+                            Image(systemName: "xmark").font(.system(size: TypeScale.micro))
                                 .foregroundStyle(c(.faint))
                         }.buttonStyle(.plain).help("Delete")
                     }
@@ -214,21 +214,21 @@ public struct TransformsView: View {
 
     private var addForm: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("Add a transform").font(.system(size: 12, weight: .semibold))
+            Text("Add a transform").font(.system(size: TypeScale.body, weight: .semibold))
                 .foregroundStyle(c(.bone))
             HStack(spacing: 9) {
                 TextField("Name, what you will say", text: $model.draftName)
-                    .textFieldStyle(.plain).font(.system(size: 12))
+                    .textFieldStyle(.plain).font(.system(size: TypeScale.body))
                     .padding(8).frame(width: 200)
                     .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
                         .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
                 TextField("Instruction, what the model should do", text: $model.draftInstruction)
-                    .textFieldStyle(.plain).font(.system(size: 12))
+                    .textFieldStyle(.plain).font(.system(size: TypeScale.body))
                     .padding(8)
                     .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
                         .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
                 Button { model.add() } label: {
-                    Text("Add").font(.system(size: 11.5, weight: .medium))
+                    Text("Add").font(.system(size: TypeScale.small, weight: .medium))
                         .foregroundStyle(c(.ink))
                         .padding(.horizontal, 12).padding(.vertical, 7)
                         .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.bone)))

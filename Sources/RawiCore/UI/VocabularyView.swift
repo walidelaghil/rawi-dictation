@@ -68,17 +68,17 @@ public struct DictionaryScreen: View {
                     ForEach(model.terms) { term in
                       Row(appearance: model.appearance) {
                         HStack(spacing: 11) {
-                            Text(term.term).font(.system(size: 13))
+                            Text(term.term).font(.system(size: TypeScale.heading))
                                 .foregroundStyle(c(.bone))
                                 .frame(width: 190, alignment: .leading)
                             Text(term.addedAutomatically
                                  ? term.note
                                  : (term.note.isEmpty ? "added by you" : term.note))
-                                .font(.system(size: 11))
+                                .font(.system(size: TypeScale.small))
                                 .foregroundStyle(c(.faint))
                             Spacer(minLength: 8)
                             Button { model.removeTerm(term) } label: {
-                                Image(systemName: "xmark").font(.system(size: 9))
+                                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
                                     .foregroundStyle(c(.faint))
                             }
                             .buttonStyle(.plain)
@@ -93,12 +93,12 @@ public struct DictionaryScreen: View {
 
             HStack(spacing: 9) {
                 TextField("Add a term Rawi has not heard enough yet", text: $model.newTerm)
-                    .textFieldStyle(.plain).font(.system(size: 13))
+                    .textFieldStyle(.plain).font(.system(size: TypeScale.heading))
                     .foregroundStyle(c(.bone))
                     .onSubmit { model.addTerm() }
                 Button("Add") { model.addTerm() }
                     .buttonStyle(.plain)
-                    .font(.system(size: 12)).foregroundStyle(c(.saffron))
+                    .font(.system(size: TypeScale.body)).foregroundStyle(c(.saffron))
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
@@ -128,14 +128,14 @@ public struct SnippetsScreen: View {
 
             HStack(spacing: 9) {
                 TextField("When I say…", text: $model.newTrigger)
-                    .textFieldStyle(.plain).font(.system(size: 13)).foregroundStyle(c(.bone))
+                    .textFieldStyle(.plain).font(.system(size: TypeScale.heading)).foregroundStyle(c(.bone))
                     .frame(width: 170)
                 Text("→").foregroundStyle(c(.faint))
                 TextField("…type this", text: $model.newExpansion)
-                    .textFieldStyle(.plain).font(.system(size: 13)).foregroundStyle(c(.bone))
+                    .textFieldStyle(.plain).font(.system(size: TypeScale.heading)).foregroundStyle(c(.bone))
                     .onSubmit { model.addSnippet() }
                 Button("Add") { model.addSnippet() }
-                    .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(c(.saffron))
+                    .buttonStyle(.plain).font(.system(size: TypeScale.body)).foregroundStyle(c(.saffron))
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
@@ -150,15 +150,15 @@ public struct SnippetsScreen: View {
                     ForEach(model.snippets) { snippet in
                         HStack(spacing: 11) {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("“\(snippet.trigger)”").font(.system(size: 13))
+                                Text("“\(snippet.trigger)”").font(.system(size: TypeScale.heading))
                                     .foregroundStyle(c(.bone))
                                 Text("→ \(snippet.expansion)")
-                                    .font(.system(size: 10.5).monospaced())
+                                    .font(.system(size: TypeScale.small).monospaced())
                                     .foregroundStyle(c(.faint)).lineLimit(1)
                             }
                             Spacer()
                             Button { model.removeSnippet(snippet) } label: {
-                                Image(systemName: "xmark").font(.system(size: 9))
+                                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
                                     .foregroundStyle(c(.faint))
                             }.buttonStyle(.plain)
                         }
@@ -185,16 +185,16 @@ struct ScreenHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 10) {
-                Text(title).font(.system(size: 21, weight: .semibold)).foregroundStyle(c(.bone))
+                Text(title).font(.system(size: TypeScale.title, weight: .semibold)).foregroundStyle(c(.bone))
                 Button { showInfo.toggle() } label: {
-                    Image(systemName: "info.circle").font(.system(size: 14))
+                    Image(systemName: "info.circle").font(.system(size: TypeScale.heading))
                         .foregroundStyle(c(.faint))
                 }.buttonStyle(.plain).help("About \(title.lowercased())")
                 Spacer()
             }
             if showInfo {
                 Text(info)
-                    .font(.system(size: 11.5)).foregroundStyle(c(.muted))
+                    .font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(13)
                     .frame(maxWidth: 520, alignment: .leading)
@@ -210,8 +210,8 @@ struct EmptyHint: View {
     private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(.system(size: 13)).foregroundStyle(c(.muted))
-            Text(detail).font(.system(size: 11.5)).foregroundStyle(c(.faint))
+            Text(title).font(.system(size: TypeScale.heading)).foregroundStyle(c(.muted))
+            Text(detail).font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
         }.padding(.top, 14)
     }
 }

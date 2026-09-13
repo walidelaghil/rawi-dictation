@@ -154,7 +154,7 @@ public struct SettingsView: View {
 
                 if let error = model.saveError {
                     Text("Could not save: \(error)")
-                        .font(.system(size: 11.5)).foregroundStyle(c(.clay))
+                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                 }
 
                 appearanceSection
@@ -184,7 +184,7 @@ public struct SettingsView: View {
                         model.save()
                     } label: {
                         Text(option.displayName)
-                            .font(.system(size: 12,
+                            .font(.system(size: TypeScale.body,
                                           weight: model.config.appearance == option
                                               ? .medium : .regular))
                             .foregroundStyle(model.config.appearance == option
@@ -208,9 +208,9 @@ public struct SettingsView: View {
                 ForEach(SettingsViewModel.Key.allCases, id: \.self) { key in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(key.label).font(.system(size: 12.5))
+                            Text(key.label).font(.system(size: TypeScale.body))
                                 .foregroundStyle(c(.bone))
-                            Text(key.detail).font(.system(size: 10.5))
+                            Text(key.detail).font(.system(size: TypeScale.small))
                                 .foregroundStyle(c(.faint))
                         }
                         .frame(width: 230, alignment: .leading)
@@ -230,7 +230,7 @@ public struct SettingsView: View {
                 if !model.clashing.isEmpty {
                     Text("\(model.clashing.joined(separator: " and ")) are on the same "
                        + "combination. Only one of them will work.")
-                        .font(.system(size: 11)).foregroundStyle(c(.clay))
+                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                 }
             }
         }
@@ -249,7 +249,7 @@ public struct SettingsView: View {
                 if model.config.engine == .whispercpp {
                     if model.whisperModels.isEmpty {
                         Text("No models found in \(ModelStore.directory.path)")
-                            .font(.system(size: 11)).foregroundStyle(c(.clay))
+                            .font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                     } else {
                         picker(model.whisperModels.map { ($0.id, $0.displayName) },
                                selected: model.currentWhisperModel?.id ?? "") { id in
@@ -264,7 +264,7 @@ public struct SettingsView: View {
                 } else {
                     Text("Audio leaves your machine with this engine. The key comes from "
                        + "~/.config/rawi/.env.")
-                        .font(.system(size: 11)).foregroundStyle(c(.saffron))
+                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.saffron))
                 }
             }
         }
@@ -299,18 +299,18 @@ public struct SettingsView: View {
                 switch model.config.cleanup.provider {
                 case .off:
                     Text("Whisper's raw output is inserted, and transforms are unavailable.")
-                        .font(.system(size: 11)).foregroundStyle(c(.faint))
+                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
                 case .ollama:
                     if !model.ollamaReachable {
                         Text("Ollama is not answering on localhost:11434.")
-                            .font(.system(size: 11)).foregroundStyle(c(.clay))
+                            .font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                     }
                     modelRow("English and other Latin", keyPath: \.latin)
                     modelRow("Arabic, mixed speech, and every transform", keyPath: \.arabic)
                 case .openai, .anthropic:
                     Text("Transcripts leave your machine with this provider. One model "
                        + "serves both scripts: \(model.config.cleanup.models.latin)")
-                        .font(.system(size: 11)).foregroundStyle(c(.saffron))
+                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.saffron))
                 }
             }
         }
@@ -329,11 +329,11 @@ public struct SettingsView: View {
                           keyPath: WritableKeyPath<CleanupModels, String>) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(label.uppercased())
-                .font(.system(size: 8.5, weight: .medium).monospaced()).tracking(1.1)
+                .font(.system(size: TypeScale.micro, weight: .medium).monospaced()).tracking(1.1)
                 .foregroundStyle(c(.faint))
             if model.installedOllama.isEmpty {
                 Text(model.config.cleanup.models[keyPath: keyPath])
-                    .font(.system(size: 11.5).monospaced()).foregroundStyle(c(.muted))
+                    .font(.system(size: TypeScale.small).monospaced()).foregroundStyle(c(.muted))
             } else {
                 picker(model.installedOllama.map { ($0, $0) },
                        selected: model.config.cleanup.models[keyPath: keyPath]) { picked in
@@ -353,19 +353,19 @@ public struct SettingsView: View {
                 Button {
                     NSWorkspace.shared.open(URL(fileURLWithPath: model.configPath))
                 } label: {
-                    Text("Open config.json").font(.system(size: 11.5))
+                    Text("Open config.json").font(.system(size: TypeScale.small))
                         .foregroundStyle(c(.ink))
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.bone)))
                 }.buttonStyle(.plain)
                 Button { model.reload() } label: {
-                    Text("Reload from disk").font(.system(size: 11.5))
+                    Text("Reload from disk").font(.system(size: TypeScale.small))
                         .foregroundStyle(c(.muted))
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.raised)))
                 }.buttonStyle(.plain)
                 Text(model.configPath)
-                    .font(.system(size: 10.5).monospaced()).foregroundStyle(c(.faint))
+                    .font(.system(size: TypeScale.small).monospaced()).foregroundStyle(c(.faint))
                     .lineLimit(1).truncationMode(.head)
             }
         }
@@ -377,9 +377,9 @@ public struct SettingsView: View {
                                         @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 12.5, weight: .semibold))
+                Text(title).font(.system(size: TypeScale.body, weight: .semibold))
                     .foregroundStyle(c(.bone))
-                Text(detail).font(.system(size: 11)).foregroundStyle(c(.faint))
+                Text(detail).font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
                     .fixedSize(horizontal: false, vertical: true)
             }
             content()
@@ -399,9 +399,9 @@ public struct SettingsView: View {
         } label: {
             HStack(spacing: 7) {
                 Text(options.first { $0.0 == selected }?.1 ?? selected)
-                    .font(.system(size: 12)).foregroundStyle(c(.bone))
+                    .font(.system(size: TypeScale.body)).foregroundStyle(c(.bone))
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9)).foregroundStyle(c(.faint))
+                    .font(.system(size: TypeScale.micro)).foregroundStyle(c(.faint))
             }
         }
         .menuStyle(.borderlessButton)
@@ -432,7 +432,7 @@ struct HotkeyField: View {
     var body: some View {
         Button(action: onStart) {
             Text(recording ? "Press a combination…" : HotkeyConfig.symbolic(raw))
-                .font(.system(size: 12, weight: .medium).monospaced())
+                .font(.system(size: TypeScale.body, weight: .medium).monospaced())
                 .foregroundStyle(recording ? c(.saffron) : (clashes ? c(.clay) : c(.bone)))
                 .frame(minWidth: 104)
                 .padding(.horizontal, 11).padding(.vertical, 6)
