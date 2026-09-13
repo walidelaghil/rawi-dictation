@@ -49,8 +49,8 @@ public struct RowGroup<Content: View>: View {
     }
 
     private var rows: some View {
-        LazyVStack(alignment: .leading, spacing: 2) { content }
-            .padding(.vertical, 6)
+        LazyVStack(alignment: .leading, spacing: 5) { content }
+            .padding(.vertical, 8)
     }
 }
 
@@ -77,8 +77,8 @@ public struct Row<Content: View>: View {
 
     public var body: some View {
         content
-            .padding(.horizontal, 13)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: Radius.control).fill(fill)
@@ -87,7 +87,7 @@ public struct Row<Content: View>: View {
                             ? RawiColors.color(.saffron, appearance).opacity(0.55)
                             : .clear))
             )
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 8)
             .onHover { hovered = $0 }
             .animation(.easeOut(duration: 0.12), value: hovered)
             .animation(.easeOut(duration: 0.12), value: selected)
@@ -113,12 +113,16 @@ public struct Row<Content: View>: View {
 ///
 /// Weights stop at three. Anything louder than semibold on a 13 point screen is
 /// shouting.
+/// The steps are pitched off the platform, not off a web page: 13 is the system
+/// body size on macOS, and anything a window asks you to read sits there. A
+/// screen full of 11 and 12 point text reads as cramped however well it is
+/// spaced, which is exactly what happened here.
 public enum TypeScale {
-    public static let hero: CGFloat = 30
-    public static let figure: CGFloat = 24
-    public static let title: CGFloat = 20
-    public static let heading: CGFloat = 13
-    public static let body: CGFloat = 12
-    public static let small: CGFloat = 11
-    public static let micro: CGFloat = 9.5
+    public static let hero: CGFloat = 32
+    public static let figure: CGFloat = 26
+    public static let title: CGFloat = 22
+    public static let heading: CGFloat = 15
+    public static let body: CGFloat = 13
+    public static let small: CGFloat = 11.5
+    public static let micro: CGFloat = 10
 }

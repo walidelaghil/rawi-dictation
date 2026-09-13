@@ -122,20 +122,22 @@ public struct TransformsView: View {
             }
 
             HStack(spacing: 10) {
-                Button { Task { await model.runTry() } } label: {
-                    Text(model.trying ? "Rewriting…" : "Rewrite")
-                        .font(.system(size: TypeScale.small, weight: .medium))
-                        .foregroundStyle(c(.ink))
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.saffron)))
-                }
-                .buttonStyle(.plain)
-                .disabled(model.trying || model.preview == nil)
-                .opacity(model.preview == nil ? 0.4 : 1)
-
+                // No provider, no button. A greyed-out control is a promise the
+                // screen cannot keep; the sentence says what to do instead.
                 if model.preview == nil {
-                    Text("Set cleanup.provider in config.json to use transforms")
-                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
+                    Text("Transforms need a cleanup provider. Turn one on in Settings.")
+                        .font(.system(size: TypeScale.body)).foregroundStyle(c(.faint))
+                } else {
+                    Button { Task { await model.runTry() } } label: {
+                        Text(model.trying ? "Rewriting…" : "Rewrite")
+                            .font(.system(size: TypeScale.body, weight: .medium))
+                            .foregroundStyle(c(.ink))
+                            .padding(.horizontal, 14).padding(.vertical, 7)
+                            .background(RoundedRectangle(cornerRadius: Radius.control)
+                                .fill(c(.saffron)))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(model.trying)
                 }
                 if let error = model.tryError {
                     Text(error).font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
@@ -181,33 +183,38 @@ public struct TransformsView: View {
     private var list: some View {
         RowGroup(appearance: model.appearance) {
             ForEach(model.transforms) { transform in
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(transform.name).font(.system(size: TypeScale.heading))
+              Row(appearance: model.appearance) {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 9) {
+                        Text(transform.name)
+                            .font(.system(size: TypeScale.heading, weight: .medium))
                             .foregroundStyle(c(.bone))
-                        Text(transform.isBuiltIn ? "built in" : "yours")
-                            .font(.system(size: TypeScale.micro, weight: .medium).monospaced()).tracking(1.1)
-                            .foregroundStyle(transform.isBuiltIn ? c(.faint) : c(.verdigris))
+                        if !transform.isBuiltIn {
+                            Text("yours")
+                                .font(.system(size: TypeScale.micro, weight: .medium))
+                                .foregroundStyle(c(.verdigris))
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Capsule().fill(c(.verdigris).opacity(0.14)))
+                        }
+                        Spacer(minLength: 8)
+                        if !transform.isBuiltIn {
+                            Button { model.remove(transform) } label: {
+                                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
+                                    .foregroundStyle(c(.faint))
+                            }.buttonStyle(.plain).help("Delete")
+                        }
                     }
-                    .frame(width: 190, alignment: .leading)
-
                     Text(transform.instruction)
-                        .font(.system(size: TypeScale.small))
+                        .font(.system(size: TypeScale.body))
                         .foregroundStyle(c(.muted))
+                        .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
-
-                    Spacer(minLength: 8)
-
-                    if !transform.isBuiltIn {
-                        Button { model.remove(transform) } label: {
-                            Image(systemName: "xmark").font(.system(size: TypeScale.micro))
-                                .foregroundStyle(c(.faint))
-                        }.buttonStyle(.plain).help("Delete")
-                    }
+                        .frame(maxWidth: 620, alignment: .leading)
                 }
+              }
             }
         }
-        .frame(minHeight: 180)
+        .frame(minHeight: 200)
     }
 
     // MARK: - Add

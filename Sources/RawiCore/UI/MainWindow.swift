@@ -88,6 +88,16 @@ public final class MainWindow: NSObject, NSWindowDelegate {
             .sink { [weak self] _ in self?.window?.performClose(nil) }
     }
 
+    /// The window's content, for the proof renders. Rendering a screen on its own
+    /// hides density problems that only appear next to the rail at 980 points.
+    public func testRootView() -> some View {
+        MainWindowView(history: model, vocabulary: vocabulary, destinations: destinations,
+                       transforms: transforms, insights: insights, settings: settings,
+                       selection: selection)
+    }
+
+    public func close() { window?.close() }
+
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 980, height: 620),

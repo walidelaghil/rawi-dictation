@@ -67,14 +67,16 @@ public struct DictionaryScreen: View {
                 RowGroup(appearance: model.appearance) {
                     ForEach(model.terms) { term in
                       Row(appearance: model.appearance) {
-                        HStack(spacing: 11) {
-                            Text(term.term).font(.system(size: TypeScale.heading))
+                        HStack(spacing: 14) {
+                            Text(term.term)
+                                .font(.system(size: TypeScale.heading, weight: .medium))
                                 .foregroundStyle(c(.bone))
-                                .frame(width: 190, alignment: .leading)
+                                .frame(minWidth: 150, alignment: .leading)
+                                .fixedSize()
                             Text(term.addedAutomatically
                                  ? term.note
                                  : (term.note.isEmpty ? "added by you" : term.note))
-                                .font(.system(size: TypeScale.small))
+                                .font(.system(size: TypeScale.body))
                                 .foregroundStyle(c(.faint))
                             Spacer(minLength: 8)
                             Button { model.removeTerm(term) } label: {
