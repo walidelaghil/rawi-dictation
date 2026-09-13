@@ -45,12 +45,19 @@ public enum HistorySearch {
     }
 
     /// Apps present in the history, for the filter control.
+    /// The apps you have dictated into, one chip each.
+    ///
+    /// Keyed by name rather than by bundle id: two bundle ids that call themselves
+    /// "Slack" — the app and its helper, a beta build beside a release — are one
+    /// filter as far as the person reading the row is concerned, and two chips
+    /// with identical labels cannot be told apart.
     public static func apps(in entries: [HistoryEntry]) -> [(id: String, name: String)] {
-        var seen: [String: String] = [:]
+        var seen: [String: String] = [:]                       // name -> bundle id
         for e in entries {
             guard let id = e.bundleID else { continue }
-            if seen[id] == nil { seen[id] = e.appName ?? id }
+            let name = e.appName ?? id
+            if seen[name] == nil { seen[name] = id }
         }
-        return seen.map { (id: $0.key, name: $0.value) }.sorted { $0.name < $1.name }
+        return seen.map { (id: $0.value, name: $0.key) }.sorted { $0.name < $1.name }
     }
 }

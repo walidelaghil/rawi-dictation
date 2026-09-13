@@ -21,6 +21,8 @@ public enum RemoteTrigger {
         /// the status item — and so was the one surface that could not be checked
         /// from a terminal.
         case menu
+        /// Puts the clipboard back the way it was before the last transform.
+        case undo
     }
 
     private static let name = "com.welaghil.rawi.trigger"

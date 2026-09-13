@@ -15,6 +15,10 @@ public struct Insights: Sendable, Equatable {
     public let entriesCleaned: Int
     public let byApp: [AppShare]
     public let activeDays: Set<String>
+    /// Words by script. The one number on this screen that is about *this*
+    /// product rather than about usage in general.
+    public let latinWords: Int
+    public let arabicWords: Int
     public let currentStreak: Int
     public let longestStreak: Int
 
@@ -28,7 +32,16 @@ public struct Insights: Sendable, Equatable {
     public static let empty = Insights(
         wordsDictated: 0, secondsSpoken: 0, wordsPerMinute: 0, dictations: 0,
         cleanupsRejected: 0, entriesCleaned: 0, byApp: [], activeDays: [],
-        currentStreak: 0, longestStreak: 0)
+        latinWords: 0, arabicWords: 0, currentStreak: 0, longestStreak: 0)
+
+    public var arabicShare: Double {
+        let total = latinWords + arabicWords
+        return total > 0 ? Double(arabicWords) / Double(total) : 0
+    }
+
+    /// Both languages actually used. One language is not a split, and a bar that
+    /// is 100% of one thing says nothing.
+    public var isBilingual: Bool { latinWords > 0 && arabicWords > 0 }
 
     /// An estimate, and labelled as one wherever it is shown.
     public func minutesSavedVersusTyping(at typingWPM: Int = 41) -> Int {
@@ -73,6 +86,10 @@ public struct Insights: Sendable, Equatable {
             entriesCleaned: spoken.filter(\.wasCleaned).count,
             byApp: shares,
             activeDays: days,
+            latinWords: spoken.filter { $0.script == .latin }
+                .reduce(0) { $0 + wordCount($1.cleaned) },
+            arabicWords: spoken.filter { $0.script == .arabic }
+                .reduce(0) { $0 + wordCount($1.cleaned) },
             currentStreak: streak(endingAt: now, days: days, formatter: formatter),
             longestStreak: longest(days: days, formatter: formatter))
     }

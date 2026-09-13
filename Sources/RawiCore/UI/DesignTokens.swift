@@ -39,7 +39,12 @@ public struct RowGroup<Content: View>: View {
     public var body: some View {
         Group {
             if scrolls {
+                // Sized to its rows, capped rather than stretched: a single row on
+                // 870 points of bordered emptiness reads as a rendering failure,
+                // not as breathing room.
                 ScrollView { rows }
+                    .frame(maxHeight: 640)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 rows
             }

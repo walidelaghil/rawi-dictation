@@ -137,6 +137,18 @@ public final class DictationController {
         }
     }
 
+    /// Takes back the last transform while its result is still on the clipboard.
+    @discardableResult
+    public func undoTransform() -> Bool {
+        guard let runner = transformRunner, runner.undo() else { return false }
+        log.info("Transform undone; your text is back on the clipboard")
+        state = .notice("Put back")
+        scheduleErrorClear()
+        return true
+    }
+
+    public var canUndoTransform: Bool { transformRunner?.canUndo ?? false }
+
     /// Esc. Drops a recording, or aborts work already running.
     public func cancelRequested() async {
         switch state {

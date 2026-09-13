@@ -80,6 +80,7 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
         self.state = state
         self.permissions = permissions
         panel.state = state
+        panel.canUndo = controller.canUndoTransform
 
         guard let button = statusItem.button else { return }
         // The Rawi mark, not an SF Symbol: the menu bar is where this app lives, so
@@ -117,6 +118,11 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
     public func setRecent(_ recent: [RecentDictation]) { panel.recent = recent }
 
     public func setLabels(_ labels: HotkeyLabels) { panel.labels = labels }
+
+    public var onUndo: (() -> Void)? {
+        get { panel.onUndo }
+        set { panel.onUndo = newValue }
+    }
 
     public func setAppearance(_ appearance: ResolvedAppearance) { panel.appearance = appearance }
 

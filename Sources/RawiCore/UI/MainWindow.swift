@@ -249,7 +249,7 @@ struct MainWindowView: View {
             // ever learns one.
             Text("⌘\(shortcut)")
                 .font(.system(size: TypeScale.micro).monospaced())
-                .foregroundStyle(c(.faint).opacity(selected ? 0.9 : 0.5))
+                .foregroundStyle(selected ? c(.muted) : c(.faint))
         }
         .foregroundStyle(selected ? c(.bone) : c(.muted))
         .padding(.horizontal, 9).padding(.vertical, 7)

@@ -240,3 +240,48 @@ private final class SlowRewriter: CleanupProvider, @unchecked Sendable {
         #expect(inserter.inserted.isEmpty)
     }
 }
+
+@MainActor
+@Suite("Undoing a transform") struct TransformUndoTests {
+    func store() -> TransformStore {
+        TransformStore(url: URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("rawi-undo-\(UUID().uuidString).json"))
+    }
+
+    @Test("the original comes back") func undo() async throws {
+        // The runner already keeps it — it writes the original to history before
+        // calling the model — so the way back existed and had no control on it.
+        let clip = FakeClipboard("the original text")
+        let runner = TransformRunner(store: store(), rewriter: FakeRewriter(), clipboard: clip)
+        _ = try await runner.run(spoken: "polish")
+        #expect(clip.text == "rewritten")
+        #expect(runner.undo())
+        #expect(clip.text == "the original text")
+    }
+
+    @Test("there is nothing to undo before a transform runs") func nothingYet() {
+        let clip = FakeClipboard("x")
+        let runner = TransformRunner(store: store(), rewriter: FakeRewriter(), clipboard: clip)
+        #expect(!runner.canUndo)
+        #expect(!runner.undo())
+    }
+
+    @Test("undoing twice does not put the rewrite back") func once() async throws {
+        let clip = FakeClipboard("original")
+        let runner = TransformRunner(store: store(), rewriter: FakeRewriter(), clipboard: clip)
+        _ = try await runner.run(spoken: "polish")
+        #expect(runner.undo())
+        #expect(!runner.undo())
+        #expect(clip.text == "original")
+    }
+
+    @Test("a clipboard you changed yourself is not overwritten") func respectsYou() async throws {
+        // Undo means "put my text back", not "revert whatever is there now".
+        let clip = FakeClipboard("original")
+        let runner = TransformRunner(store: store(), rewriter: FakeRewriter(), clipboard: clip)
+        _ = try await runner.run(spoken: "polish")
+        clip.text = "something I copied since"
+        #expect(!runner.undo())
+        #expect(clip.text == "something I copied since")
+    }
+}

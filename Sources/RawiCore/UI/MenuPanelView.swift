@@ -18,6 +18,8 @@ public final class MenuPanelModel: ObservableObject {
     public var onSettings: (() -> Void)?
     public var onOpenWindow: (() -> Void)?
     public var onQuit: (() -> Void)?
+    public var onUndo: (() -> Void)?
+    @Published public var canUndo = false
 
     public init() {}
 }
@@ -246,6 +248,15 @@ public struct MenuPanelView: View {
             }
             .buttonStyle(.plain)
             .help("Settings")
+            if model.canUndo {
+                Button { model.onUndo?() } label: {
+                    Text("Undo transform")
+                        .font(.system(size: TypeScale.body))
+                        .foregroundStyle(c(.saffron))
+                }
+                .buttonStyle(.plain)
+                .help("Put the clipboard back the way it was")
+            }
             Spacer()
             Button { model.onQuit?() } label: {
                 Text("Quit").font(.system(size: TypeScale.body)).foregroundStyle(c(.faint))
@@ -253,7 +264,9 @@ public struct MenuPanelView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 15).padding(.vertical, 9)
-        .background(c(.ink))
+        // `ink` is darker than `surface` in the dark theme and all but identical to
+        // it in the light one, where the footer separated from the panel by 1.03:1.
+        .background(model.appearance == .dark ? c(.ink) : c(.raised))
     }
 }
 

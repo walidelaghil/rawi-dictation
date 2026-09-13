@@ -67,7 +67,10 @@ public struct DestinationsView: View {
                             Button { model.remove(rule) } label: {
                                 Image(systemName: "xmark").font(.system(size: TypeScale.micro))
                                     .foregroundStyle(c(.faint))
-                            }.buttonStyle(.plain)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Delete this rule")
+                            .accessibilityLabel("Delete the \(rule.name) rule")
                         }
                     }
                   }

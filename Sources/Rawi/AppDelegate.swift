@@ -226,6 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar = MenuBarController(controller: controller, log: log)
         publishHotkeyLabels()
         menuBar.onOpenWindow = { [weak self] in self?.mainWindow.show() }
+        menuBar.onUndo = { [weak self] in _ = self?.controller.undoTransform() }
         menuBar.onOpenSettings = { [weak self] in self?.mainWindow.show(.settings) }
         // Let go of the global hotkeys while one is being recorded, or the key you
         // are trying to assign is swallowed by the key it is already assigned to.
@@ -379,6 +380,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .cancel: await self.controller.cancelRequested()
                 case .window: self.mainWindow.show()
                 case .menu: self.menuBar.togglePanel()
+                case .undo: _ = self.controller.undoTransform()
                 }
             }
         }

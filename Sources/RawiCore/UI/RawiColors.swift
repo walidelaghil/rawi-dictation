@@ -22,6 +22,11 @@ public enum ColorToken: String, Sendable, CaseIterable {
 public enum RawiColors {
     /// One table, both themes. Adding a token here forces a value for each — which
     /// is deliberate: a token defined in one theme only is the classic two-theme bug.
+    ///
+    /// Every text token clears 4.5:1 on every ground it is used on, in both
+    /// themes, and `ContrastFloorTests` fails if that stops being true. A token is
+    /// a contrast commitment: do not dim one with `.opacity()`, because that
+    /// breaks the commitment silently and no test can see it in a screenshot.
     private static let table: [ColorToken: (dark: String, light: String)] = [
         .ink:       ("#12161C", "#F4F6F8"),
         .surface:   ("#1A1F27", "#FFFFFF"),
@@ -29,10 +34,13 @@ public enum RawiColors {
         .edge:      ("#333B47", "#D5DBE3"),
         .bone:      ("#E7EBF0", "#171B21"),
         .muted:     ("#A3AEBD", "#4E5764"),
-        .faint:     ("#79838F", "#6B7481"),
+        // Lifted until every text token clears WCAG AA on every ground it is used
+        // on. faint was 3.80:1 on `raised`, and it carries the raw transcript,
+        // every tile's qualifier and every settings description.
+        .faint:     ("#86909C", "#656E7B"),
         // Accents share chroma and lightness and vary only in hue, so none shouts
         // over the others. The light values are darkened to hold contrast on white.
-        .saffron:   ("#E0A039", "#9A6404"),
+        .saffron:   ("#E0A039", "#976101"),
         .verdigris: ("#4FB3A6", "#116B60"),
         .lapis:     ("#9084F0", "#4A3DAF"),
         .clay:      ("#E2726C", "#A93A34"),

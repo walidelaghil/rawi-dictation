@@ -162,7 +162,10 @@ public struct SnippetsScreen: View {
                             Button { model.removeSnippet(snippet) } label: {
                                 Image(systemName: "xmark").font(.system(size: TypeScale.micro))
                                     .foregroundStyle(c(.faint))
-                            }.buttonStyle(.plain)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Delete this snippet")
+                            .accessibilityLabel("Delete the snippet for \(snippet.trigger)")
                         }
                     }
                 }

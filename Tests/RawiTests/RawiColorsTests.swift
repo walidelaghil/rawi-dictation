@@ -126,3 +126,61 @@ func contrastRatio(_ a: String, _ b: String) -> Double {
         }
     }
 }
+
+@Suite("Contrast floor") struct ContrastFloorTests {
+    /// WCAG relative luminance, so the palette's promises are checked rather than
+    /// asserted.
+    static func luminance(_ hex: String) -> Double {
+        let value = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        let number = UInt64(value, radix: 16) ?? 0
+        let parts = [Double((number >> 16) & 0xFF), Double((number >> 8) & 0xFF),
+                     Double(number & 0xFF)].map { $0 / 255 }
+        let linear = parts.map { $0 <= 0.03928 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    }
+
+    static func ratio(_ a: String, _ b: String) -> Double {
+        let (x, y) = (luminance(a), luminance(b))
+        return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+
+    @Test("every text token clears AA on every ground it is used on") func textTokens() {
+        // faint was 3.80:1 on raised and carried the raw transcript, every tile
+        // qualifier and every Settings description.
+        for appearance in [ResolvedAppearance.dark, .light] {
+            for text in [ColorToken.bone, .muted, .faint] {
+                for ground in [ColorToken.ink, .surface, .raised] {
+                    let r = Self.ratio(RawiColors.hex(text, appearance),
+                                       RawiColors.hex(ground, appearance))
+                    #expect(r >= 4.5, Comment(rawValue:
+                        "\(text) on \(ground) in \(appearance): \(String(format: "%.2f", r)):1"))
+                }
+            }
+        }
+    }
+
+    @Test("the accents clear AA where they carry words") func accents() {
+        for appearance in [ResolvedAppearance.dark, .light] {
+            for accent in [ColorToken.saffron, .verdigris, .lapis, .clay] {
+                for ground in [ColorToken.surface, .raised] {
+                    let r = Self.ratio(RawiColors.hex(accent, appearance),
+                                       RawiColors.hex(ground, appearance))
+                    #expect(r >= 4.5, Comment(rawValue:
+                        "\(accent) on \(ground) in \(appearance): \(String(format: "%.2f", r)):1"))
+                }
+            }
+        }
+    }
+
+    @Test("no view dims a text token with opacity") func noDimming() {
+        // A token is a contrast commitment. Multiplying it breaks the commitment
+        // silently: the rail's own shortcut hints were rendering at 2.11:1.
+        let dimmed = try! Regex("c\\(\\.(bone|muted|faint)\\)\\.opacity")
+        for file in TypeScaleTests.uiSources {
+            let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+            for line in text.split(separator: "\n") where line.contains(dimmed) {
+                Issue.record(Comment(rawValue: "\(file.lastPathComponent): \(line.trimmingCharacters(in: .whitespaces))"))
+            }
+        }
+    }
+}

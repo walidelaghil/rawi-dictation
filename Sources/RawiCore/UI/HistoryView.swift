@@ -6,6 +6,7 @@ public final class HistoryViewModel: ObservableObject {
     @Published public var filter = HistoryFilter()
     @Published public var showInfo = false
     @Published public var confirmingPurge = false
+    @Published public var confirmingDelete = false
     @Published public var appearance: ResolvedAppearance = .dark
     /// The row the keyboard is on. Kept as an id rather than an index so a filter
     /// or a delete cannot silently move the selection to a different dictation.
@@ -24,6 +25,9 @@ public final class HistoryViewModel: ObservableObject {
     }
 
     private let store: HistoryStore
+    /// The real cap, rather than a number typed into a sentence.
+    public var limit: Int { store.cap }
+
     public init(store: HistoryStore) {
         self.store = store
         reload()
@@ -119,7 +123,13 @@ public struct HistoryView: View {
         .onKeyPress(.upArrow) { model.moveSelection(by: -1); return .handled }
         .onKeyPress(.downArrow) { model.moveSelection(by: 1); return .handled }
         .onKeyPress(.return) { model.copySelected() ? .handled : .ignored }
-        .onKeyPress(.delete) { model.deleteSelected(); return .handled }
+        // Confirmed, like Clear all. It was the only destructive action in the app
+        // without a guard, and the easiest one to hit by accident.
+        .onKeyPress(.delete) {
+            guard model.selected != nil else { return .ignored }
+            model.confirmingDelete = true
+            return .handled
+        }
         .onKeyPress(.escape) {
             model.escape() == .nothingToClear ? .ignored : .handled
         }
@@ -145,6 +155,16 @@ public struct HistoryView: View {
                 Text("Clear all").font(.system(size: TypeScale.body)).foregroundStyle(c(.clay))
             }
             .buttonStyle(.plain)
+            .confirmationDialog(
+                "Delete this dictation?",
+                isPresented: $model.confirmingDelete,
+                presenting: model.selected
+            ) { entry in
+                Button("Delete", role: .destructive) { model.deleteSelected() }
+                Button("Keep", role: .cancel) { }
+            } message: { entry in
+                Text(entry.oneLine)
+            }
             .confirmationDialog("Delete every stored dictation?",
                                 isPresented: $model.confirmingPurge) {
                 Button("Delete \(model.entries.count) entries", role: .destructive) {
@@ -172,7 +192,7 @@ public struct HistoryView: View {
             Text("Both the cleaned text and what whisper actually heard. Search covers "
                + "both, which is what you need when you remember what you said rather "
                + "than what came out. "
-               + "Capped at \(model.entries.count > 0 ? "500" : "500") entries; password "
+               + "Capped at \(model.limit) entries; password "
                + "managers and private messages are never recorded.")
                 .font(.system(size: TypeScale.small))
                 .foregroundStyle(c(.muted))
@@ -212,7 +232,7 @@ public struct HistoryView: View {
             } else {
                 Text("⌘F")
                     .font(.system(size: TypeScale.micro).monospaced())
-                    .foregroundStyle(c(.faint).opacity(0.7))
+                    .foregroundStyle(c(.faint))
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)

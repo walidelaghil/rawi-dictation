@@ -368,7 +368,10 @@ public struct SettingsView: View {
                         Text("No models found in \(ModelStore.directory.path)")
                             .font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                     } else {
-                        picker(model.whisperModels.map { ($0.id, $0.displayName) },
+                        picker(model.whisperModels.map {
+                                   ($0.id, $0.multilingual ? $0.displayName
+                                                           : "\($0.displayName) · English only")
+                               },
                                selected: model.currentWhisperModel?.id ?? "") { id in
                             guard let picked = ModelStore.model(id: id) else { return }
                             model.config.whispercpp.model = ModelStore.url(for: picked).path
@@ -377,6 +380,13 @@ public struct SettingsView: View {
                             model.config.whispercpp.language = picked.multilingual ? "auto" : "en"
                             model.save()
                         }
+                    }
+                    if let current = model.currentWhisperModel, !current.multilingual {
+                        // The failure this prevents is silent: an English-only model
+                        // does not mishear Arabic, it cannot hear it at all.
+                        Text("This model cannot transcribe Arabic. Choose a multilingual "
+                           + "one if you dictate in both.")
+                            .font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                     }
                 } else {
                     Text("Audio leaves your machine with this engine. The key comes from "

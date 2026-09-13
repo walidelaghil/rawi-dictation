@@ -58,6 +58,26 @@ public final class TransformRunner {
     /// The clipboard text as it was, published before the model is called.
     public var onOriginal: ((String) -> Void)?
 
+    /// What the last transform replaced, and what it replaced it with. Held so the
+    /// rewrite can be taken back: the runner already had the original, and until
+    /// now nothing could act on it.
+    private var lastRun: (before: String, after: String)?
+
+    public var canUndo: Bool {
+        guard let lastRun else { return false }
+        // Only while the rewrite is still the thing on the clipboard. If you have
+        // copied something since, undo would take that away instead.
+        return clipboard.text?.trimmingCharacters(in: .whitespacesAndNewlines) == lastRun.after
+    }
+
+    @discardableResult
+    public func undo() -> Bool {
+        guard canUndo, let lastRun else { return false }
+        clipboard.text = lastRun.before
+        self.lastRun = nil
+        return true
+    }
+
     public init(store: TransformStore,
                 rewriter: any CleanupProvider,
                 clipboard: any ClipboardAccess = SystemClipboard()) {
@@ -85,6 +105,7 @@ public final class TransformRunner {
         guard !after.isEmpty else { throw TransformError.emptyResult }
 
         clipboard.text = after
+        lastRun = (before: before, after: after)
         return Outcome(transform: matched, instruction: instruction,
                        before: before, after: after)
     }

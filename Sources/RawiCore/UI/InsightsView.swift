@@ -31,8 +31,8 @@ public struct InsightsView: View {
                 ScreenHeader(title: "Insights", appearance: model.appearance,
                              showInfo: $model.showInfo,
                              info: "Every number here is computed from your history, not "
-                                 + "accumulated in a counter, so deleting a dictation changes them "
-                                 + "change to match. Words per minute is words over time "
+                                 + "accumulated in a counter, so deleting a dictation changes "
+                                 + "them to match. Words per minute is words over time "
                                  + "actually spoken. Time saved is an estimate against a typing "
                                  + "speed you set. Transforms are excluded from the spoken "
                                  + "figures: that text was on your clipboard, not in your voice.")
@@ -42,8 +42,11 @@ public struct InsightsView: View {
                               detail: "Dictate something and this fills in.",
                               appearance: model.appearance)
                 } else {
-                    streak
                     tiles
+                    if i.isBilingual { languages }
+                    // A contribution grid needs contributions. Below a week it is
+                    // fifty-five grey squares reporting that you are new.
+                    if i.activeDays.count >= 7 { streak }
                     apps
                 }
                 Spacer(minLength: 0)
@@ -64,7 +67,7 @@ public struct InsightsView: View {
                      "across \(i.dictations.formatted()) dictations", .bone)
                 tile("\(i.wordsPerMinute)", "words per minute",
                      "spoken, not wall clock", .bone)
-                tile(spokenTime, "time speaking",
+                tile(spokenTime, "spent speaking",
                      "microphone open, transcribing excluded", .bone)
             }
             HStack(spacing: 10) {
@@ -73,7 +76,8 @@ public struct InsightsView: View {
                      i.cleanupsRejected == 0
                         ? "no cleanup was ever rejected"
                         : "\(i.cleanupsRejected) rejected, raw kept instead", .verdigris)
-                tile("\(i.activeDays.count)", "days used",
+                tile("\(i.activeDays.count)",
+                     i.activeDays.count == 1 ? "day used" : "days used",
                      "since you started", .bone)
             }
         }
@@ -126,6 +130,47 @@ public struct InsightsView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
+    }
+
+    // MARK: - Languages
+
+    /// The split between the two scripts, which is the thing this app does that
+    /// others do not. One bar, both ends labelled, no legend needed.
+    private var languages: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(Int((i.arabicShare * 100).rounded()))%")
+                    .font(.system(size: TypeScale.figure, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(c(.lapis))
+                Text("of your words are Arabic")
+                    .font(.system(size: TypeScale.body)).foregroundStyle(c(.bone))
+                Spacer()
+                Text("one key for both")
+                    .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
+            }
+            GeometryReader { geo in
+                HStack(spacing: 3) {
+                    RoundedRectangle(cornerRadius: Radius.mark)
+                        .fill(c(.lapis))
+                        .frame(width: max(3, (geo.size.width - 3) * i.arabicShare))
+                    RoundedRectangle(cornerRadius: Radius.mark)
+                        .fill(c(.saffron).opacity(0.75))
+                }
+                .frame(height: 10)
+            }
+            .frame(height: 10)
+            HStack {
+                Text("العربية \(i.arabicWords.formatted())")
+                    .font(.system(size: TypeScale.small)).foregroundStyle(c(.lapis))
+                Spacer()
+                Text("\(i.latinWords.formatted()) English")
+                    .font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
+            }
+        }
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
             .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))

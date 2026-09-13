@@ -23,6 +23,8 @@ public final class HistoryStore: @unchecked Sendable {
     }
 
     public var count: Int { lock.withLock { entries.count } }
+    /// The cap, so a screen can state it rather than repeat a literal.
+    public var cap: Int { limit }
 
     public func all() -> [HistoryEntry] { lock.withLock { entries } }
 

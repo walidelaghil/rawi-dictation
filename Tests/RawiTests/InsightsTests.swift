@@ -161,3 +161,41 @@ import Foundation
         #expect(Insights.compute(from: [entry]).wordsDictated == 2)
     }
 }
+
+@Suite("The language split") struct LanguageSplitTests {
+    func entry(_ text: String, script: Script, seconds: Double = 5) -> HistoryEntry {
+        HistoryEntry(at: Date(), cleaned: text, raw: text, script: script,
+                     appName: "Slack", bundleID: "slack", durationSeconds: seconds,
+                     peakLevel: 0.3, guardRejected: false)
+    }
+
+    @Test("words are counted per script, which is this product's actual subject")
+    func counts() {
+        let i = Insights.compute(from: [
+            entry("one two three", script: .latin),
+            entry("أربعة خمسة", script: .arabic),
+            entry("six", script: .latin),
+        ])
+        #expect(i.latinWords == 4)
+        #expect(i.arabicWords == 2)
+        #expect(abs(i.arabicShare - 2.0 / 6.0) < 0.001)
+    }
+
+    @Test("one language only is not a split, and reports as such") func single() {
+        let i = Insights.compute(from: [entry("only english here", script: .latin)])
+        #expect(i.arabicWords == 0)
+        #expect(i.arabicShare == 0)
+        #expect(!i.isBilingual)
+    }
+
+    @Test("both languages present makes it worth showing") func both() {
+        let i = Insights.compute(from: [entry("english", script: .latin),
+                                        entry("عربي", script: .arabic)])
+        #expect(i.isBilingual)
+    }
+
+    @Test("an empty history has no split and no division by zero") func empty() {
+        #expect(Insights.empty.arabicShare == 0)
+        #expect(!Insights.empty.isBilingual)
+    }
+}
