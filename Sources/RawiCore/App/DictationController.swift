@@ -140,7 +140,10 @@ public final class DictationController {
     /// Esc. Drops a recording, or aborts work already running.
     public func cancelRequested() async {
         switch state {
-        case .idle, .error, .notice:
+        case .error:
+            state = .idle                    // Esc acknowledges a failure
+            return
+        case .idle, .notice:
             return
         case .recording:
             discardRecording(reason: "cancelled")
@@ -164,6 +167,9 @@ public final class DictationController {
     // MARK: - Recording
 
     private func startRecording(mode: RecordingMode, intent: RecordingIntent = .dictate) {
+        // A held error is dismissed by using the app again, which is the gesture
+        // people actually make after reading one.
+        if case .error = state { state = .idle }
         guard state == .idle else { return }        // ignore key repeat / re-entry
         let url = Config.recordingsDirectory
             .appendingPathComponent("dictation-\(Int(Date().timeIntervalSince1970)).wav")
@@ -269,6 +275,10 @@ public final class DictationController {
                 Audio retained at \(recording.url.path) \
                 (\(recording.url.lastPathComponent))
                 """)
+            // Written to history, not only to a log nobody has open: this is the
+            // one moment in the product where words are lost, and it used to be
+            // the one moment with no record.
+            recordFailure(error, recording: recording)
             report(error, context: "transcribe")
             return
         }
@@ -290,8 +300,20 @@ public final class DictationController {
             return
         }
 
-        // 2. Clean up. A cleanup failure must never lose the dictation, so the raw
-        //    transcript is inserted instead.
+        await finishText(raw, recordingURL: recording.url,
+                         duration: Double(recording.duration.components.seconds),
+                         peak: recording.peakLevel, keepAudio: false)
+        currentRecordingURL = nil
+    }
+
+
+    /// Everything after the words exist: cleanup, the guard, the dictionary,
+    /// snippets, insertion, and the record. Shared so a retry of kept audio takes
+    /// exactly the path a fresh dictation takes.
+    private func finishText(_ raw: String, recordingURL: URL, duration: Double,
+                            peak: Double, keepAudio: Bool) async {
+        // Cleanup. A cleanup failure must never lose the dictation, so the raw
+        // transcript is inserted instead.
         var text = raw
         var rejected = false
         state = .cleaning
@@ -314,33 +336,30 @@ public final class DictationController {
         }
         if cancelled { state = .idle; return }
 
-        // 3. Apply the dictionary deterministically. The model layers are
-        //    unreliable — 1.5b ignores a glossary entirely — so the guarantee
-        //    lives in code that cannot decline.
+        // The dictionary, applied deterministically. The model layers are
+        // unreliable — 1.5b ignores a glossary entirely — so the guarantee lives in
+        // code that cannot decline.
         text = TermCorrector.apply(text, terms: capturedVocabulary.terms)
 
-        // 4. Expand snippets — after the guard, so an expanded address can never
-        //    be mistaken for the model rewriting your words.
+        // Snippets, after the guard, so an expanded address can never be mistaken
+        // for the model rewriting your words.
         text = SnippetExpander.expand(text, with: capturedVocabulary.snippets)
 
-        // 5. Insert.
         state = .inserting
         let pasted = inserter.insert(text,
                                      restoringClipboard: config.output.restorePreviousClipboard)
         // Recorded whether or not the synthetic paste landed. On a Mac that cannot
         // grant Accessibility the clipboard *is* the delivery mechanism — pressing
-        // ⌘V is the user completing the insertion, not the dictation failing. Gating
-        // on `pasted` left history permanently empty on exactly that machine.
+        // ⌘V is the user completing the insertion, not the dictation failing.
         remember(text)
         onRecord?(HistoryEntry(
             at: Date(), cleaned: text, raw: raw,
             destination: capturedDestination?.name,
             script: ScriptDetector.detect(text),
             appName: captured.name, bundleID: captured.bundleID,
-            durationSeconds: Double(recording.duration.components.seconds),
-            peakLevel: recording.peakLevel, guardRejected: rejected))
+            durationSeconds: duration, peakLevel: peak, guardRejected: rejected))
 
-        try? FileManager.default.removeItem(at: recording.url)
+        if !keepAudio { try? FileManager.default.removeItem(at: recordingURL) }
         if pasted {
             log.info("Inserted \(text.count) characters")
             state = .idle
@@ -363,7 +382,6 @@ public final class DictationController {
         guard let runner = transformRunner else {
             log.warn("Transform requested but no provider is configured")
             state = .error("Transforms need a cleanup provider")
-            scheduleErrorClear()
             return
         }
         state = .transforming
@@ -398,8 +416,50 @@ public final class DictationController {
             log.warn("Transform failed (\(error.localizedDescription)); clipboard unchanged")
             let message = (error as? TransformError)?.errorDescription ?? "Transform failed"
             state = .error(message)
-            scheduleErrorClear()
         }
+    }
+
+    /// A failed dictation, with the audio that outlived it.
+    private func recordFailure(_ error: any Error, recording: RecordingResult) {
+        onRecord?(HistoryEntry(
+            at: Date(), cleaned: "", raw: "", script: .latin,
+            appName: captured.name, bundleID: captured.bundleID,
+            durationSeconds: Double(recording.duration.components.seconds),
+            peakLevel: recording.peakLevel, guardRejected: false,
+            kind: .failed, failure: error.localizedDescription,
+            audioPath: recording.url.path))
+    }
+
+    /// Runs the pipeline again on audio that was kept when it failed the first
+    /// time. Everything downstream is the ordinary path.
+    public func retry(audioPath: String, appName: String?, bundleID: String?) async {
+        guard state == .idle else { return }
+        let url = URL(fileURLWithPath: audioPath)
+        guard FileManager.default.fileExists(atPath: audioPath) else {
+            log.warn("The audio for that dictation is gone")
+            state = .error("That recording is no longer on disk")
+            return
+        }
+        cancelled = false
+        captured = (appName, bundleID)
+        capturedIntent = .dictate
+        capturedVocabulary = vocabulary()
+        capturedDestination = destination(bundleID)
+        state = .transcribing
+        let raw: String
+        do {
+            raw = try await engine.transcribe(wav: url,
+                                              prompt: capturedVocabulary.whisperPrompt)
+        } catch {
+            log.error("Retry failed: \(error.localizedDescription)")
+            report(error, context: "retry")
+            return
+        }
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            state = .error("Still nothing heard in that recording")
+            return
+        }
+        await finishText(raw, recordingURL: url, duration: 0, peak: 0, keepAudio: true)
     }
 
     private func remember(_ text: String) {
@@ -411,21 +471,24 @@ public final class DictationController {
 
     // MARK: - Errors
 
+    /// An error holds until you do something about it.
+    ///
+    /// It used to clear itself after 2.5 seconds onto a click-through pill at the
+    /// bottom of a screen you were not looking at, which meant the only moment the
+    /// product loses your words was also the only moment it told you nothing. The
+    /// next key press, or Esc, is what dismisses it now.
     private func report(_ error: any Error, context: String) {
         log.error("\(context) failed: \(error.localizedDescription)")
         state = .error(error.localizedDescription)
-        scheduleErrorClear()
     }
 
-    /// Leaves an error visible on the pill briefly, then returns to idle.
+    /// Leaves a confirmation visible on the pill briefly, then returns to idle.
+    /// Only notices clear themselves; a failure waits for you.
     private func scheduleErrorClear() {
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.5))
             guard let self else { return }
-            switch self.state {
-            case .error, .notice: self.state = .idle
-            default: break
-            }
+            if case .notice = self.state { self.state = .idle }
         }
     }
 }

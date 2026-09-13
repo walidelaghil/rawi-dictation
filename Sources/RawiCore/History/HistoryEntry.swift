@@ -14,6 +14,9 @@ public enum EntryKind: String, Codable, Sendable {
     /// loses your words — and excluded from the spoken-word statistics, because
     /// nobody spoke it.
     case transform
+    /// A dictation that did not survive the pipeline. Kept because the alternative
+    /// is a user who cannot tell a lost paragraph from one they never spoke.
+    case failed
 }
 
 public struct HistoryEntry: Codable, Sendable, Equatable, Identifiable {
@@ -33,12 +36,18 @@ public struct HistoryEntry: Codable, Sendable, Equatable, Identifiable {
     public let guardRejected: Bool
 
     public let kind: EntryKind
+    /// Why it failed, in the words the user was shown.
+    public let failure: String?
+    /// The recording that was kept when transcription failed. The words still
+    /// exist; this is where.
+    public let audioPath: String?
 
     public init(id: UUID = UUID(), at: Date, cleaned: String, raw: String,
                 destination: String? = nil, script: Script,
                 appName: String?, bundleID: String?, durationSeconds: Double,
                 peakLevel: Double, guardRejected: Bool,
-                kind: EntryKind = .dictation) {
+                kind: EntryKind = .dictation,
+                failure: String? = nil, audioPath: String? = nil) {
         self.id = id
         self.at = at
         self.cleaned = cleaned
@@ -51,6 +60,8 @@ public struct HistoryEntry: Codable, Sendable, Equatable, Identifiable {
         self.peakLevel = peakLevel
         self.guardRejected = guardRejected
         self.kind = kind
+        self.failure = failure
+        self.audioPath = audioPath
     }
 
     /// `kind` is decoded tolerantly: every line written before transforms existed
@@ -69,6 +80,14 @@ public struct HistoryEntry: Codable, Sendable, Equatable, Identifiable {
         peakLevel = try c.decode(Double.self, forKey: .peakLevel)
         guardRejected = try c.decode(Bool.self, forKey: .guardRejected)
         kind = try c.decodeIfPresent(EntryKind.self, forKey: .kind) ?? .dictation
+        failure = try c.decodeIfPresent(String.self, forKey: .failure)
+        audioPath = try c.decodeIfPresent(String.self, forKey: .audioPath)
+    }
+
+    /// Whether the audio is still on disk to try again with.
+    public var isRetryable: Bool {
+        guard kind == .failed, let audioPath else { return false }
+        return FileManager.default.fileExists(atPath: audioPath)
     }
 
     public var wasCleaned: Bool { cleaned != raw }

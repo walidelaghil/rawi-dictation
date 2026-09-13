@@ -200,6 +200,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 """)
             return rule
         }
+        mainWindow.onRetry = { [weak self] entry in
+            guard let self, let path = entry.audioPath else { return }
+            Task { @MainActor in
+                self.log.info("Retrying a dictation that failed")
+                await self.controller.retry(audioPath: path, appName: entry.appName,
+                                            bundleID: entry.bundleID)
+            }
+        }
         wireTransforms(env: env)
         controller.onRecord = { [weak self] entry in
             guard let self else { return }

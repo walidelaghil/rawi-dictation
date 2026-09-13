@@ -42,8 +42,8 @@ public struct Insights: Sendable, Equatable {
         guard !entries.isEmpty else { return .empty }
 
         // Spoken-word statistics count dictations only. A transform's row holds
-        // clipboard text nobody said, and counting it would inflate both the word
-        // total and — because its duration is zero — words per minute.
+        // clipboard text nobody said; a failed row holds no text at all. Counting
+        // either would inflate the totals with words that were never delivered.
         let spoken = entries.filter { $0.kind == .dictation }
         let words = spoken.reduce(0) { $0 + wordCount($1.cleaned) }
         let seconds = spoken.reduce(0.0) { $0 + max(0, $1.durationSeconds) }

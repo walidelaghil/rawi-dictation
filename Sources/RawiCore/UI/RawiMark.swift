@@ -131,6 +131,8 @@ public enum RawiMark {
         case .transcribing, .cleaning, .inserting, .transforming:
             return image(size: size, tint: RawiColors.nsColor(.lapis, .dark), motion: motion)
         case .error:
+            // Held, not flashed: the icon is the app's health, and a failure the
+            // user has not seen yet is not health.
             return image(size: size, tint: RawiColors.nsColor(.clay, .dark))
         case .notice:
             return image(size: size, tint: RawiColors.nsColor(.verdigris, .dark),

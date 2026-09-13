@@ -15,6 +15,13 @@ public final class HistoryViewModel: ObservableObject {
     /// Bumped to ask the view to scroll the selection into sight.
     @Published public var scrollToken = 0
     @Published public var labels: HotkeyLabels = .placeholder
+    /// Set by the app: re-runs a failed dictation from the audio it kept.
+    public var onRetry: ((HistoryEntry) -> Void)?
+    /// Puts the raw transcript back on the clipboard when cleanup rewrote you.
+    public func useRaw(_ entry: HistoryEntry) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(entry.raw, forType: .string)
+    }
 
     private let store: HistoryStore
     public init(store: HistoryStore) {
@@ -293,37 +300,83 @@ public struct HistoryView: View {
                 .frame(width: 22, alignment: .leading)
                 .padding(.top, 2)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(entry.oneLine)
-                    .font(.system(size: TypeScale.body))
-                    .foregroundStyle(c(.bone))
-                    .environment(\.layoutDirection,
-                                 entry.script == .arabic ? .rightToLeft : .leftToRight)
-                    .fixedSize(horizontal: false, vertical: true)
-                if entry.guardRejected {
-                    Text("cleanup rejected, your words were kept")
-                        .font(.system(size: TypeScale.small).monospaced())
+            VStack(alignment: .leading, spacing: 4) {
+                if entry.kind == .failed {
+                    Text(entry.failure ?? "Something went wrong")
+                        .font(.system(size: TypeScale.body))
                         .foregroundStyle(c(.clay))
-                } else if entry.wasCleaned {
-                    Text("heard · \(entry.raw)")
-                        .font(.system(size: TypeScale.small).monospaced())
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(entry.isRetryable
+                         ? "Your recording was kept."
+                         : "The recording has since been cleaned up.")
+                        .font(.system(size: TypeScale.small))
                         .foregroundStyle(c(.faint))
-                        .lineLimit(2)
+                } else {
+                    Text(entry.oneLine)
+                        .font(.system(size: TypeScale.body))
+                        .foregroundStyle(c(.bone))
+                        .environment(\.layoutDirection,
+                                     entry.script == .arabic ? .rightToLeft : .leftToRight)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if entry.guardRejected {
+                        Text("cleanup rejected, your words were kept")
+                            .font(.system(size: TypeScale.small))
+                            .foregroundStyle(c(.clay))
+                    } else if entry.wasCleaned {
+                        Text("heard: \(entry.raw)")
+                            .font(.system(size: TypeScale.small))
+                            .foregroundStyle(c(.muted))
+                            .environment(\.layoutDirection,
+                                         entry.script == .arabic ? .rightToLeft : .leftToRight)
+                            .lineLimit(2)
+                    }
                 }
             }
 
             Spacer(minLength: 8)
 
             if let app = entry.appName {
-                Text(app).font(.system(size: TypeScale.small)).foregroundStyle(c(.faint)).padding(.top, 1)
+                Text(app).font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
+                    .padding(.top, 1)
             }
-            Button { model.copy(entry) } label: {
-                Text("Copy").font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
-                    .padding(.horizontal, 9).padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: Radius.control)
-                        .strokeBorder(c(.edge)))
+
+            if entry.kind == .failed {
+                if entry.isRetryable {
+                    Button { model.onRetry?(entry) } label: {
+                        Text("Retry").font(.system(size: TypeScale.small, weight: .medium))
+                            .foregroundStyle(c(.ink))
+                            .padding(.horizontal, 10).padding(.vertical, 3)
+                            .background(RoundedRectangle(cornerRadius: Radius.control)
+                                .fill(c(.saffron)))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Transcribe the recording again")
+                }
+            } else {
+                // The way back from a rewrite. The guard detects it and the row
+                // shows it; this is the control that acts on it.
+                if entry.wasCleaned {
+                    Button { model.useRaw(entry) } label: {
+                        Text("Use what I said")
+                            .font(.system(size: TypeScale.small))
+                            .foregroundStyle(c(.muted))
+                            .padding(.horizontal, 9).padding(.vertical, 3)
+                            .background(RoundedRectangle(cornerRadius: Radius.control)
+                                .strokeBorder(c(.edge)))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy the raw transcript instead of the cleaned text")
+                }
+                Button { model.copy(entry) } label: {
+                    Text("Copy").font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
+                        .padding(.horizontal, 9).padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: Radius.control)
+                            .strokeBorder(c(.edge)))
+                }
+                .buttonStyle(.plain)
+                .help("Copy this text")
             }
-            .buttonStyle(.plain)
+
             Button { model.delete(entry) } label: {
                 Image(systemName: "xmark").font(.system(size: TypeScale.micro))
                     .foregroundStyle(c(.faint))

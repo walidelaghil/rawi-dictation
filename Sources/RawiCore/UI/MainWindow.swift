@@ -69,6 +69,12 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         window?.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
     }
 
+    /// Re-runs a failed dictation from the audio it kept.
+    public var onRetry: ((HistoryEntry) -> Void)? {
+        get { model.onRetry }
+        set { model.onRetry = newValue }
+    }
+
     /// Every screen that prints a shortcut reads it from here.
     public func setLabels(_ labels: HotkeyLabels) {
         model.labels = labels
