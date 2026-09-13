@@ -25,6 +25,9 @@ import SwiftUI
                                                         arabic: "qwen2.5:3b")
             model.installedOllama = ["qwen2.5:1.5b", "qwen2.5:3b", "gemma3:4b"]
             model.ollamaReachable = true
+            // The moment this screen used to get wrong: a pressed combination that
+            // already belongs to another key.
+            _ = model.assign("option+space", to: .transform)
             RunLoop.current.run(until: Date().addingTimeInterval(0.15))
             view.layoutSubtreeIfNeeded()
             guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }

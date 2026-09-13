@@ -112,15 +112,20 @@ func scratchSettings(_ config: Config = .default) -> SettingsViewModel {
         #expect(events == [true])
     }
 
-    @Test("an armed capture gives up on its own") func timesOut() async throws {
-        // Leaving the hotkeys released is worse than an unset shortcut.
+    @Test("an armed capture gives up eventually, and says it did") func timesOut() async throws {
+        // A backstop so the hotkeys cannot stay released forever, but long enough
+        // that clicking the field and looking down at the keyboard is not a race.
+        // Eight seconds was: the capture ended, the keypress reached the hotkey it
+        // was meant to replace, and started a dictation.
         let model = scratchSettings()
         var events: [Bool] = []
         model.onCapture = { events.append($0) }
         model.beginCapture(.cancel)
         #expect(model.recording != nil)
-        try await Task.sleep(for: .seconds(8.4))
-        #expect(model.recording == nil)
+        try await Task.sleep(for: .seconds(2))
+        #expect(model.recording != nil)           // still waiting for you
+        #expect(!model.captureExpired)
+        model.endCapture()
         #expect(events == [true, false])
     }
 }
@@ -146,5 +151,77 @@ func scratchSettings(_ config: Config = .default) -> SettingsViewModel {
                                           onPress: { pressed = true })
         #expect(monitor.handle(id: monitor.ids.dictate, kind: UInt32(kEventHotKeyPressed)))
         #expect(pressed)
+    }
+}
+
+@MainActor
+@Suite("Assigning a shortcut") struct ShortcutAssignmentTests {
+    func model() -> SettingsViewModel {
+        let m = scratchSettings()
+        m.config.hotkey = "option+space"
+        m.config.transformHotkey = "ctrl+option+space"
+        m.config.cancelHotkey = "ctrl+option+escape"
+        return m
+    }
+
+    @Test("a free combination is simply taken") func free() {
+        let m = model()
+        #expect(m.assign("shift+cmd+d", to: .transform) == .saved)
+        #expect(m.config.transformHotkey == "shift+cmd+d")
+    }
+
+    @Test("a combination another key owns is refused, and says which") func refused() {
+        // Saving it and reporting the clash afterwards is what produced a config
+        // where dictation and transform were the same key and one silently lost.
+        let m = model()
+        #expect(m.assign("option+space", to: .transform) == .clashes(with: .dictate))
+        #expect(m.config.transformHotkey == "ctrl+option+space")   // unchanged
+        #expect(m.clashing.isEmpty)
+    }
+
+    @Test("pressing the key a shortcut already has is not a clash") func same() {
+        let m = model()
+        #expect(m.assign("option+space", to: .dictate) == .saved)
+    }
+
+    @Test("a swap gives each key the other's combination") func swap() {
+        let m = model()
+        #expect(m.assign("option+space", to: .transform) == .clashes(with: .dictate))
+        m.swapPending()
+        #expect(m.config.transformHotkey == "option+space")
+        #expect(m.config.hotkey == "ctrl+option+space")
+        #expect(m.clashing.isEmpty)
+    }
+
+    @Test("a swap the other way round works the same") func swapBack() {
+        let m = model()
+        #expect(m.assign("ctrl+option+space", to: .dictate) == .clashes(with: .transform))
+        m.swapPending()
+        #expect(m.config.hotkey == "ctrl+option+space")
+        #expect(m.config.transformHotkey == "option+space")
+    }
+
+    @Test("dismissing a clash changes nothing") func dismiss() {
+        let m = model()
+        _ = m.assign("option+space", to: .transform)
+        m.dismissPending()
+        #expect(m.pendingClash == nil)
+        #expect(m.config.transformHotkey == "ctrl+option+space")
+    }
+
+    @Test("a bare modifier is refused for a key Carbon has to bind") func needsModifier() {
+        let m = model()
+        #expect(m.assign("space", to: .transform) == .unusable)
+        #expect(m.config.transformHotkey == "ctrl+option+space")
+    }
+
+    @Test("a config that already clashes can be repaired from the screen") func repair() {
+        // The state this replaces: both keys on ⌥Space, and no way to fix
+        // transform because every attempt was rejected as a clash with itself.
+        let m = model()
+        m.config.transformHotkey = "option+space"
+        #expect(m.clashes(.transform))
+        #expect(m.assign("ctrl+shift+t", to: .transform) == .saved)
+        #expect(m.clashing.isEmpty)
     }
 }

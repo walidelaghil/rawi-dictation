@@ -21,6 +21,19 @@ public final class SettingsViewModel: ObservableObject {
 
     private var captureTimeout: Task<Void, Never>?
 
+    /// What happened when a pressed combination was offered to a key.
+    public enum Assignment: Equatable {
+        case saved
+        /// Another Rawi key already owns it. Nothing was written.
+        case clashes(with: Key)
+        /// Not bindable at all: a bare key with no modifier would take that key
+        /// away from every app on the Mac.
+        case unusable
+    }
+
+    /// A combination that was pressed but refused, waiting on a swap or a dismiss.
+    @Published public var pendingClash: (pressed: String, wanted: Key, owner: Key)?
+
     /// Where this screen reads and writes. Injectable, and injected by every test:
     /// a view model that defaults to the real config file will eventually be
     /// constructed by a test, and then the test edits the user's live settings. It
@@ -54,16 +67,24 @@ public final class SettingsViewModel: ObservableObject {
         self.url = url
     }
 
+    /// True when a capture gave up on its own rather than being used.
+    @Published public var captureExpired = false
+
     public func beginCapture(_ key: Key) {
         guard recording != key.rawValue else { return }
+        pendingClash = nil
+        captureExpired = false
         recording = key.rawValue
         onCapture?(true)
-        // A capture left armed would leave the hotkeys released, which is worse
-        // than a shortcut not set. It gives up on its own.
+        // A backstop, not a deadline. Eight seconds was long enough to click the
+        // field, look down at the keyboard, and have the capture quietly end
+        // before the keypress — which then reached the hotkey it was trying to
+        // replace and started a dictation.
         captureTimeout?.cancel()
         captureTimeout = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(8))
+            try? await Task.sleep(for: .seconds(45))
             guard !Task.isCancelled else { return }
+            self?.captureExpired = true
             self?.endCapture()
         }
     }
@@ -83,6 +104,39 @@ public final class SettingsViewModel: ObservableObject {
         case .cancel: config.cancelHotkey
         }
     }
+
+    /// Offers a pressed combination to a key.
+    ///
+    /// A clash is refused rather than saved. The screen used to write it and then
+    /// report the collision in red, which left a config where dictation and
+    /// transform were the same chord and one of them silently lost — including,
+    /// briefly, a transform key that could not be changed because every press
+    /// collided with itself.
+    @discardableResult
+    public func assign(_ raw: String, to key: Key) -> Assignment {
+        guard HotkeyConfig.isCarbonCompatible(raw) || HotkeyConfig.parse(raw) != nil,
+              case .keyCode? = HotkeyConfig.parse(raw) else { return .unusable }
+        if let owner = Key.allCases.first(where: {
+            $0 != key && HotkeyConfig.parse(value(for: $0)) == HotkeyConfig.parse(raw)
+        }) {
+            pendingClash = (raw, key, owner)
+            return .clashes(with: owner)
+        }
+        pendingClash = nil
+        set(raw, for: key)
+        return .saved
+    }
+
+    /// Takes the clash as an instruction: each key gets the other's combination.
+    public func swapPending() {
+        guard let clash = pendingClash else { return }
+        let previous = value(for: clash.wanted)
+        set(clash.pressed, for: clash.wanted)
+        set(previous, for: clash.owner)
+        pendingClash = nil
+    }
+
+    public func dismissPending() { pendingClash = nil }
 
     public func set(_ raw: String, for key: Key) {
         switch key {
@@ -169,6 +223,8 @@ public struct SettingsView: View {
         .background(c(.surface))
         .onAppear { model.reload() }
         .onDisappear { model.endCapture() }
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSWindow.didResignKeyNotification)) { _ in model.endCapture() }
     }
 
     // MARK: - Appearance
@@ -222,14 +278,52 @@ public struct SettingsView: View {
                                     onStart: { model.beginCapture(key) },
                                     onCapture: { raw in
                                         model.endCapture()
-                                        if let raw { model.set(raw, for: key) }
+                                        if let raw { model.assign(raw, to: key) }
                                     })
                         Spacer()
                     }
                 }
+                if let clash = model.pendingClash {
+                    // The collision is an offer, not a telling-off: you pressed a
+                    // key that means something else, and swapping is almost always
+                    // what you wanted.
+                    HStack(spacing: 10) {
+                        Text("\(HotkeyConfig.symbolic(clash.pressed)) is \(clash.owner.label).")
+                            .font(.system(size: TypeScale.body))
+                            .foregroundStyle(c(.bone))
+                        Button { model.swapPending() } label: {
+                            Text("Swap them")
+                                .font(.system(size: TypeScale.small, weight: .medium))
+                                .foregroundStyle(c(.ink))
+                                .padding(.horizontal, 11).padding(.vertical, 5)
+                                .background(RoundedRectangle(cornerRadius: Radius.control)
+                                    .fill(c(.saffron)))
+                        }.buttonStyle(.plain)
+                        Button { model.dismissPending() } label: {
+                            Text("Keep as it was")
+                                .font(.system(size: TypeScale.small))
+                                .foregroundStyle(c(.muted))
+                        }.buttonStyle(.plain)
+                        Spacer()
+                    }
+                    .padding(11)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: Radius.control)
+                        .fill(c(.saffron).opacity(0.12))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control)
+                            .strokeBorder(c(.saffron).opacity(0.45))))
+                }
+
+                if model.captureExpired {
+                    Text("Nothing was pressed, so the shortcut is unchanged. Click it again.")
+                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
+                }
+
+                // A config edited by hand can still hold a collision.
                 if !model.clashing.isEmpty {
                     Text("\(model.clashing.joined(separator: " and ")) are on the same "
-                       + "combination. Only one of them will work.")
+                       + "combination, so only one of them works. Click either and press "
+                       + "a different one.")
                         .font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                 }
             }
@@ -431,7 +525,7 @@ struct HotkeyField: View {
 
     var body: some View {
         Button(action: onStart) {
-            Text(recording ? "Press a combination…" : HotkeyConfig.symbolic(raw))
+            Text(recording ? "Press it now" : HotkeyConfig.symbolic(raw))
                 .font(.system(size: TypeScale.body, weight: .medium).monospaced())
                 .foregroundStyle(recording ? c(.saffron) : (clashes ? c(.clay) : c(.bone)))
                 .frame(minWidth: 104)
@@ -442,7 +536,7 @@ struct HotkeyField: View {
                                                 : (clashes ? c(.clay) : c(.edge)))))
         }
         .buttonStyle(.plain)
-        .help(recording ? "Press a combination, or Escape to keep the current one"
+        .help(recording ? "Press the combination you want, or Escape to keep this one"
                         : "Click, then press the combination you want")
         .onChange(of: recording) { _, isRecording in
             isRecording ? start() : stop()
