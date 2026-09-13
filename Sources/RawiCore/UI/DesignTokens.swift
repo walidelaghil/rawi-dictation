@@ -26,6 +26,8 @@ public struct RowGroup<Content: View>: View {
     let appearance: ResolvedAppearance
     var scrolls: Bool = true
     @ViewBuilder var content: Content
+    /// The height the rows actually need. Used as a ceiling, never as a demand.
+    @State private var contentHeight: CGFloat = .greatestFiniteMagnitude
 
     public init(appearance: ResolvedAppearance, scrolls: Bool = true,
                 @ViewBuilder content: () -> Content) {
@@ -39,12 +41,15 @@ public struct RowGroup<Content: View>: View {
     public var body: some View {
         Group {
             if scrolls {
-                // Sized to its rows, capped rather than stretched: a single row on
-                // 870 points of bordered emptiness reads as a rendering failure,
-                // not as breathing room.
+                // A ceiling, not a demand. `maxHeight` can only shrink the list
+                // below the space it was offered, so a one-row list is a one-row
+                // card and a long one still fills the window and scrolls inside.
+                //
+                // `fixedSize` here instead made the list insist on its content
+                // height, which pushed the screen's own header off the top of the
+                // window as soon as there were more rows than fitted.
                 ScrollView { rows }
-                    .frame(maxHeight: 640)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxHeight: contentHeight)
             } else {
                 rows
             }
@@ -56,6 +61,25 @@ public struct RowGroup<Content: View>: View {
     private var rows: some View {
         LazyVStack(alignment: .leading, spacing: 5) { content }
             .padding(.vertical, 8)
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(key: RowsHeightKey.self, value: geo.size.height)
+                }
+            )
+            .onPreferenceChange(RowsHeightKey.self) { height in
+                // A LazyVStack only measures what it has built, so the ceiling
+                // starts unbounded and comes down only when the rows genuinely
+                // fit. It must never report *less* than what is on screen.
+                if height > 0 { contentHeight = max(contentHeight == .greatestFiniteMagnitude
+                                                    ? 0 : contentHeight, height) }
+            }
+    }
+}
+
+private struct RowsHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

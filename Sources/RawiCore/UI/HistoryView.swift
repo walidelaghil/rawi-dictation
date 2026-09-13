@@ -119,7 +119,10 @@ public struct HistoryView: View {
         .background(c(.surface))
         .overlay(alignment: .topLeading) { if model.showInfo { infoOverlay } }
         // The list owns the arrows, Return and Delete once the search box does not.
+        // The ring is suppressed: a focus ring around an entire screen is not
+        // telling anyone anything, and it drew a blue line down the window.
         .focusable(!searchFocused)
+        .focusEffectDisabled()
         .onKeyPress(.upArrow) { model.moveSelection(by: -1); return .handled }
         .onKeyPress(.downArrow) { model.moveSelection(by: 1); return .handled }
         .onKeyPress(.return) { model.copySelected() ? .handled : .ignored }

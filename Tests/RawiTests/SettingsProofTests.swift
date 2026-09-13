@@ -150,6 +150,18 @@ import SwiftUI
         let out = URL(fileURLWithPath: ProcessInfo.processInfo.environment["RAWI_WINDOW"]!)
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
         let history = HistoryStore(url: dir.appendingPathComponent("w-\(UUID()).jsonl"))
+        // Enough rows to overflow the window, which is where the real one lives.
+        for index in 0..<22 {
+            let long = "I'm not sure. Mask added new questions to the form I couldn't find "
+                     + "in the Notion database. Add every input field I need to fill in "
+                     + "Airtable to the sync database."
+            history.append(HistoryEntry(
+                at: Date().addingTimeInterval(Double(-index) * 900),
+                cleaned: index % 3 == 0 ? "Thank you." : long,
+                raw: index % 2 == 0 ? "raw version of it" : (index % 3 == 0 ? "Thank you." : long),
+                script: .latin, appName: "Claude", bundleID: "claude",
+                durationSeconds: 8, peakLevel: 0.3, guardRejected: false))
+        }
         for (index, text) in [
             "I also advise them that they have two focus areas right now, one is to keep optimizing the model",
             "نرسل التقرير الى سلة قبل يوم الاثنين",
