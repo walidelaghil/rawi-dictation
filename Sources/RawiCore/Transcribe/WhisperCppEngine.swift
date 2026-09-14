@@ -165,14 +165,6 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
 
     /// Strips whisper's non-speech annotations and folds the multi-line output
     /// into the single paragraph a dictation user expects.
-    public static func cleanTranscript(_ raw: String) -> String {
-        var s = raw
-        for pattern in [#"\[[^\]]*\]"#, #"\([^)]*\)"#] {
-            s = s.replacingOccurrences(of: pattern, with: " ",
-                                       options: [.regularExpression])
-        }
-        return s.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    /// Kept as the name the tests and the CLI path already use.
+    public static func cleanTranscript(_ raw: String) -> String { Transcript.clean(raw) }
 }

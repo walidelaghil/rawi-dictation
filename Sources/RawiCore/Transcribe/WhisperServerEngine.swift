@@ -264,9 +264,11 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
     static func parse(_ data: Data) -> String {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let text = json["text"] as? String {
-            return text
+            // The server returns one segment per line. The command-line path has
+            // always joined them, and a sentence you spoke is one sentence.
+            return Transcript.clean(text)
         }
         // Some builds answer in plain text; a transcript is still a transcript.
-        return String(data: data, encoding: .utf8) ?? ""
+        return Transcript.clean(String(data: data, encoding: .utf8) ?? "")
     }
 }

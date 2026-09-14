@@ -21,7 +21,7 @@ public final class HistoryViewModel: ObservableObject {
     /// Puts the raw transcript back on the clipboard when cleanup rewrote you.
     public func useRaw(_ entry: HistoryEntry) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(entry.raw, forType: .string)
+        NSPasteboard.general.setString(Transcript.clean(entry.raw), forType: .string)
     }
 
     private let store: HistoryStore
@@ -93,7 +93,10 @@ public final class HistoryViewModel: ObservableObject {
 
     public func copy(_ entry: HistoryEntry) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(entry.cleaned, forType: .string)
+        // Cleaned on the way out, not on the way in: entries recorded before the
+        // server's segment breaks were joined still hold them, and pasting one
+        // should give you the sentence you spoke, not the four lines it arrived in.
+        NSPasteboard.general.setString(Transcript.clean(entry.cleaned), forType: .string)
     }
     public func delete(_ entry: HistoryEntry) { store.remove(entry.id); reload() }
     public func purge() { store.purge(); reload(); confirmingPurge = false }
