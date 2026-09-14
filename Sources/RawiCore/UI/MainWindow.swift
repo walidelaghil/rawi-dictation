@@ -202,11 +202,7 @@ struct MainWindowView: View {
                     .stroke(c(.saffron), style: RawiMarkShape.stroke(for: 20))
                     .frame(width: 20, height: 20)
                     .accessibilityHidden(true)
-                Text("Rawi").font(.system(size: TypeScale.heading, weight: .semibold))
-                    .foregroundStyle(c(.bone))
-                Text("راوي").font(.system(size: TypeScale.heading))
-                    .foregroundStyle(c(.faint))
-                    .environment(\.layoutDirection, .rightToLeft)
+                Wordmark(appearance: history.appearance)
             }
             .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 16)
 

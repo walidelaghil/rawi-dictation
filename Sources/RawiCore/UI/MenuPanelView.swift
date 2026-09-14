@@ -56,9 +56,16 @@ public struct MenuPanelView: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 10) {
                 stateMark
-                Text(PillLabel.text(for: model.state))
-                    .font(.system(size: TypeScale.heading, weight: .semibold))
-                    .foregroundStyle(c(.bone))
+                // At rest the panel says whose it is; the moment it has something
+                // to report it says that instead. A header that reads "Rawi" while
+                // it is transcribing would be branding over the truth.
+                if model.state == .idle {
+                    Wordmark(appearance: model.appearance)
+                } else {
+                    Text(PillLabel.text(for: model.state))
+                        .font(.system(size: TypeScale.heading, weight: .semibold))
+                        .foregroundStyle(c(.bone))
+                }
                 Spacer()
                 Text(isLive ? PillLabel.elapsed(model.elapsed) : model.labels.dictate)
                     .font(.system(size: TypeScale.small).monospacedDigit())

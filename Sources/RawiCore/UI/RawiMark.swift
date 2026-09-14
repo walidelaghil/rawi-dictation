@@ -227,3 +227,34 @@ public struct RawiMarkShape: Shape {
                     lineCap: .round, lineJoin: .round)
     }
 }
+
+/// The name, in both of its scripts.
+///
+/// One definition, because the panel and the main window are the same app and a
+/// wordmark that drifts between two screens stops reading as a name. Latin in the
+/// brand saffron, Arabic quieter beside it: راوي is the same word, not a second
+/// heading, and two shouts would be one shout too many.
+public struct Wordmark: View {
+    let appearance: ResolvedAppearance
+    var size: CGFloat = TypeScale.heading
+
+    public init(appearance: ResolvedAppearance, size: CGFloat = TypeScale.heading) {
+        self.appearance = appearance
+        self.size = size
+    }
+
+    public var body: some View {
+        HStack(spacing: 7) {
+            Text("Rawi")
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(RawiColors.color(.saffron, appearance))
+            Text("راوي")
+                .font(.system(size: size))
+                .foregroundStyle(RawiColors.color(.muted, appearance))
+                .environment(\.layoutDirection, .rightToLeft)
+        }
+        // Screen readers get the name once, not the same name twice in two scripts.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Rawi")
+    }
+}
