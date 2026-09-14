@@ -153,12 +153,15 @@ public struct OutputSettings: Codable, Sendable, Equatable {
     /// it when cleanup finishes. Removes the cleanup wait from the time you spend
     /// unable to paste.
     public var deliverRawFirst: Bool = true
+    /// Lay a spoken enumeration out as a numbered list.
+    public var formatSpokenLists: Bool = true
 
     public init(restorePreviousClipboard: Bool, restoreDelayMs: Int,
-                deliverRawFirst: Bool = true) {
+                deliverRawFirst: Bool = true, formatSpokenLists: Bool = true) {
         self.restorePreviousClipboard = restorePreviousClipboard
         self.restoreDelayMs = restoreDelayMs
         self.deliverRawFirst = deliverRawFirst
+        self.formatSpokenLists = formatSpokenLists
     }
 
     public init(from decoder: any Decoder) throws {

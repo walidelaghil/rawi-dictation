@@ -420,6 +420,11 @@ public final class DictationController {
         // for the model rewriting your words.
         text = SnippetExpander.expand(text, with: capturedVocabulary.snippets)
 
+        // "first…, second…, third…" is a list, and here it becomes one. Last,
+        // because it is the only stage that adds line breaks, and every stage
+        // before it reads the text as one line.
+        if config.output.formatSpokenLists { text = SpokenLists.format(text) }
+
         stageTimings.cleanup = cleanupStarted.duration(to: .now).milliseconds
         let insertStarted = ContinuousClock.now
         state = .inserting
