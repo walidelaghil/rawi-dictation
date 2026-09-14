@@ -3,7 +3,7 @@ import Testing
 
 @Suite("SnippetExpander") struct SnippetExpanderTests {
     let email = Snippet(trigger: "my email", expansion: "rawi@example.com")
-    let work = Snippet(trigger: "my work email", expansion: "waleed@salla.sa")
+    let work = Snippet(trigger: "my work email", expansion: "rawi@example.org")
     let sig = Snippet(trigger: "توقيعي", expansion: "مع التحية، وليد")
 
     @Test("expands a trigger mid-sentence") func expands() {
@@ -24,7 +24,7 @@ import Testing
     @Test("the longest trigger wins") func longest() {
         // "my work email" must beat "my email", or the specific one never fires.
         let out = SnippetExpander.expand("Use my work email today", with: [email, work])
-        #expect(out.contains("waleed@salla.sa"))
+        #expect(out.contains("rawi@example.org"))
         #expect(!out.contains("gmail"))
     }
 

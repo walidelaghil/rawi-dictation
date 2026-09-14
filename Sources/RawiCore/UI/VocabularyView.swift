@@ -150,15 +150,26 @@ public struct SnippetsScreen: View {
             } else {
                 RowGroup(appearance: model.appearance) {
                     ForEach(model.snippets) { snippet in
-                        HStack(spacing: 11) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("“\(snippet.trigger)”").font(.system(size: TypeScale.heading))
-                                    .foregroundStyle(c(.bone))
-                                Text("→ \(snippet.expansion)")
-                                    .font(.system(size: TypeScale.small).monospaced())
-                                    .foregroundStyle(c(.faint)).lineLimit(1)
-                            }
-                            Spacer()
+                      Row(appearance: model.appearance) {
+                        HStack(alignment: .top, spacing: 14) {
+                            // What you say, then what lands. The arrow sits between
+                            // them rather than in front of the expansion, where it
+                            // read as a stray bullet.
+                            Text(snippet.trigger)
+                                .font(.system(size: TypeScale.heading, weight: .medium))
+                                .foregroundStyle(c(.bone))
+                                .frame(minWidth: 130, alignment: .leading)
+                                .fixedSize()
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: TypeScale.micro))
+                                .foregroundStyle(c(.faint))
+                                .padding(.top, 3)
+                            Text(snippet.expansion)
+                                .font(.system(size: TypeScale.body))
+                                .foregroundStyle(c(.muted))
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 8)
                             Button { model.removeSnippet(snippet) } label: {
                                 Image(systemName: "xmark").font(.system(size: TypeScale.micro))
                                     .foregroundStyle(c(.faint))
@@ -167,6 +178,7 @@ public struct SnippetsScreen: View {
                             .help("Delete this snippet")
                             .accessibilityLabel("Delete the snippet for \(snippet.trigger)")
                         }
+                      }
                     }
                 }
             }

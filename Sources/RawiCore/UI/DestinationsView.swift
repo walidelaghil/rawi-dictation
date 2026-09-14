@@ -42,24 +42,31 @@ public struct DestinationsView: View {
                         Button { model.toggle(rule) } label: {
                             Image(systemName: rule.enabled ? "checkmark.square.fill" : "square")
                                 .font(.system(size: TypeScale.heading))
-                                .foregroundStyle(rule.enabled ? c(.saffron) : c(.faint))
+                                // Not saffron: that colour means "recording right
+                                // now" everywhere else, and a checked box is not
+                                // that.
+                                .foregroundStyle(rule.enabled ? c(.verdigris) : c(.faint))
                         }
                         .buttonStyle(.plain)
                         .help(rule.enabled ? "Disable" : "Enable")
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(rule.name).font(.system(size: TypeScale.heading))
-                                .foregroundStyle(rule.enabled ? c(.bone) : c(.faint))
-                            Text(rule.matchDescription)
-                                .font(.system(size: TypeScale.small).monospaced())
-                                .foregroundStyle(c(.faint))
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(spacing: 9) {
+                                Text(rule.name)
+                                    .font(.system(size: TypeScale.heading, weight: .medium))
+                                    .foregroundStyle(rule.enabled ? c(.bone) : c(.faint))
+                                Text(rule.matchDescription)
+                                    .font(.system(size: TypeScale.small).monospaced())
+                                    .foregroundStyle(c(.faint))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            Text(rule.instruction)
+                                .font(.system(size: TypeScale.body))
+                                .foregroundStyle(rule.enabled ? c(.muted) : c(.faint))
+                                .lineSpacing(2)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .frame(width: 210, alignment: .leading)
-
-                        Text(rule.instruction)
-                            .font(.system(size: TypeScale.small))
-                            .foregroundStyle(rule.enabled ? c(.muted) : c(.faint))
-                            .fixedSize(horizontal: false, vertical: true)
 
                         Spacer(minLength: 8)
 
@@ -85,7 +92,7 @@ public struct DestinationsView: View {
 
     /// What the three signals can and cannot do — measured, not assumed.
     private var capability: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             signal("Which app", "free", .verdigris,
                    "Read from the system. No permission at all.")
             signal("Which page", "one click", .saffron,
@@ -102,15 +109,18 @@ public struct DestinationsView: View {
                 Text(title).font(.system(size: TypeScale.body, weight: .semibold)).foregroundStyle(c(.bone))
                 Spacer()
                 Text(badge.uppercased())
-                    .font(.system(size: TypeScale.micro, weight: .medium).monospaced()).tracking(1.1)
+                    .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
+                    .tracking(1.1)
                     .foregroundStyle(c(token))
+                    .fixedSize()
             }
             Text(detail).font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(13)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(token).opacity(0.45))))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface)
+                .strokeBorder(c(token).opacity(0.45))))
     }
 }

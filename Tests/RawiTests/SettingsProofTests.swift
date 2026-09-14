@@ -116,7 +116,7 @@ import SwiftUI
         _ = vocabulary.syncLearned([
             LearnedTerm(term: "Salla", occurrences: 11, days: 6),
             LearnedTerm(term: "Kandji", occurrences: 6, days: 3),
-            LearnedTerm(term: "Elaghil", occurrences: 5, days: 4),
+            LearnedTerm(term: "Nadeem", occurrences: 5, days: 4),
         ])
         _ = vocabulary.addTerm("Wispr", note: "")
 
@@ -177,6 +177,10 @@ import SwiftUI
         }
         let vocabulary = VocabularyStore(url: dir.appendingPathComponent("wv-\(UUID()).json"))
         _ = vocabulary.syncLearned([LearnedTerm(term: "Salla", occurrences: 11, days: 6)])
+        _ = vocabulary.addSnippet(trigger: "my email", expansion: "rawi@example.com")
+        _ = vocabulary.addSnippet(trigger: "standup",
+                                  expansion: "Yesterday I finished the billing migration. "
+                                           + "Today I am on the retry path. No blockers.")
         let destinations = DestinationStore(url: dir.appendingPathComponent("wd-\(UUID()).json"))
         let transforms = TransformStore(url: dir.appendingPathComponent("wt-\(UUID()).json"))
 
@@ -186,11 +190,12 @@ import SwiftUI
         var images: [NSImage] = []
         let appearance: ResolvedAppearance =
             ProcessInfo.processInfo.environment["RAWI_LIGHT"] != nil ? .light : .dark
+        let shotWidth = Double(ProcessInfo.processInfo.environment["RAWI_WIDTH"] ?? "980") ?? 980
         window.setAppearance(appearance)
         for screen in Screen.allCases {
             window.show(screen)
             let view = window.testRootView()
-            let image = shot(view, width: 980, height: 620)
+            let image = shot(view, width: shotWidth, height: 620)
             images.append(image)
             // Each screen also lands on its own, so a review can look closely.
             if let dir = ProcessInfo.processInfo.environment["RAWI_WINDOW_DIR"] {
