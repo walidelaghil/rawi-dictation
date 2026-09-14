@@ -264,6 +264,16 @@ public final class DictationController {
             return
         }
 
+        // Nothing was captured, so there is nothing to transcribe and nothing to
+        // report. This used to travel all the way to the server and come back as a
+        // failure with a retry button for a file containing no audio.
+        guard AudioFile.hasAudio(at: recording.url) else {
+            log.info("That was too short to catch anything; nothing recorded")
+            try? FileManager.default.removeItem(at: recording.url)
+            state = .idle
+            return
+        }
+
         log.info(String(format: "Recorded %.1fs, peak level %.3f",
                         Double(recording.duration.components.seconds)
                             + Double(recording.duration.components.attoseconds) / 1e18,

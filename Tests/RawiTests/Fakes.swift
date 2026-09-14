@@ -8,14 +8,32 @@ final class FakeRecorder: AudioRecording, @unchecked Sendable {
     var startedURLs: [URL] = []
     var stubDuration: Duration = .seconds(3)
     var startError: (any Error)?
+    /// Overrides what `stop()` returns, for tests about the audio itself.
+    var stopResult: RecordingResult?
 
     func start(to url: URL) throws {
         if let startError { throw startError }
         isRecording = true
         startedURLs.append(url)
+        // Write something, because a recorder does. The controller now refuses to
+        // send an empty file down the pipeline, and a fake that leaves no file at
+        // all is not a recorder that captured nothing — it is one that never ran.
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        var wav = Data()
+        wav.append(contentsOf: Array("RIFF".utf8))
+        wav.append(contentsOf: [36, 0, 0, 0])
+        wav.append(contentsOf: Array("WAVEfmt ".utf8))
+        wav.append(contentsOf: [16, 0, 0, 0, 1, 0, 1, 0])
+        wav.append(contentsOf: [0x80, 0x3E, 0, 0, 0, 0x7D, 0, 0, 2, 0, 16, 0])
+        wav.append(contentsOf: Array("data".utf8))
+        wav.append(contentsOf: [0, 0, 0, 0])
+        wav.append(Data(repeating: 0, count: 32_000))          // a second of silence
+        try? wav.write(to: url)
     }
     func stop() throws -> RecordingResult {
         isRecording = false
+        if let stopResult { return stopResult }
         return RecordingResult(url: startedURLs.last!, duration: stubDuration)
     }
     func cancel() { isRecording = false; cancelled = true }

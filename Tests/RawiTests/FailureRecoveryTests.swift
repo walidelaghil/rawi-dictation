@@ -2,6 +2,22 @@ import Testing
 import Foundation
 @testable import RawiCore
 
+/// Waits for a condition instead of for a number of seconds.
+///
+/// A fixed sleep is a bet that the main actor is free, and under the full suite it
+/// is not: these tests passed alone and failed together, which is the signature of
+/// a timing assumption rather than a defect.
+@MainActor
+func waitUntil(_ timeout: Duration = .seconds(5),
+               _ condition: () -> Bool) async -> Bool {
+    let deadline = ContinuousClock.now + timeout
+    while ContinuousClock.now < deadline {
+        if condition() { return true }
+        try? await Task.sleep(for: .milliseconds(20))
+    }
+    return condition()
+}
+
 @MainActor
 @Suite("A failure you can see and undo") struct FailureRecoveryTests {
     func rig(fails: Bool, pastes: Bool = true)
@@ -50,6 +66,8 @@ import Foundation
         await ctl.handle(.endedHold)
         guard case .error = ctl.state else { Issue.record("not an error state"); return }
         ctl.noticeDuration = .milliseconds(80)
+        // A failure must still be there after everything a notice would have
+        // outlived several times over.
         try? await Task.sleep(for: .milliseconds(600))
         guard case .error = ctl.state else {
             Issue.record("the failure cleared itself")
@@ -81,8 +99,7 @@ import Foundation
         await ctl.handle(.beganHold)
         await ctl.handle(.endedHold)
         if case .notice = ctl.state {} else { Issue.record("expected a notice") }
-        try? await Task.sleep(for: .milliseconds(600))
-        #expect(ctl.state == .idle)
+        #expect(await waitUntil { ctl.state == .idle })
     }
 
     @Test("failures do not count as words you dictated") func excludedFromInsights() async {

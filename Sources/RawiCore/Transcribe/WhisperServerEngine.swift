@@ -172,6 +172,8 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
     // MARK: - Transcription
 
     public func transcribe(wav: URL, prompt: String) async throws -> String {
+        // An empty recording is not an error to report, it is nothing to do.
+        guard AudioFile.hasAudio(at: wav) else { throw TranscriptionError.emptyResult }
         guard await warm() else { throw TranscriptionError.binaryNotFound(binary) }
 
         // One encode, not two. The detector costs about a tenth of a second and
@@ -209,8 +211,11 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
                     }
                     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                     guard (200..<300).contains(status), let data else {
-                        continuation.resume(throwing: TranscriptionError.processFailed(
-                            exitCode: Int32(status), stderrTail: "whisper-server")); return
+                        let detail = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                        continuation.resume(throwing: TranscriptionError.serverRejected(
+                            status: status,
+                            detail: detail.trimmingCharacters(in: .whitespacesAndNewlines)))
+                        return
                     }
                     continuation.resume(returning: Self.parse(data))
                 }

@@ -16,6 +16,8 @@ public enum TranscriptionError: Error, LocalizedError, Equatable {
     case binaryNotFound(String)
     case modelNotFound(String)
     case processFailed(exitCode: Int32, stderrTail: String)
+    /// The resident transcription server refused the request.
+    case serverRejected(status: Int, detail: String)
     case cancelled
     case emptyResult
     case apiError(status: Int, message: String)
@@ -26,6 +28,11 @@ public enum TranscriptionError: Error, LocalizedError, Equatable {
         case .binaryNotFound(let b): "whisper-cli not found (looked for “\(b)”)"
         case .modelNotFound(let m): "Whisper model not found at \(m)"
         case .processFailed(let code, let tail): "whisper-cli exited \(code): \(tail)"
+        case .serverRejected(let status, let detail):
+            status == 400
+                // The one the user can act on, and the only 400 this server sends.
+                ? "The recording could not be read"
+                : "Transcription server error \(status): \(detail)"
         case .cancelled: "Cancelled"
         case .emptyResult: "Nothing was transcribed"
         case .apiError(let s, let m): "Transcription API error \(s): \(m)"
