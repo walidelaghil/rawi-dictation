@@ -49,7 +49,8 @@ import Foundation
         await ctl.handle(.beganHold)
         await ctl.handle(.endedHold)
         guard case .error = ctl.state else { Issue.record("not an error state"); return }
-        try? await Task.sleep(for: .seconds(3))
+        ctl.noticeDuration = .milliseconds(80)
+        try? await Task.sleep(for: .milliseconds(600))
         guard case .error = ctl.state else {
             Issue.record("the failure cleared itself")
             return
@@ -76,10 +77,11 @@ import Foundation
         // Only failure is sticky. A confirmation that would not go away is nagging.
         // The notice is the Accessibility-blocked path, which is this Mac.
         let (ctl, _, _) = rig(fails: false, pastes: false)
+        ctl.noticeDuration = .milliseconds(80)
         await ctl.handle(.beganHold)
         await ctl.handle(.endedHold)
         if case .notice = ctl.state {} else { Issue.record("expected a notice") }
-        try? await Task.sleep(for: .seconds(3))
+        try? await Task.sleep(for: .milliseconds(600))
         #expect(ctl.state == .idle)
     }
 

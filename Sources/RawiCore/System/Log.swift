@@ -72,3 +72,11 @@ public final class SilentLog: Logging, @unchecked Sendable {
     public init() {}
     public func log(_ level: LogLevel, _ message: String) {}
 }
+
+
+public extension Duration {
+    /// Whole milliseconds, for timing lines that people read.
+    var milliseconds: Int {
+        Int(components.seconds) * 1000 + Int(components.attoseconds / 1_000_000_000_000_000)
+    }
+}

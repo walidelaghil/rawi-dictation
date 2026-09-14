@@ -7,7 +7,7 @@ import Foundation
     typealias Rig = (ctl: DictationController, rec: FakeRecorder, eng: FakeEngine,
                      clean: FakeCleanup, ins: FakeInserter, log: FakeLog)
 
-    func make(cleanupFails: Bool = false, transcript: String = "raw transcript",
+    func make(cleanupFails: Bool = false, transcript: String = "um raw transcript",
               config: Config = .default) -> Rig {
         let r = FakeRecorder(), e = FakeEngine(), c = FakeCleanup()
         let i = FakeInserter(), l = FakeLog()
@@ -24,7 +24,7 @@ import Foundation
         #expect(g.rec.isRecording)
         #expect(g.ctl.state.recordingMode == .pushToTalk)
         await g.ctl.handle(.endedHold)
-        #expect(g.clean.received == ["raw transcript"])
+        #expect(g.clean.received == ["um raw transcript"])
         #expect(g.ins.inserted == ["Cleaned transcript."])
         #expect(g.ctl.state == .idle)
     }
@@ -85,7 +85,7 @@ import Foundation
         let g = make(cleanupFails: true)
         await g.ctl.handle(.beganHold)
         await g.ctl.handle(.endedHold)
-        #expect(g.ins.inserted == ["raw transcript"])
+        #expect(g.ins.inserted == ["um raw transcript"])
         #expect(g.log.lines.contains { $0.lowercased().contains("cleanup") })
         #expect(g.ctl.state == .idle)
     }
@@ -165,7 +165,10 @@ import Foundation
         await g.ctl.handle(.endedHold)
         #expect(seen.contains { $0.recordingMode == .pushToTalk })
         #expect(seen.contains(.transcribing))
-        #expect(seen.contains(.cleaning))
+        // No "Cleaning up…" on the fast path: the words are already pasteable by
+        // then, and saying otherwise made people wait for polish they had not asked
+        // to wait for.
+        #expect(seen.contains { if case .notice = $0 { return true } else { return false } })
         #expect(seen.last == .idle)
     }
 
@@ -236,6 +239,7 @@ import Foundation
 
     @Test("the detected language is exposed for the menu") func language() async {
         let r = FakeRecorder(), e = FakeEngine(), c = FakeCleanup()
+        e.result = .success("يعني يعني نرسل التقرير بكرة")
         c.result = .success("يعني تمام كذا")
         let ctl = DictationController(config: .default, recorder: r, engine: e,
                                       cleanup: c, inserter: FakeInserter(), log: FakeLog())
@@ -249,6 +253,8 @@ import Foundation
 @MainActor
 @Suite("History recording") struct HistoryRecordingTests {
     func rig(cleanup: String = "Cleaned text.", fails: Bool = false,
+             // Carries filler, so it still reaches the model. A transcript that is
+             // already clean skips it entirely now.
              raw: String = "um raw transcript")
         -> (DictationController, FakeInserter, Recorded) {
         let r = FakeRecorder(), e = FakeEngine(), c = FakeCleanup()

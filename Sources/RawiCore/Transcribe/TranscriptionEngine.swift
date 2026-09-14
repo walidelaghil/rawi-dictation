@@ -46,8 +46,9 @@ public enum TranscriptionEngineFactory {
             let detectModel = Config.expand(settings.detectModel)
             let detector = settings.language == "auto"
                 && FileManager.default.fileExists(atPath: detectModel)
-                ? LanguageDetector(binary: settings.binary, model: detectModel,
-                                   threads: max(2, settings.threads / 2))
+                ? LanguageDetector(serverBinary: settings.serverBinary, model: detectModel,
+                                   threads: max(2, settings.threads / 2),
+                                   port: settings.serverPort + 1, log: log ?? SilentLog())
                 : nil
             if settings.useServer {
                 return WhisperServerEngine(

@@ -1,5 +1,30 @@
 import Foundation
 
+/// Which server is on which port, and what it loaded.
+///
+/// Process-wide because the port is process-wide: two engines built a second apart
+/// during a config reload would otherwise both think they owned 8711.
+final class ServerRegistry: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [Int: (process: Process, model: String)] = [:]
+
+    func model(onPort port: Int) -> String? {
+        lock.withLock {
+            guard let entry = entries[port], entry.process.isRunning else { return nil }
+            return entry.model
+        }
+    }
+
+    func record(process: Process, model: String, port: Int) {
+        lock.withLock { entries[port] = (process, model) }
+    }
+
+    func stop(port: Int) {
+        let entry = lock.withLock { entries.removeValue(forKey: port) }
+        entry?.process.terminate()
+    }
+}
+
 /// Transcribes against a resident `whisper-server` instead of spawning the CLI.
 ///
 /// The CLI reloads the model on every dictation. Measured on this machine with
@@ -44,9 +69,33 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
     /// Starts the server if it is not already answering. Safe to call repeatedly;
     /// called at launch and again on the first key press, so the model is resident
     /// before anyone has finished speaking.
+    /// The server this engine started, and the model it was started with. A
+    ///健 health check alone was not enough: changing the model in Settings left the
+    /// old server answering on the port with the old model loaded, so the setting
+    /// appeared to do nothing.
+    private static let running = ServerRegistry()
+
+    /// Both residents: the model and, when auto is in play, the detector.
+    @discardableResult
+    public func warmAll() async -> Bool {
+        let modelReady = await warm()
+        let detectorReady = await detector?.warm() ?? true
+        return modelReady && detectorReady
+    }
+
     @discardableResult
     public func warm() async -> Bool {
-        if await isHealthy() { return true }
+        // Someone else's server, or ours with the wrong model, has to go first.
+        if Self.running.model(onPort: port) != model {
+            Self.running.stop(port: port)
+            // Including one left behind by a previous run of the app: a crash, or a
+            // kill that skipped the quit handler, leaves a server holding the port
+            // with the old model still loaded. It answers, so every health check
+            // says yes, and the model setting silently does nothing.
+            Self.killStrays(onPort: port)
+        } else if await isHealthy() {
+            return true
+        }
         lock.withLock {
             if let server, server.isRunning { return }
             let process = Process()
@@ -58,7 +107,11 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
             do {
                 try process.run()
                 self.server = process
-                log.info("Started whisper-server on port \(port); the model stays resident")
+                Self.running.record(process: process, model: model, port: port)
+                log.info("""
+                    Started whisper-server on port \(port) with \
+                    \((model as NSString).lastPathComponent); the model stays resident
+                    """)
             } catch {
                 log.warn("Could not start whisper-server (\(error.localizedDescription))")
             }
@@ -71,11 +124,42 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
         return false
     }
 
+    /// Kills any whisper-server holding our port that we did not start. Scoped
+    /// twice over: only the configured port, and only processes that are actually
+    /// whisper-server.
+    static func killStrays(onPort port: Int) {
+        let lsof = Process()
+        lsof.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        lsof.arguments = ["lsof", "-tnP", "-iTCP:\(port)", "-sTCP:LISTEN"]
+        let pipe = Pipe()
+        lsof.standardOutput = pipe
+        lsof.standardError = Pipe()
+        guard (try? lsof.run()) != nil else { return }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        lsof.waitUntilExit()
+        let pids = (String(data: data, encoding: .utf8) ?? "")
+            .split(whereSeparator: \.isNewline)
+            .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
+        for pid in pids where isWhisperServer(pid) { kill(pid, SIGTERM) }
+    }
+
+    private static func isWhisperServer(_ pid: Int32) -> Bool {
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        ps.arguments = ["ps", "-o", "command=", "-p", String(pid)]
+        let pipe = Pipe()
+        ps.standardOutput = pipe
+        ps.standardError = Pipe()
+        guard (try? ps.run()) != nil else { return false }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        ps.waitUntilExit()
+        return (String(data: data, encoding: .utf8) ?? "").contains("whisper-server")
+    }
+
     public func stop() {
-        lock.withLock {
-            server?.terminate()
-            server = nil
-        }
+        detector?.stop()
+        Self.running.stop(port: port)
+        lock.withLock { server = nil }
     }
 
     func isHealthy() async -> Bool {

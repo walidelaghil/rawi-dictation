@@ -10,42 +10,118 @@ import Foundation
 /// Detection does not need a good model, only a fast one. Measured on this
 /// machine: `base` detects in 72 ms of encode and agrees with turbo on English,
 /// on Arabic, and on a sentence that switches between them mid-clause.
-public struct LanguageDetector: Sendable {
+///
+/// It runs against its own resident server rather than the command line. The
+/// encode was never the cost: spawning a process, initialising Metal and loading
+/// the model came to 700-1500 ms under load, which was more than the
+/// transcription it was supposed to make cheaper. Resident, the same answer takes
+/// about 400 ms.
+public final class LanguageDetector: @unchecked Sendable {
     public struct Detection: Sendable, Equatable {
         public let language: String
         public let probability: Double
     }
 
-    private let binary: String
     private let model: String
     private let threads: Int
+    private let port: Int
+    private let serverBinary: String
+    private let log: any Logging
+    private let lock = NSLock()
+    private var server: Process?
 
     /// Below this, the detector is guessing and the caller should pay for a full
     /// `auto` pass rather than pin the wrong language. Being slow is recoverable;
     /// transcribing Arabic as English is not.
     public static let confidenceFloor = 0.6
 
-    public init(binary: String, model: String, threads: Int = 4) {
-        self.binary = binary
+    public init(serverBinary: String = "whisper-server", model: String,
+                threads: Int = 4, port: Int = 8712, log: any Logging = SilentLog()) {
+        self.serverBinary = serverBinary
         self.model = model
         self.threads = threads
+        self.port = port
+        self.log = log
+    }
+
+    /// Loads the detector's model so the first dictation does not pay for it.
+    @discardableResult
+    public func warm() async -> Bool {
+        if await isHealthy() { return true }
+        WhisperServerEngine.killStrays(onPort: port)
+        lock.withLock {
+            guard server == nil || server?.isRunning == false else { return }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [serverBinary, "-m", model, "--host", "127.0.0.1",
+                                 "--port", String(port), "-t", String(threads)]
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            if (try? process.run()) != nil {
+                server = process
+                log.info("Language detector resident on port \(port)")
+            }
+        }
+        for _ in 0..<20 {
+            if await isHealthy() { return true }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        return false
+    }
+
+    public func stop() {
+        lock.withLock {
+            server?.terminate()
+            server = nil
+        }
+    }
+
+    private func isHealthy() async -> Bool {
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/")!)
+        request.timeoutInterval = 0.5
+        guard let (_, response) = try? await URLSession.shared.data(for: request) else {
+            return false
+        }
+        return (response as? HTTPURLResponse) != nil
     }
 
     public func detect(wav: URL) async -> Detection? {
-        guard FileManager.default.fileExists(atPath: model) else { return nil }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [binary, "-m", model, "-f", wav.path,
-                             "-dl", "-t", String(threads)]
-        // The answer arrives on stderr, alongside the model's own chatter.
-        let pipe = Pipe()
-        process.standardError = pipe
-        process.standardOutput = Pipe()
+        guard FileManager.default.fileExists(atPath: model), await warm() else { return nil }
+        guard let body = try? multipart(wav: wav) else { return nil }
+        var request = URLRequest(
+            url: URL(string: "http://127.0.0.1:\(port)/inference")!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue("multipart/form-data; boundary=\(WhisperServerEngine.boundary)",
+                         forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let language = json["language"] as? String,
+              !language.isEmpty, language != "auto" else { return nil }
+        // whisper-server answers with the language's name; whisper accepts either
+        // the name or the code, so the name is passed straight through.
+        return Detection(language: language, probability: 1)
+    }
 
-        do { try process.run() } catch { return nil }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return Self.parse(String(data: data, encoding: .utf8) ?? "")
+    private func multipart(wav: URL) throws -> Data {
+        var body = Data()
+        let boundary = WhisperServerEngine.boundary
+        body.append(Data("--\(boundary)\r\n".utf8))
+        let disposition = "Content-Disposition: form-data; name=\"file\"; "
+                        + "filename=\"audio.wav\"\r\n"
+        body.append(Data(disposition.utf8))
+        body.append(Data("Content-Type: audio/wav\r\n\r\n".utf8))
+        body.append(try Data(contentsOf: wav))
+        body.append(Data("\r\n".utf8))
+        for (name, value) in [("language", "auto"), ("response_format", "verbose_json"),
+                              ("temperature", "0")] {
+            body.append(Data("--\(boundary)\r\n".utf8))
+            body.append(Data("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".utf8))
+            body.append(Data("\(value)\r\n".utf8))
+        }
+        body.append(Data("--\(boundary)--\r\n".utf8))
+        return body
     }
 
     /// `whisper_full_with_state: auto-detected language: ar (p = 0.995071)`

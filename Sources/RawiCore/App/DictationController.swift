@@ -1,6 +1,9 @@
 import AppKit
 import Foundation
 
+/// Thrown to skip the cleanup stage without treating it as a failure.
+enum CleanupSkipped: Error { case nothingToDo }
+
 public enum RecordingMode: Equatable, Sendable { case pushToTalk, handsFree }
 
 /// What the recording is for. Captured at key-press, because it is the key you
@@ -46,6 +49,9 @@ public final class DictationController {
 
     public var onStateChange: ((DictationState) -> Void)?
     public var isEnabled: Bool = true
+    /// How long a confirmation stays on the pill. Injectable so tests assert the
+    /// behaviour rather than racing a wall clock.
+    public var noticeDuration: Duration = .seconds(2.5)
 
     /// Exposed so the pill can show elapsed time and the timeout can be scheduled.
     public private(set) var recordingStartedAt: ContinuousClock.Instant?
@@ -273,6 +279,7 @@ public final class DictationController {
         // 1. Transcribe. On failure the WAV is retained and its path logged, so a
         //    dictation is never silently lost.
         let raw: String
+        let transcribeStarted = ContinuousClock.now
         do {
             raw = try await transcriber.transcribe(wav: recording.url,
                                               prompt: capturedVocabulary.whisperPrompt)
@@ -297,6 +304,7 @@ public final class DictationController {
             return
         }
         if cancelled { state = .idle; return }
+        let transcribeMs = transcribeStarted.duration(to: .now).milliseconds
 
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             log.info("Empty transcript; nothing to insert")
@@ -313,6 +321,7 @@ public final class DictationController {
             await runTransform(spoken: raw)
             return
         }
+        stageTimings = Timings(transcribe: transcribeMs)
 
         await finishText(raw, recordingURL: recording.url,
                          duration: Double(recording.duration.components.seconds),
@@ -324,6 +333,20 @@ public final class DictationController {
     /// Everything after the words exist: cleanup, the guard, the dictionary,
     /// snippets, insertion, and the record. Shared so a retry of kept audio takes
     /// exactly the path a fresh dictation takes.
+    /// How long each stage of the last dictation took. Logged every time, because
+    /// the only way anyone found the 1.4 seconds that `auto` was costing was by
+    /// measuring instead of assuming.
+    struct Timings {
+        var transcribe: Int = 0
+        var cleanup: Int = 0
+        var insert: Int = 0
+        /// When the words became pasteable, which is the number that decides
+        /// whether this feels fast. Everything after it is polish.
+        var ready: Int = 0
+        var total: Int { transcribe + cleanup + insert }
+    }
+    private var stageTimings = Timings()
+
     private func finishText(_ raw: String, recordingURL: URL, duration: Double,
                             peak: Double, keepAudio: Bool) async {
         // Your words go on the clipboard now, before cleanup runs. Cleanup takes
@@ -338,9 +361,26 @@ public final class DictationController {
         // because it is the one you had to turn on deliberately.
         let earlyPaste = config.output.deliverRawFirst
             && !config.output.restorePreviousClipboard
-        if earlyPaste { _ = inserter.stage(raw) }
-        state = .cleaning
+        if earlyPaste {
+            _ = inserter.stage(raw)
+            // And say so. Staging the text early while the pill still read
+            // "Cleaning up…" meant the words were ready and nothing told you; you
+            // waited for a stage whose only job is to remove filler.
+            stageTimings.ready = stageTimings.transcribe
+            log.info("Ready to paste after \(stageTimings.ready)ms")
+            state = .notice(PillLabel.landed(raw))
+        }
+        let cleanupStarted = ContinuousClock.now
+        // Nothing to clean, nothing to wait for. Whisper punctuates and capitalises
+        // on its own; asking a model to confirm that costs a second of GPU and
+        // slows the next dictation down too.
+        let worthCleaning = CleanupNeeded.check(raw)
+        if !worthCleaning {
+            log.info("Nothing to clean up; keeping the transcript as heard")
+        }
+        if !earlyPaste, worthCleaning { state = .cleaning }
         do {
+            guard worthCleaning else { throw CleanupSkipped.nothingToDo }
             let candidate = try await cleanup.clean(
                 raw, instruction: capturedDestination?.instruction ?? "")
             // The model is not trusted blindly: a local model will sometimes answer
@@ -353,6 +393,8 @@ public final class DictationController {
                 rejected = true
                 log.warn("Cleanup rejected (\(reason)); inserting raw transcript")
             }
+        } catch is CleanupSkipped {
+            // Expected, and not a failure: the transcript was already clean.
         } catch {
             if cancelled { state = .idle; return }
             log.warn("LLM cleanup failed (\(error.localizedDescription)); inserting raw transcript")
@@ -368,6 +410,8 @@ public final class DictationController {
         // for the model rewriting your words.
         text = SnippetExpander.expand(text, with: capturedVocabulary.snippets)
 
+        stageTimings.cleanup = cleanupStarted.duration(to: .now).milliseconds
+        let insertStarted = ContinuousClock.now
         state = .inserting
         // If the raw text is still the thing on the clipboard, upgrade it. If you
         // have already pasted or copied something else, it is left alone.
@@ -386,6 +430,18 @@ public final class DictationController {
             appName: captured.name, bundleID: captured.bundleID,
             durationSeconds: duration, peakLevel: peak, guardRejected: rejected))
 
+        stageTimings.insert = insertStarted.duration(to: .now).milliseconds
+        if earlyPaste, case .notice = state {
+            // The clipboard was quietly upgraded underneath a message that is
+            // already correct. Leave it alone rather than flashing a second one.
+            scheduleErrorClear()
+        }
+        log.info("""
+            Timing: transcribe \(stageTimings.transcribe)ms, \
+            cleanup \(stageTimings.cleanup)ms, deliver \(stageTimings.insert)ms, \
+            pasteable after \(stageTimings.ready > 0 ? stageTimings.ready : stageTimings.total)ms, \
+            total \(stageTimings.total)ms for \(text.split(separator: " ").count) words
+            """)
         if !keepAudio { try? FileManager.default.removeItem(at: recordingURL) }
         if pasted {
             log.info("Inserted \(text.count) characters")
@@ -474,6 +530,7 @@ public final class DictationController {
         capturedDestination = destination(bundleID)
         state = .transcribing
         let raw: String
+        let started = ContinuousClock.now
         do {
             raw = try await transcriber.transcribe(wav: url,
                                               prompt: capturedVocabulary.whisperPrompt)
@@ -486,6 +543,7 @@ public final class DictationController {
             state = .error("Still nothing heard in that recording")
             return
         }
+        stageTimings = Timings(transcribe: started.duration(to: .now).milliseconds)
         await finishText(raw, recordingURL: url, duration: 0, peak: 0, keepAudio: true)
     }
 
@@ -512,8 +570,9 @@ public final class DictationController {
     /// Leaves a confirmation visible on the pill briefly, then returns to idle.
     /// Only notices clear themselves; a failure waits for you.
     private func scheduleErrorClear() {
+        let duration = noticeDuration
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2.5))
+            try? await Task.sleep(for: duration)
             guard let self else { return }
             if case .notice = self.state { self.state = .idle }
         }

@@ -97,7 +97,7 @@ import Testing
         -> (DictationController, FakeInserter) {
         let r = FakeRecorder(), e = FakeEngine(), c = FakeCleanup()
         let i = FakeInserter()
-        e.result = .success("raw transcript here")
+        e.result = .success("um raw transcript here")
         c.result = .success(cleanupReturns)
         let ctl = DictationController(config: .default, recorder: r, engine: e,
                                       cleanup: c, inserter: i, log: FakeLog())
@@ -127,7 +127,7 @@ import Testing
     @Test("correction runs before snippet expansion, not after") func order() async {
         let r = FakeRecorder(), e = FakeEngine(), c = FakeCleanup()
         let i = FakeInserter()
-        e.result = .success("raw")
+        e.result = .success("um raw")
         c.result = .success("ping Kanji now")
         let ctl = DictationController(config: .default, recorder: r, engine: e,
                                       cleanup: c, inserter: i, log: FakeLog())

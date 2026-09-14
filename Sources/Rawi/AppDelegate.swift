@@ -364,7 +364,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func warmEngine(_ engine: any TranscriptionEngine) {
         guard let resident = engine as? WhisperServerEngine else { return }
         Task.detached(priority: .utility) {
-            let ready = await resident.warm()
+            let ready = await resident.warmAll()
             await MainActor.run {
                 self.log.info(ready
                     ? "Transcription model is resident and warm"
@@ -410,6 +410,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .window: self.mainWindow.show()
                 case .menu: self.menuBar.togglePanel()
                 case .undo: _ = self.controller.undoTransform()
+                case .benchmark:
+                    let path = ProcessInfo.processInfo.environment["RAWI_BENCH_WAV"]
+                        ?? Config.recordingsDirectory
+                            .appendingPathComponent("benchmark.wav").path
+                    await self.controller.retry(audioPath: path, appName: "Benchmark",
+                                                bundleID: "benchmark")
                 }
             }
         }
@@ -717,9 +723,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let transformsChanged = reloaded.cleanup != config.cleanup
         config = reloaded
         let env = DotEnv.load(from: Config.envFile)
-        controller.reconfigure(config: config,
-                               engine: makeEngine(env: env),
+        // The resident server holds whatever model it was started with, so a model
+        // change in Settings has to take it down. Leaving it up was why switching
+        // to a faster model changed nothing at all.
+        (controller.engine as? WhisperServerEngine)?.stop()
+        let engine = makeEngine(env: env)
+        controller.reconfigure(config: config, engine: engine,
                                cleanup: makeCleanup(env: env))
+        warmEngine(engine)
         tapPattern = TapPattern(doubleTapWindow: .milliseconds(config.doubleTapWindowMs),
                                 minHold: .milliseconds(config.minHoldMs))
         if hotkeyChanged { startMonitoring() }

@@ -3,6 +3,13 @@ import Foundation
 @testable import RawiCore
 
 @Suite("Language detection") struct LanguageDetectorTests {
+    @Test("the floor is what stops a guess becoming a wrong transcription") func floorValue() {
+        // Below it the caller pays for a full auto pass instead. Slow is
+        // recoverable; Arabic transcribed as English is not.
+        #expect(LanguageDetector.confidenceFloor > 0.5)
+        #expect(LanguageDetector.confidenceFloor < 0.9)
+    }
+
     @Test("reads the language and how sure it is") func parse() {
         let line = "whisper_full_with_state: auto-detected language: ar (p = 0.995071)"
         let d = LanguageDetector.parse(line)

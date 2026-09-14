@@ -22,7 +22,7 @@ final class FakeRecorder: AudioRecording, @unchecked Sendable {
 }
 
 final class FakeEngine: TranscriptionEngine, @unchecked Sendable {
-    var result: Result<String, any Error> = .success("raw transcript")
+    var result: Result<String, any Error> = .success("um raw transcript")
     var cancelCount = 0
     var callCount = 0
     var lastPrompt: String = ""
