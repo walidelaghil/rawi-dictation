@@ -9,22 +9,38 @@ public struct LearnedTerm: Sendable, Equatable, Identifiable {
     /// repetition inside one sitting is one story told once.
     public let days: Int
 
+    /// How many ways whisper spelled it. Two or more is the reason it is here.
+    public let spellings: Int
+
     public var note: String {
-        "heard \(occurrences) times on \(days) day\(days == 1 ? "" : "s")"
+        "heard \(occurrences) times on \(days) day\(days == 1 ? "" : "s"), "
+        + "\(spellings) spellings"
+    }
+
+    public init(term: String, occurrences: Int, days: Int, spellings: Int = 2) {
+        self.term = term
+        self.occurrences = occurrences
+        self.days = days
+        self.spellings = spellings
     }
 }
 
 /// Builds the dictionary from what you actually say, without asking.
 ///
-/// The earlier design asked you to confirm each term. That is maintenance work
-/// handed back to the user for a job the app can do itself — so it now promotes
-/// terms on evidence and shows you what it learned, rather than a queue of
-/// decisions to make.
+/// The rule is not "a word you say often". Everything you say often recurs, which
+/// is how "database" and "actually" ended up in a dictionary meant for names and
+/// jargon. A dictionary term exists to fix a word whisper gets *wrong*, and the
+/// evidence that it is getting one wrong is that it spells it differently from one
+/// dictation to the next: Salla, Sala, Sallah. A word it spells the same way every
+/// time is not a problem to solve, whatever it is.
 ///
-/// Every rule here errs toward learning nothing. A dictionary term is not a
-/// suggestion: `TermCorrector` rewrites near-misses into it, so a wrong term
-/// actively corrupts text that was already right. The bar is therefore high, and
-/// the refusals below matter more than the promotions.
+/// That test is also language-agnostic, which matters here: no word list was ever
+/// going to cover English and Arabic, and the spell checker on this machine
+/// already "knows" Kandji and Notion because it learned them from typing.
+///
+/// Every other rule errs toward learning nothing. `TermCorrector` rewrites
+/// near-misses into whatever is promoted, so a wrong term actively corrupts text
+/// that was already right.
 public enum TermLearner {
     /// How much evidence before a word becomes a term.
     public static let minimumOccurrences = 4
@@ -59,55 +75,105 @@ public enum TermLearner {
         let knownLower = Set(known.map { $0.term.lowercased() })
         let blockedLower = Set(blocked.map { $0.lowercased() })
 
-        var spellings: [String: [String: Int]] = [:]     // lowered -> spelling -> count
-        var days: [String: Set<String>] = [:]
+        var counts: [String: Int] = [:]                  // spelling -> times heard
+        var days: [String: Set<String>] = [:]            // spelling -> days heard on
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
 
         for entry in entries {
             let day = formatter.string(from: entry.at)
-            // The raw transcript: a word whisper keeps mangling is the one worth
-            // learning, and cleanup may already have hidden it.
-            for word in tokenize(entry.raw) {
-                let lower = word.lowercased()
-                guard isCandidate(word, lower: lower),
-                      !knownLower.contains(lower),
-                      !blockedLower.contains(lower) else { continue }
-                spellings[lower, default: [:]][word, default: 0] += 1
-                days[lower, default: []].insert(day)
+            // The raw transcript: the whole question is what whisper produced,
+            // before cleanup smoothed any of it over.
+            // Shape only at this stage. The near-common-word fence comes later,
+            // because a misspelling like "Sala" is exactly the evidence that
+            // whisper is getting "Salla" wrong — filtering it out here left one
+            // spelling behind and nothing to learn from.
+            for word in tokenize(entry.raw) where hasTermShape(word) {
+                counts[word, default: 0] += 1
+                days[word, default: []].insert(day)
             }
         }
 
-        return spellings.compactMap { lowered, variants -> LearnedTerm? in
-            let occurrences = variants.values.reduce(0, +)
-            let dayCount = days[lowered]?.count ?? 0
-            guard occurrences >= minimumOccurrences, dayCount >= minimumDays else { return nil }
-            // The spelling you used most is the spelling that gets enforced.
-            guard let spelling = variants.max(by: {
-                $0.value == $1.value ? $0.key < $1.key : $0.value < $1.value
-            })?.key else { return nil }
-            return LearnedTerm(term: spelling, occurrences: occurrences, days: dayCount)
+        var used = Set<String>()
+        var learned: [LearnedTerm] = []
+        // Strongest first, so a cluster forms around the spelling you use most.
+        for spelling in counts.keys.sorted(by: { (counts[$0] ?? 0) > (counts[$1] ?? 0) }) {
+            guard !used.contains(spelling) else { continue }
+            // Transitive: Sala is a variant of Salah, Salah of Sallah, so all three
+            // are one word heard three ways. Stopping at direct neighbours split
+            // them into pairs and each pair looked like it had a clear favourite.
+            var cluster: Set<String> = [spelling]
+            var frontier = [spelling]
+            while let current = frontier.popLast() {
+                for candidate in counts.keys
+                where !cluster.contains(candidate) && !used.contains(candidate)
+                    && areVariants(current, candidate) {
+                    cluster.insert(candidate)
+                    frontier.append(candidate)
+                }
+            }
+            used.formUnion(cluster)
+
+            let distinct = Set(cluster.map { $0.lowercased() })
+            // One spelling is one spelling, however often you said it.
+            guard distinct.count >= 2 else { continue }
+
+            let occurrences = cluster.reduce(0) { $0 + (counts[$1] ?? 0) }
+            let dayCount = Set(cluster.flatMap { days[$0] ?? [] }).count
+            guard occurrences >= minimumOccurrences, dayCount >= minimumDays else { continue }
+
+            // The spelling to enforce has to be one that is safe to enforce, so
+            // the confusable ones are taken out before the vote rather than after
+            // it. Ties break alphabetically, so the same history always learns the
+            // same term.
+            let enforceable = cluster
+                .filter { ScriptDetector.detect($0) != .latin
+                          || !isNearCommonWord($0.lowercased()) }
+                .sorted {
+                    (counts[$0] ?? 0) == (counts[$1] ?? 0)
+                        ? $0 < $1
+                        : (counts[$0] ?? 0) > (counts[$1] ?? 0)
+                }
+            guard let dominant = enforceable.first else { continue }
+            let dominantCount = counts[dominant] ?? 0
+            // Without a favourite we would be guessing which spelling you meant,
+            // and enforcing a guess is worse than enforcing nothing.
+            guard Double(dominantCount) / Double(occurrences) >= 0.4 else { continue }
+            guard !knownLower.contains(dominant.lowercased()),
+                  !blockedLower.contains(dominant.lowercased()) else { continue }
+
+            learned.append(LearnedTerm(term: dominant, occurrences: occurrences,
+                                       days: dayCount, spellings: distinct.count))
         }
-        .sorted {
-            $0.occurrences == $1.occurrences
-                ? $0.term.lowercased() < $1.term.lowercased()
-                : $0.occurrences > $1.occurrences
-        }
-        .prefix(limit)
-        .map { $0 }
+
+        return learned
+            .sorted {
+                $0.occurrences == $1.occurrences
+                    ? $0.term.lowercased() < $1.term.lowercased()
+                    : $0.occurrences > $1.occurrences
+            }
+            .prefix(limit)
+            .map { $0 }
     }
 
-    /// The shape of something that could be a term at all.
-    private static func isCandidate(_ word: String, lower: String) -> Bool {
+    /// Whether two spellings are close enough to be the same word heard twice.
+    /// Same first letter, because "report" and "support" are not variants of each
+    /// other however close the rest gets.
+    static func areVariants(_ a: String, _ b: String) -> Bool {
+        let x = a.lowercased(), y = b.lowercased()
+        if x == y { return true }
+        guard x.first == y.first else { return false }
+        let allowance = min(x.count, y.count) <= 5 ? 1 : 2
+        guard abs(x.count - y.count) <= allowance else { return false }
+        return CommonWords.editDistance(x, y, cap: allowance) <= allowance
+    }
+
+    /// The shape of something that could be a term at all: long enough to be a
+    /// word, no digits, not ordinary English.
+    static func hasTermShape(_ word: String) -> Bool {
         guard word.count >= 4 else { return false }
         guard word.rangeOfCharacter(from: .decimalDigits) == nil else { return false }
-        guard !stopwords.contains(lower) else { return false }
-        // Latin words get one more test the others do not need: English is where
-        // the corrector's edit-distance rules bite.
-        guard ScriptDetector.detect(word) != .latin || !isNearCommonWord(lower) else {
-            return false
-        }
-        return true
+        return !stopwords.contains(word.lowercased())
     }
 
     /// Refuses anything the corrector could confuse with ordinary language.

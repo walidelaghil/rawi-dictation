@@ -21,11 +21,14 @@ public final class SystemClipboard: ClipboardAccess {
 public enum TransformError: Error, LocalizedError, Equatable {
     case emptyClipboard
     case emptyResult
+    /// The rewrite came back in a language nobody asked for.
+    case wrongLanguage(String)
 
     public var errorDescription: String? {
         switch self {
         case .emptyClipboard: "Copy some text first"
         case .emptyResult: "The model returned nothing"
+        case .wrongLanguage(let reason): "Rewrite refused: \(reason)"
         }
     }
 }
@@ -103,6 +106,14 @@ public final class TransformRunner {
             wrapTransform(text: before, instruction: instruction))
         let after = reply.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !after.isEmpty else { throw TransformError.emptyResult }
+
+        // Asked for Arabic, a small model answered in Chinese. The clipboard keeps
+        // what it had rather than taking that, the same way CleanupGuard refuses a
+        // rewrite of your dictation.
+        if case .reject(let reason) = ScriptGuard.check(input: before, output: after,
+                                                        instruction: instruction) {
+            throw TransformError.wrongLanguage(reason)
+        }
 
         clipboard.text = after
         lastRun = (before: before, after: after)

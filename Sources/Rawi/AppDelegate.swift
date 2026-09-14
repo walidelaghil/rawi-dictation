@@ -341,8 +341,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.mainWindow.reload()
             _ = outcome
         }
-        log.info("Transforms via \(config.cleanup.provider.rawValue) "
-                 + "\(config.cleanup.models.arabic)")
+        let transformModel = config.cleanup.transformModel.isEmpty
+            ? config.cleanup.models.arabic
+            : config.cleanup.transformModel
+        log.info("Transforms via \(config.cleanup.provider.rawValue) \(transformModel)")
     }
 
     /// A misconfigured provider must not prevent the app from launching — it degrades

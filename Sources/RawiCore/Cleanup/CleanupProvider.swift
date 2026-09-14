@@ -70,7 +70,9 @@ public enum CleanupProviderFactory {
     /// cleanup is off: there is no model to ask.
     public static func makeTransformer(config: Config, env: DotEnv) throws
         -> (any CleanupProvider)? {
-        let model = config.cleanup.models.arabic
+        let model = config.cleanup.transformModel.isEmpty
+            ? config.cleanup.models.arabic
+            : config.cleanup.transformModel
         switch config.cleanup.provider {
         case .off:
             return nil

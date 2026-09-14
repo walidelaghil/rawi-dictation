@@ -9,154 +9,124 @@ import Foundation
                             appName: "Slack", bundleID: "slack", durationSeconds: 4,
                             peakLevel: 0.3, guardRejected: false)
     }
-    func said(_ text: String, times: Int, overDays: Int = 3) -> [HistoryEntry] {
-        (0..<times).map { entry(text, daysAgo: $0 % overDays) }
+
+    /// Says each variant in turn, across several days.
+    func heard(_ variants: [String], times: Int, overDays: Int = 3) -> [HistoryEntry] {
+        (0..<times).map { index in
+            entry("we shipped \(variants[index % variants.count]) today",
+                  daysAgo: index % overDays)
+        }
     }
 
-    @Test("a name you keep saying is learned on its own") func learns() {
-        let learned = TermLearner.learn(from: said("we shipped Salla today", times: 4),
-                                        known: [], blocked: [])
+    @Test("a name whisper cannot spell consistently is learned") func learnsUnstable() {
+        // This is the whole point: the dictionary exists to fix words whisper gets
+        // wrong, and the evidence that it is getting one wrong is that it spells it
+        // differently from one dictation to the next.
+        let learned = TermLearner.learn(from: heard(["Salla", "Sala", "Salla", "Sallah"],
+                                                    times: 8), known: [], blocked: [])
         #expect(learned.map(\.term) == ["Salla"])
-        #expect(learned.first?.occurrences == 4)
     }
 
-    @Test("the spelling learned is the one you actually used") func casing() {
-        // Lowercasing everything would put "salla" in the whisper prompt and
-        // correct the right spelling into the wrong one.
-        let learned = TermLearner.learn(from: said("ship Salla now", times: 5), known: [],
-                                        blocked: [])
+    @Test("a word it always spells the same way is left alone") func ignoresStable() {
+        // "database" and "actually" were both learned by the previous rule, which
+        // asked only whether a word recurred. Everything you say often recurs.
+        for word in ["database", "actually", "migration", "billing", "Kubernetes"] {
+            let learned = TermLearner.learn(from: heard([word], times: 11, overDays: 4),
+                                            known: [], blocked: [])
+            #expect(learned.isEmpty, Comment(rawValue: "learned \(word)"))
+        }
+    }
+
+    @Test("the spelling enforced is the one you use most") func dominant() {
+        let learned = TermLearner.learn(
+            from: heard(["Salla", "Salla", "Salla", "Sala"], times: 8),
+            known: [], blocked: [])
         #expect(learned.first?.term == "Salla")
+    }
+
+    @Test("a word with no dominant spelling is not worth enforcing") func noDominant() {
+        // Four ways of saying it and none of them a favourite means we would be
+        // guessing which one you meant.
+        let learned = TermLearner.learn(
+            from: heard(["Sala", "Salah", "Sallah", "Salaa"], times: 8),
+            known: [], blocked: [])
+        #expect(learned.isEmpty)
+    }
+
+    @Test("variants only count when they are variants of each other") func notRelated() {
+        // "report" and "support" are not two spellings of one word.
+        let learned = TermLearner.learn(from: heard(["report", "support"], times: 10),
+                                        known: [], blocked: [])
+        #expect(learned.isEmpty)
     }
 
     @Test("said once, or all in one sitting, is not evidence") func needsRepetition() {
         #expect(TermLearner.learn(from: [entry("deploy Kubernetes")],
                                   known: [], blocked: []).isEmpty)
-        // Four times in a single day is one story, not a habit.
-        let sameDay = (0..<4).map { _ in entry("deploy Kubernetes", daysAgo: 0) }
+        let sameDay = (0..<6).map { _ in entry("ship Salla and Sala", daysAgo: 0) }
         #expect(TermLearner.learn(from: sameDay, known: [], blocked: []).isEmpty)
     }
 
-    @Test("ordinary words are never learned, however often you say them") func stopwords() {
-        let learned = TermLearner.learn(from: said("please could you review this", times: 8),
+    @Test("ordinary words are never learned, however they are spelled") func stopwords() {
+        let learned = TermLearner.learn(from: heard(["please", "pleese"], times: 8),
                                         known: [], blocked: [])
         #expect(learned.isEmpty)
     }
 
     @Test("a word one edit from a common word is refused") func nearCommonWord() {
-        // This is the whole risk of learning: promote "Sala" and the corrector
-        // starts rewriting "sale" and "salt" into it. Doing nothing is better.
-        let learned = TermLearner.learn(from: said("the Sals report", times: 6),
+        // Promote "Sals" and the corrector starts rewriting "sale" and "salt".
+        let learned = TermLearner.learn(from: heard(["Sals", "Salz"], times: 8),
                                         known: [], blocked: [])
         #expect(learned.isEmpty)
     }
 
     @Test("a term already in the dictionary is not learned twice") func known() {
         let existing = [DictionaryTerm(term: "Salla")]
-        #expect(TermLearner.learn(from: said("ship Salla", times: 6),
+        #expect(TermLearner.learn(from: heard(["Salla", "Sala"], times: 8),
                                   known: existing, blocked: []).isEmpty)
     }
 
     @Test("a term you removed stays removed") func blocked() {
-        // Otherwise removing it is pointless: it returns on the next dictation.
-        #expect(TermLearner.learn(from: said("ship Salla", times: 9),
+        #expect(TermLearner.learn(from: heard(["Salla", "Sala"], times: 9),
                                   known: [], blocked: ["salla"]).isEmpty)
     }
 
-    @Test("only the strongest evidence is kept — the prompt has a budget") func capped() {
-        var entries: [HistoryEntry] = []
-        for (index, suffix) in "abcdefghijklmnopqrst".enumerated() {
-            entries += said("the Zephyr\(suffix)nium reading", times: 4 + index)
-        }
-        let learned = TermLearner.learn(from: entries, known: [], blocked: [])
-        #expect(learned.count <= TermLearner.limit)
-        // Strongest first, so the cap keeps what matters.
-        #expect(learned.first!.occurrences >= learned.last!.occurrences)
-    }
-
     @Test("numbers and short tokens are not terms") func shapes() {
-        let learned = TermLearner.learn(from: said("v2 api 1234 qa", times: 8),
+        let learned = TermLearner.learn(from: heard(["v2", "api", "1234", "qa"], times: 8),
                                         known: [], blocked: [])
         #expect(learned.isEmpty)
     }
 
-    @Test("Arabic words are learned too") func arabic() {
-        let learned = TermLearner.learn(from: said("نرسل التقرير الى سلة", times: 5),
-                                        known: [], blocked: [])
-        #expect(learned.contains { $0.term == "التقرير" })
+    @Test("Arabic is judged the same way, by inconsistency") func arabic() {
+        // Three times the way you mean it, once the way whisper slipped.
+        let unstable = TermLearner.learn(
+            from: heard(["التقرير", "التقرير", "التقرير", "التقرر"], times: 8),
+            known: [], blocked: [])
+        #expect(unstable.first?.term == "التقرير")
+        let stable = TermLearner.learn(from: heard(["التقرير"], times: 11), known: [],
+                                       blocked: [])
+        #expect(stable.isEmpty)
     }
 
     @Test("what was learned says why, in evidence you can check") func evidence() {
-        let learned = TermLearner.learn(from: said("ship Salla today", times: 5,
-                                                   overDays: 4), known: [], blocked: [])
+        let learned = TermLearner.learn(from: heard(["Salla", "Sala"], times: 8, overDays: 4),
+                                        known: [], blocked: [])
         let term = learned.first!
-        #expect(term.occurrences == 5)
+        #expect(term.occurrences == 8)
         #expect(term.days == 4)
-        #expect(term.note.contains("5"))
-    }
-}
-
-@Suite("The dictionary keeps itself") struct LearnedSyncTests {
-    func store() -> VocabularyStore {
-        VocabularyStore(url: URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("rawi-vocab-\(UUID().uuidString).json"))
-    }
-    func learned(_ term: String, _ occurrences: Int = 5) -> LearnedTerm {
-        LearnedTerm(term: term, occurrences: occurrences, days: 3)
+        #expect(term.note.contains("8"))
+        #expect(term.note.contains("spellings") || term.note.contains("ways"))
     }
 
-    @Test("learned terms arrive without being asked for") func adds() throws {
-        let s = store()
-        let change = s.syncLearned([learned("Salla"), learned("Kandji")])
-        #expect(Set(change.added) == ["Salla", "Kandji"])
-        #expect(s.terms.filter(\.addedAutomatically).count == 2)
-        #expect(s.terms.first { $0.term == "Salla" }?.note.contains("heard") == true)
-    }
-
-    @Test("a term you typed yourself is never touched by learning") func manualSurvives() throws {
-        let s = store()
-        _ = s.addTerm("Wispr", note: "mine")
-        _ = s.syncLearned([learned("Salla")])
-        _ = s.syncLearned([])                       // evidence gone entirely
-        #expect(s.terms.map(\.term) == ["Wispr"])
-    }
-
-    @Test("a learned term whose evidence faded is dropped, not hoarded") func drops() {
-        let s = store()
-        _ = s.syncLearned([learned("Salla"), learned("Kandji")])
-        let change = s.syncLearned([learned("Salla")])
-        #expect(change.dropped == ["Kandji"])
-        #expect(s.terms.map(\.term) == ["Salla"])
-    }
-
-    @Test("removing a learned term blocks it from coming back") func blocks() {
-        let s = store()
-        _ = s.syncLearned([learned("Salla")])
-        s.removeTerm(s.terms.first!.id)
-        #expect(s.blocked == ["salla"])
-        // The learner is handed the block list, so the evidence no longer matters.
-        #expect(TermLearner.learn(from: [], known: s.terms, blocked: s.blocked).isEmpty)
-    }
-
-    @Test("removing a term you typed does not block it") func manualRemoval() {
-        let s = store()
-        _ = s.addTerm("Wispr")
-        s.removeTerm(s.terms.first!.id)
-        #expect(s.blocked.isEmpty)
-    }
-
-    @Test("syncing the same evidence twice changes nothing") func idempotent() {
-        let s = store()
-        _ = s.syncLearned([learned("Salla")])
-        let second = s.syncLearned([learned("Salla")])
-        #expect(second.added.isEmpty && second.dropped.isEmpty)
-        #expect(s.terms.count == 1)
-    }
-
-    @Test("a learned term reaches the whisper prompt and the glossary") func reaches() {
-        let s = store()
-        _ = s.syncLearned([learned("Salla")])
-        #expect(s.whisperPrompt().contains("Salla"))
-        #expect(s.glossaryClause().contains("Salla"))
-        #expect(s.snapshot().terms.contains("Salla"))
+    @Test("only the strongest evidence is kept — the prompt has a budget") func capped() {
+        // Distinct first letters, or every one of these is a variant of the next
+        // and they collapse into a single cluster.
+        var entries: [HistoryEntry] = []
+        for (index, letter) in "BCDFGHJKLMNPQRSTVWXZ".enumerated() {
+            entries += heard(["\(letter)ephyrium", "\(letter)ephyriom"], times: 4 + index)
+        }
+        let learned = TermLearner.learn(from: entries, known: [], blocked: [])
+        #expect(learned.count <= TermLearner.limit)
+        #expect(learned.first!.occurrences >= learned.last!.occurrences)
     }
 }

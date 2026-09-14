@@ -98,16 +98,24 @@ public struct CleanupModels: Codable, Sendable, Equatable {
 public struct CleanupSettings: Codable, Sendable, Equatable {
     public var provider: CleanupKind
     public var models: CleanupModels
+    /// The model transforms use. Separate from cleanup because the job is
+    /// different: cleanup must not change your words, a transform must write whole
+    /// sentences in a language you asked for, and a model can be good at one and
+    /// hopeless at the other. Measured: qwen2.5:3b asked for Arabic answers in
+    /// Chinese. Empty means "use the multilingual cleanup model".
+    public var transformModel: String = ""
     public var prompt: String
 
-    public init(provider: CleanupKind, models: CleanupModels, prompt: String) {
+    public init(provider: CleanupKind, models: CleanupModels, prompt: String,
+                transformModel: String = "") {
+        self.transformModel = transformModel
         self.provider = provider
         self.models = models
         self.prompt = prompt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case provider, models, prompt
+        case provider, models, prompt, transformModel
         case legacyModel = "model"     // v1 wrote a single model; read it, never write it
     }
 
@@ -117,6 +125,7 @@ public struct CleanupSettings: Codable, Sendable, Equatable {
         provider = try c.decodeIfPresent(CleanupKind.self, forKey: .provider) ?? d.provider
         prompt = try c.decodeIfPresent(String.self, forKey: .prompt) ?? d.prompt
 
+        transformModel = try c.decodeIfPresent(String.self, forKey: .transformModel) ?? ""
         if let explicit = try c.decodeIfPresent(CleanupModels.self, forKey: .models) {
             models = explicit
         } else if let legacy = try c.decodeIfPresent(String.self, forKey: .legacyModel) {

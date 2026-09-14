@@ -433,7 +433,8 @@ public struct SettingsView: View {
                             .font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                     }
                     modelRow("English and other Latin", keyPath: \.latin)
-                    modelRow("Arabic, mixed speech, and every transform", keyPath: \.arabic)
+                    modelRow("Arabic and mixed speech", keyPath: \.arabic)
+                    transformModelRow
                 case .openai, .anthropic:
                     Text("Transcripts leave your machine with this provider. One model "
                        + "serves both scripts: \(model.config.cleanup.models.latin)")
@@ -449,6 +450,37 @@ public struct SettingsView: View {
         case .ollama: "Ollama, on this Mac"
         case .openai: "OpenAI API"
         case .anthropic: "Anthropic API"
+        }
+    }
+
+    /// Transforms write whole sentences, which is a different job from not
+    /// changing your words. A model can be good at one and hopeless at the other.
+    private var transformModelRow: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("TRANSFORMS")
+                .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
+                .tracking(1.1)
+                .foregroundStyle(c(.faint))
+            if model.installedOllama.isEmpty {
+                Text(model.config.cleanup.transformModel.isEmpty
+                     ? model.config.cleanup.models.arabic
+                     : model.config.cleanup.transformModel)
+                    .font(.system(size: TypeScale.small).monospaced())
+                    .foregroundStyle(c(.muted))
+            } else {
+                picker(model.installedOllama.map { ($0, $0) },
+                       selected: model.config.cleanup.transformModel.isEmpty
+                           ? model.config.cleanup.models.arabic
+                           : model.config.cleanup.transformModel) { picked in
+                    model.config.cleanup.transformModel = picked
+                    model.save()
+                }
+            }
+            Text("Asked for Arabic, some models answer in Chinese. A rewrite that comes "
+               + "back in the wrong language is refused and your clipboard is left alone.")
+                .font(.system(size: TypeScale.small))
+                .foregroundStyle(c(.faint))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
