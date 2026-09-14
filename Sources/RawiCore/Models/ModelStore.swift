@@ -35,6 +35,9 @@ public enum ModelStore {
     public static let known: [WhisperModel] = [
         WhisperModel(id: "large-v3-turbo-q5_0", filename: "ggml-large-v3-turbo-q5_0.bin",
                      displayName: "Large v3 Turbo", approxBytes: 574_041_195, multilingual: true),
+        WhisperModel(id: "small", filename: "ggml-small.bin",
+                     displayName: "Small (fast, all languages)",
+                     approxBytes: 488_000_000, multilingual: true),
         WhisperModel(id: "medium", filename: "ggml-medium.bin",
                      displayName: "Medium", approxBytes: 1_533_763_059, multilingual: true),
         WhisperModel(id: "small.en", filename: "ggml-small.en.bin",

@@ -35,7 +35,7 @@ public enum DictationState: Equatable, Sendable {
 public final class DictationController {
     private var config: Config
     private var recorder: any AudioRecording
-    private var engine: any TranscriptionEngine
+    private var transcriber: any TranscriptionEngine
     private var cleanup: any CleanupProvider
     private let inserter: any TextInserting
     private let log: any Logging
@@ -101,7 +101,7 @@ public final class DictationController {
                 log: any Logging) {
         self.config = config
         self.recorder = recorder
-        self.engine = engine
+        self.transcriber = engine
         self.cleanup = cleanup
         self.inserter = inserter
         self.log = log
@@ -113,11 +113,13 @@ public final class DictationController {
                             cleanup: any CleanupProvider) {
         guard state == .idle else { return }
         self.config = config
-        self.engine = engine
+        self.transcriber = engine
         self.cleanup = cleanup
     }
 
     public var currentConfig: Config { config }
+    /// Exposed so the app can warm a resident model without owning the graph twice.
+    public var engine: any TranscriptionEngine { transcriber }
 
     // MARK: - Input
 
@@ -161,7 +163,7 @@ public final class DictationController {
             discardRecording(reason: "cancelled")
         case .transcribing, .cleaning, .inserting, .transforming:
             cancelled = true
-            engine.cancel()
+            transcriber.cancel()
             cleanup.cancel()
             transformRunner?.cancel()
             log.info("Cancelled in-flight transcription")
@@ -272,7 +274,7 @@ public final class DictationController {
         //    dictation is never silently lost.
         let raw: String
         do {
-            raw = try await engine.transcribe(wav: recording.url,
+            raw = try await transcriber.transcribe(wav: recording.url,
                                               prompt: capturedVocabulary.whisperPrompt)
         } catch {
             if cancelled { state = .idle; return }
@@ -324,10 +326,19 @@ public final class DictationController {
     /// exactly the path a fresh dictation takes.
     private func finishText(_ raw: String, recordingURL: URL, duration: Double,
                             peak: Double, keepAudio: Bool) async {
-        // Cleanup. A cleanup failure must never lose the dictation, so the raw
-        // transcript is inserted instead.
+        // Your words go on the clipboard now, before cleanup runs. Cleanup takes
+        // about four tenths of a second and only ever removes filler; waiting for
+        // it meant waiting to be able to paste at all. If you paste in that window
+        // you get the raw transcript, which is what the guard would have fallen
+        // back to anyway.
         var text = raw
         var rejected = false
+        // The two settings contradict each other: one puts text on the clipboard
+        // early, the other promises to put your old clipboard back. Restoring wins,
+        // because it is the one you had to turn on deliberately.
+        let earlyPaste = config.output.deliverRawFirst
+            && !config.output.restorePreviousClipboard
+        if earlyPaste { _ = inserter.stage(raw) }
         state = .cleaning
         do {
             let candidate = try await cleanup.clean(
@@ -358,8 +369,12 @@ public final class DictationController {
         text = SnippetExpander.expand(text, with: capturedVocabulary.snippets)
 
         state = .inserting
-        let pasted = inserter.insert(text,
-                                     restoringClipboard: config.output.restorePreviousClipboard)
+        // If the raw text is still the thing on the clipboard, upgrade it. If you
+        // have already pasted or copied something else, it is left alone.
+        let pasted = earlyPaste && text != raw
+            ? inserter.replace(staged: raw, with: text)
+            : inserter.insert(text,
+                              restoringClipboard: config.output.restorePreviousClipboard)
         // Recorded whether or not the synthetic paste landed. On a Mac that cannot
         // grant Accessibility the clipboard *is* the delivery mechanism — pressing
         // ⌘V is the user completing the insertion, not the dictation failing.
@@ -460,7 +475,7 @@ public final class DictationController {
         state = .transcribing
         let raw: String
         do {
-            raw = try await engine.transcribe(wav: url,
+            raw = try await transcriber.transcribe(wav: url,
                                               prompt: capturedVocabulary.whisperPrompt)
         } catch {
             log.error("Retry failed: \(error.localizedDescription)")

@@ -13,10 +13,25 @@ public struct WhisperCppSettings: Codable, Sendable, Equatable {
     public var model: String
     public var language: String
     public var threads: Int
+    /// Keep the model resident in a `whisper-server` instead of reloading it on
+    /// every dictation. Worth 0.2 to 0.9 seconds each time, and removes the cold
+    /// first dictation entirely.
+    public var useServer: Bool
+    public var serverPort: Int
+    public var serverBinary: String
+    /// A small model used only to answer "which language was that", so the real
+    /// model can be told rather than having to work it out with a second encoder
+    /// pass. Empty disables it and `auto` goes back to costing double.
+    public var detectModel: String
 
-    public init(binary: String, model: String, language: String, threads: Int) {
+    public init(binary: String, model: String, language: String, threads: Int,
+                useServer: Bool = true, serverPort: Int = 8711,
+                serverBinary: String = "whisper-server",
+                detectModel: String = Config.defaultDetectModel) {
         self.binary = binary; self.model = model
         self.language = language; self.threads = threads
+        self.useServer = useServer; self.serverPort = serverPort
+        self.serverBinary = serverBinary; self.detectModel = detectModel
     }
 
     public init(from decoder: any Decoder) throws {
@@ -26,6 +41,10 @@ public struct WhisperCppSettings: Codable, Sendable, Equatable {
         model = try c.decodeIfPresent(String.self, forKey: .model) ?? d.model
         language = try c.decodeIfPresent(String.self, forKey: .language) ?? d.language
         threads = try c.decodeIfPresent(Int.self, forKey: .threads) ?? d.threads
+        useServer = try c.decodeIfPresent(Bool.self, forKey: .useServer) ?? d.useServer
+        serverPort = try c.decodeIfPresent(Int.self, forKey: .serverPort) ?? d.serverPort
+        serverBinary = try c.decodeIfPresent(String.self, forKey: .serverBinary) ?? d.serverBinary
+        detectModel = try c.decodeIfPresent(String.self, forKey: .detectModel) ?? d.detectModel
     }
 }
 
@@ -121,10 +140,16 @@ public struct CleanupSettings: Codable, Sendable, Equatable {
 public struct OutputSettings: Codable, Sendable, Equatable {
     public var restorePreviousClipboard: Bool
     public var restoreDelayMs: Int
+    /// Put the raw transcript on the clipboard as soon as it exists, then upgrade
+    /// it when cleanup finishes. Removes the cleanup wait from the time you spend
+    /// unable to paste.
+    public var deliverRawFirst: Bool = true
 
-    public init(restorePreviousClipboard: Bool, restoreDelayMs: Int) {
+    public init(restorePreviousClipboard: Bool, restoreDelayMs: Int,
+                deliverRawFirst: Bool = true) {
         self.restorePreviousClipboard = restorePreviousClipboard
         self.restoreDelayMs = restoreDelayMs
+        self.deliverRawFirst = deliverRawFirst
     }
 
     public init(from decoder: any Decoder) throws {
@@ -133,6 +158,8 @@ public struct OutputSettings: Codable, Sendable, Equatable {
         restorePreviousClipboard = try c.decodeIfPresent(
             Bool.self, forKey: .restorePreviousClipboard) ?? d.restorePreviousClipboard
         restoreDelayMs = try c.decodeIfPresent(Int.self, forKey: .restoreDelayMs) ?? d.restoreDelayMs
+        deliverRawFirst = try c.decodeIfPresent(Bool.self, forKey: .deliverRawFirst)
+            ?? d.deliverRawFirst
     }
 }
 
@@ -218,6 +245,12 @@ public struct Config: Codable, Sendable, Equatable {
 
     // MARK: - Defaults
 
+    /// The detector's model. Small on purpose: it answers one question and the
+    /// answer is a language code.
+    public static var defaultDetectModel: String {
+        Config.supportDirectory.appendingPathComponent("models/ggml-base.bin").path
+    }
+
     public static let defaultWhisperCpp = WhisperCppSettings(
         binary: "whisper-cli",
         // Multilingual, always. The v1 English-only model did not degrade on
@@ -238,7 +271,8 @@ public struct Config: Codable, Sendable, Equatable {
 
     public static let defaultOutput = OutputSettings(
         restorePreviousClipboard: false,
-        restoreDelayMs: 300)
+        restoreDelayMs: 300,
+        deliverRawFirst: true)
 
     public static let defaultHistory = HistorySettings(
         enabled: true,

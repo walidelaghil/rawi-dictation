@@ -49,11 +49,30 @@ final class FakeCleanup: CleanupProvider, @unchecked Sendable {
 
 final class FakeInserter: TextInserting, @unchecked Sendable {
     var inserted: [String] = []
+    var staged: [String] = []
+    var replaced: [(from: String, to: String)] = []
     var restoreFlags: [Bool] = []
     var succeed = true
+    /// Whether the staged text is still what is on the clipboard.
+    var stagedSurvives = true
+
     func insert(_ text: String, restoringClipboard: Bool) -> Bool {
         inserted.append(text)
         restoreFlags.append(restoringClipboard)
+        return succeed
+    }
+
+    @discardableResult
+    func stage(_ text: String) -> Bool {
+        staged.append(text)
+        return true
+    }
+
+    @discardableResult
+    func replace(staged from: String, with text: String) -> Bool {
+        guard stagedSurvives else { return false }
+        replaced.append((from, text))
+        inserted.append(text)
         return succeed
     }
 }

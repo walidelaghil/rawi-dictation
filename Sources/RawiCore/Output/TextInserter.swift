@@ -5,6 +5,17 @@ public protocol TextInserting: AnyObject, Sendable {
     /// Returns false when Accessibility is not granted. The text is still placed on
     /// the clipboard, so the caller can tell the user to paste it by hand.
     func insert(_ text: String, restoringClipboard: Bool) -> Bool
+
+    /// Puts text on the clipboard without pasting, so it is available to paste
+    /// while the rest of the pipeline is still running.
+    @discardableResult
+    func stage(_ text: String) -> Bool
+
+    /// Replaces text this pipeline staged, but only if it is still the thing on the
+    /// clipboard. Anything else means the user has moved on, and their clipboard is
+    /// theirs.
+    @discardableResult
+    func replace(staged: String, with text: String) -> Bool
 }
 
 /// Places text on the pasteboard and synthesizes Cmd-V into the focused app.
@@ -18,6 +29,23 @@ public final class TextInserter: TextInserting, @unchecked Sendable {
 
     public init(restoreDelay: Duration = .milliseconds(300)) {
         self.restoreDelay = restoreDelay
+    }
+
+    @discardableResult
+    public func stage(_ text: String) -> Bool {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        return true
+    }
+
+    @discardableResult
+    public func replace(staged: String, with text: String) -> Bool {
+        let pasteboard = NSPasteboard.general
+        guard pasteboard.string(forType: .string) == staged else { return false }
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        return AXIsProcessTrusted() ? postCommandV() : false
     }
 
     public func insert(_ text: String, restoringClipboard: Bool) -> Bool {

@@ -31,7 +31,11 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
     private var process: Process?
     private var wasCancelled = false
 
-    public init(binary: String, model: String, language: String, threads: Int) {
+    private let detector: LanguageDetector?
+
+    public init(binary: String, model: String, language: String, threads: Int,
+                detector: LanguageDetector? = nil) {
+        self.detector = detector
         self.binary = binary
         self.model = model
         self.language = language
@@ -39,6 +43,14 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
     }
 
     public func transcribe(wav: URL, prompt: String = "") async throws -> String {
+        // Ask the cheap model which language this is, so the expensive one is told
+        // rather than made to work it out with a whole extra encoder pass.
+        var language = self.language
+        if language == "auto", let detector,
+           let detection = await detector.detect(wav: wav),
+           detection.probability >= LanguageDetector.confidenceFloor {
+            language = detection.language
+        }
         guard let executable = Self.resolveBinary(binary) else {
             throw TranscriptionError.binaryNotFound(binary)
         }

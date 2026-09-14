@@ -36,13 +36,34 @@ public enum TranscriptionError: Error, LocalizedError, Equatable {
 
 /// Builds the engine named by config. API keys come from `.env` only.
 public enum TranscriptionEngineFactory {
-    public static func make(config: Config, env: DotEnv) throws -> any TranscriptionEngine {
+    public static func make(config: Config, env: DotEnv,
+                            log: (any Logging)? = nil) throws -> any TranscriptionEngine {
         switch config.engine {
         case .whispercpp:
-            return WhisperCppEngine(binary: config.whispercpp.binary,
-                                    model: Config.expand(config.whispercpp.model),
-                                    language: config.whispercpp.language,
-                                    threads: config.whispercpp.threads)
+            let settings = config.whispercpp
+            // The detector only earns its place when the language is not already
+            // known: `auto` is what costs a second encoder pass.
+            let detectModel = Config.expand(settings.detectModel)
+            let detector = settings.language == "auto"
+                && FileManager.default.fileExists(atPath: detectModel)
+                ? LanguageDetector(binary: settings.binary, model: detectModel,
+                                   threads: max(2, settings.threads / 2))
+                : nil
+            if settings.useServer {
+                return WhisperServerEngine(
+                    binary: settings.serverBinary,
+                    model: Config.expand(settings.model),
+                    threads: settings.threads,
+                    language: settings.language,
+                    port: settings.serverPort,
+                    detector: detector,
+                    log: log ?? SilentLog())
+            }
+            return WhisperCppEngine(binary: settings.binary,
+                                    model: Config.expand(settings.model),
+                                    language: settings.language,
+                                    threads: settings.threads,
+                                    detector: detector)
         case .groq:
             guard let key = env["GROQ_API_KEY"], !key.isEmpty else {
                 throw TranscriptionError.missingAPIKey("GROQ_API_KEY")

@@ -114,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        (controller?.engine as? WhisperServerEngine)?.stop()
         transformMonitor?.stop()
         monitor?.stop()
         watcher?.stop()
@@ -169,6 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             transformStore: transforms,
             appearance: config.appearance.resolved(systemIsDark: Appearance.systemIsDark))
         let engine = makeEngine(env: env)
+        warmEngine(engine)
         let cleanup = makeCleanup(env: env)
 
         if let routed = cleanup as? RoutedCleanup {
@@ -347,12 +349,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// to something that works and says so in the log and the menu bar.
     private func makeEngine(env: DotEnv) -> any TranscriptionEngine {
         do {
-            return try TranscriptionEngineFactory.make(config: config, env: env)
+            return try TranscriptionEngineFactory.make(config: config, env: env, log: log)
         } catch {
             log.error("Falling back to local whisper: \(error.localizedDescription)")
             var fallback = config
             fallback.engine = .whispercpp
-            return try! TranscriptionEngineFactory.make(config: fallback, env: env)
+            return try! TranscriptionEngineFactory.make(config: fallback, env: env, log: log)
+        }
+    }
+
+    /// Loads the model before anybody needs it. Costs nothing but memory, and it is
+    /// the difference between the first dictation of the day taking a second and
+    /// taking four.
+    private func warmEngine(_ engine: any TranscriptionEngine) {
+        guard let resident = engine as? WhisperServerEngine else { return }
+        Task.detached(priority: .utility) {
+            let ready = await resident.warm()
+            await MainActor.run {
+                self.log.info(ready
+                    ? "Transcription model is resident and warm"
+                    : "whisper-server did not answer; falling back to the command line")
+            }
+            if !ready {
+                await MainActor.run {
+                    var fallback = self.config
+                    fallback.whispercpp.useServer = false
+                    let env = DotEnv.load(from: Config.envFile)
+                    if let cli = try? TranscriptionEngineFactory.make(
+                        config: fallback, env: env, log: self.log) {
+                        self.controller.reconfigure(config: self.config, engine: cli,
+                                                    cleanup: self.makeCleanup(env: env))
+                    }
+                }
+            }
         }
     }
 
@@ -538,6 +567,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func feed(_ outcome: TapOutcome, intent: RecordingIntent = .dictate) {
+        // You are about to speak, so the model had better be loaded by the time you
+        // stop. Nothing waits on this.
+        if outcome == .beganHold || outcome == .beganDoubleTap { warmEngine(controller.engine) }
         if outcome == .pendingShortTap { schedulePendingTapTimer() }
         if outcome == .beganDoubleTap || outcome == .beganHold { pendingTapTimer?.invalidate() }
         guard outcome != .ignored else { return }

@@ -64,3 +64,11 @@ public final class FileLogger: Logging, @unchecked Sendable {
         try? FileManager.default.moveItem(at: url, to: rotated)
     }
 }
+
+
+/// For code paths constructed without a logger, such as a factory called from a
+/// test. Says nothing rather than forcing every caller to own a log.
+public final class SilentLog: Logging, @unchecked Sendable {
+    public init() {}
+    public func log(_ level: LogLevel, _ message: String) {}
+}
