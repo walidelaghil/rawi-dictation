@@ -11,6 +11,7 @@ public enum PillLabel {
         case .inserting: "Inserting…"
         case .transforming: "Rewriting…"
         case .notice(let message): message
+        case .confirming(let question): question
         case .error(let message): message
         }
     }
@@ -51,6 +52,7 @@ public enum PillLabel {
         case .transcribing, .cleaning, .inserting, .transforming: .lapis
         case .error: .clay
         case .idle, .notice: .verdigris
+        case .confirming: .saffron
         }
     }
 }
@@ -72,6 +74,8 @@ public final class PillModel: ObservableObject {
     @Published public var labels: HotkeyLabels = .placeholder
     /// What the × does. Not published: it never changes what is drawn.
     public var onCancel: (() -> Void)?
+    /// Says yes to a command waiting for confirmation.
+    public var onConfirm: (() -> Void)?
     public init() {}
 }
 
@@ -90,6 +94,11 @@ public struct PillView: View {
         case .idle, .notice: false
         default: true
         }
+    }
+
+    private var isAsking: Bool {
+        if case .confirming = model.state { return true }
+        return false
     }
     private var accent: Color { RawiColors.pill(PillLabel.token(for: model.state)) }
 
@@ -125,11 +134,34 @@ public struct PillView: View {
                     .transition(.opacity)
             }
 
+            // A question needs an answer within reach: the key is faster once you know
+            // it, and the button is there the first time, when you do not.
+            if isAsking {
+                HStack(spacing: 7) {
+                    Button { model.onConfirm?() } label: {
+                        HStack(spacing: 5) {
+                            Text("Run").font(.system(size: TypeScale.small, weight: .semibold))
+                            Text(model.labels.command)
+                                .font(.system(size: TypeScale.micro).monospaced())
+                                .opacity(0.7)
+                        }
+                        .foregroundStyle(RawiColors.pill(.ink))
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .background(Capsule().fill(RawiColors.pill(.saffron)))
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Run this command")
+                    cancelButton
+                }
+                .transition(.opacity)
+            }
+
             // The cursor has rested on the pill, so it can be clicked. The key is
             // shown beside the button rather than instead of it: the click is the
             // answer for the hand already on the mouse, the keycap teaches the
             // faster gesture for next time.
-            if model.armed, canCancel {
+            if model.armed, canCancel, !isAsking {
                 HStack(spacing: 7) {
                     Text(model.labels.cancel)
                         .font(.system(size: TypeScale.micro, weight: .medium).monospaced())

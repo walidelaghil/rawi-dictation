@@ -12,6 +12,10 @@ public enum RecordingIntent: Equatable, Sendable { case dictate, transform, comm
 
 public enum DictationState: Equatable, Sendable {
     case idle
+    /// A command is waiting for you to say yes. Unlike a notice, it does not clear
+    /// itself: something is about to happen, and it holds until you answer or it
+    /// times out.
+    case confirming(String)
     case recording(mode: RecordingMode, startedAt: ContinuousClock.Instant)
     case transcribing
     case cleaning
@@ -218,8 +222,8 @@ public final class DictationController {
             return
         }
         switch state {
-        case .error:
-            state = .idle                    // Esc acknowledges a failure
+        case .error, .confirming:
+            state = .idle                    // Esc acknowledges a failure or a question
             return
         case .idle, .notice:
             return
@@ -668,13 +672,38 @@ public final class DictationController {
         do {
             let message = try await commandRunner.heard(spoken)
             log.info("Command: \(message)")
-            state = .notice(message)
-            scheduleErrorClear()
+            if commandRunner.pending != nil {
+                state = .confirming(message)
+                scheduleConfirmExpiry()
+            } else {
+                state = .notice(message)
+                scheduleErrorClear()
+            }
         } catch {
             log.warn("Command: \(error.localizedDescription)")
             state = .error(error.localizedDescription)
         }
     }
+
+    /// A question nobody answers goes away on its own, and takes the command with
+    /// it: an action that fires minutes later is worse than one that never ran.
+    private func scheduleConfirmExpiry() {
+        let window = commandConfirmWindow
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(window))
+            guard let self, let runner = self.commandRunner, runner.pending != nil else { return }
+            _ = runner.cancel()
+            if case .confirming = self.state { self.state = .idle }
+            self.log.info("Command confirmation expired")
+        }
+    }
+
+    /// Injectable so the test does not wait twelve seconds.
+    public var commandConfirmWindow: TimeInterval = CommandRunner.confirmWindow
+
+    /// Says yes to what is waiting, from the key or from the pill.
+    @discardableResult
+    public func runPendingCommand() async -> Bool { await confirmCommand() }
 
     /// The command key again, while a confirmation is showing: yes.
     public func confirmCommand() async -> Bool {

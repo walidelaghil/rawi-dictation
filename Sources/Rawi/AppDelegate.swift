@@ -68,6 +68,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         ChatCleanup.timingSink = { [log] report in log.info(report) }
         // The pill's × is the cancel key, clicked.
+        pill.onConfirm = { [weak self] in
+            Task { @MainActor in await self?.controller.runPendingCommand() }
+        }
         pill.onCancel = { [weak self] in
             Task { @MainActor in await self?.controller.cancelRequested() }
         }

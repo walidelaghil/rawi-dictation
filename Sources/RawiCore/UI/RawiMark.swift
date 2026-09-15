@@ -134,7 +134,7 @@ public enum RawiMark {
             // Held, not flashed: the icon is the app's health, and a failure the
             // user has not seen yet is not health.
             return image(size: size, tint: RawiColors.nsColor(.clay, .dark))
-        case .notice:
+        case .confirming, .notice:
             return image(size: size, tint: RawiColors.nsColor(.verdigris, .dark),
                          motion: motion)
         case .idle:

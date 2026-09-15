@@ -164,3 +164,100 @@ import SwiftUI
         try rep.representation(using: .png, properties: [:])!.write(to: out)
     }
 }
+
+@MainActor
+@Suite("A command on the pill") struct CommandPillTests {
+    final class Fake: CommandPerforming, @unchecked Sendable {
+        var performed: [(CommandAction, String)] = []
+        func perform(_ action: CommandAction, text: String) async throws -> String {
+            performed.append((action, text))
+            return "Reminder added"
+        }
+    }
+
+    func rig(_ spoken: String, commands: [SpokenCommand]) -> (DictationController, Fake) {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("cmd-\(UUID().uuidString).json")
+        try? JSONEncoder().encode(commands).write(to: url)
+        let engine = FakeEngine()
+        engine.result = .success(spoken)
+        let controller = DictationController(config: .default, recorder: FakeRecorder(), engine: engine,
+                                             cleanup: FakeCleanup(), inserter: FakeInserter(), log: FakeLog())
+        let fake = Fake()
+        controller.commandRunner = CommandRunner(store: CommandStore(url: url), performer: fake)
+        return (controller, fake)
+    }
+
+    let reminder = [SpokenCommand(phrase: "remind me to", action: .reminder(list: ""))]
+
+    @Test("the question stays on the pill until it is answered") func asks() async {
+        let (controller, fake) = rig("remind me to send the deck", commands: reminder)
+        controller.noticeDuration = .milliseconds(30)
+        await controller.handle(.beganHold, intent: .command)
+        await controller.handle(.endedHold, intent: .command)
+        #expect(controller.state == .confirming("Add “send the deck” to your Reminders list?"))
+        // A notice would have cleared itself by now. A question does not.
+        try? await Task.sleep(for: .milliseconds(120))
+        #expect(controller.state == .confirming("Add “send the deck” to your Reminders list?"))
+        #expect(fake.performed.isEmpty)
+    }
+
+    @Test("answering it from the pill runs it") func runs() async {
+        let (controller, fake) = rig("remind me to send the deck", commands: reminder)
+        await controller.handle(.beganHold, intent: .command)
+        await controller.handle(.endedHold, intent: .command)
+        #expect(await controller.runPendingCommand())
+        #expect(fake.performed.map(\.1) == ["send the deck"])
+        #expect(controller.state == .notice("Reminder added"))
+    }
+
+    @Test("Esc drops it, and nothing runs") func escapes() async {
+        let (controller, fake) = rig("remind me to call the bank", commands: reminder)
+        await controller.handle(.beganHold, intent: .command)
+        await controller.handle(.endedHold, intent: .command)
+        await controller.cancelRequested()
+        #expect(controller.state == .idle)
+        #expect(!(await controller.runPendingCommand()))
+        #expect(fake.performed.isEmpty)
+    }
+
+    @Test("a question nobody answers expires instead of firing later") func expires() async {
+        let (controller, fake) = rig("remind me to water the plants", commands: reminder)
+        controller.commandConfirmWindow = 0.15
+        await controller.handle(.beganHold, intent: .command)
+        await controller.handle(.endedHold, intent: .command)
+        #expect(await waitUntil { controller.state == .idle })
+        #expect(!(await controller.runPendingCommand()))
+        #expect(fake.performed.isEmpty)
+    }
+
+    @Test("a command that changes nothing never asks") func straightThrough() async {
+        let (controller, fake) = rig("ask Claude why the build failed",
+                                     commands: [SpokenCommand(phrase: "ask Claude",
+                                                              action: .openLink("https://claude.ai/new?q={text}"),
+                                                              confirm: false)])
+        await controller.handle(.beganHold, intent: .command)
+        await controller.handle(.endedHold, intent: .command)
+        #expect(fake.performed.count == 1)
+        if case .confirming = controller.state { Issue.record("it asked when it should not have") }
+    }
+}
+
+@MainActor
+@Suite("Confirmation pill proof") struct ConfirmPillProofTests {
+    @Test("confirm pill proof", .enabled(if: ProcessInfo.processInfo.environment["RAWI_PROOF_PILL"] != nil))
+    func proof() throws {
+        let out = URL(fileURLWithPath: ProcessInfo.processInfo.environment["RAWI_PROOF_PILL"]!)
+        let model = PillModel()
+        model.state = .confirming("Add “send the deck” to your Reminders list?")
+        model.labels = HotkeyLabels(dictate: "⌥", transform: "⌥⌘Space", cancel: "⌥esc", command: "⌃⌥C")
+        model.armed = true
+        let host = NSHostingView(rootView: PillView(model: model).padding(20))
+        host.frame = NSRect(x: 0, y: 0, width: 620, height: 90)
+        host.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        host.layoutSubtreeIfNeeded()
+        let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+        host.cacheDisplay(in: host.bounds, to: rep)
+        try rep.representation(using: .png, properties: [:])!.write(to: out)
+    }
+}

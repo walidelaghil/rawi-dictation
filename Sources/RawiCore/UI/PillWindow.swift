@@ -41,6 +41,13 @@ public final class PillWindow {
         model.motion = motion
         model.pasteHint = pasteHint
         model.state = state
+        // A pill asking a question takes the mouse whether or not the cursor has
+        // rested on it: the buttons are the answer, and waiting for proximity to
+        // arm them would mean clicking into a pill that ignores clicks.
+        if case .confirming = state {
+            panel?.ignoresMouseEvents = false
+            model.armed = true
+        }
         model.level = level
         model.peak = peak
         model.elapsed = elapsed
@@ -48,6 +55,12 @@ public final class PillWindow {
     }
 
     public func setLabels(_ labels: HotkeyLabels) { model.labels = labels }
+
+    /// Says yes to a command waiting for confirmation.
+    public var onConfirm: (() -> Void)? {
+        get { model.onConfirm }
+        set { model.onConfirm = newValue }
+    }
 
     /// Called when the × is clicked.
     public var onCancel: (() -> Void)? {
@@ -103,6 +116,8 @@ public final class PillWindow {
 
     private func trackCursor() {
         guard let panel, panel.isVisible else { return }
+        // While it is asking, it stays clickable.
+        if case .confirming = model.state { return }
         let armed = proximity.update(cursor: NSEvent.mouseLocation,
                                      frame: panel.frame,
                                      now: .now)
