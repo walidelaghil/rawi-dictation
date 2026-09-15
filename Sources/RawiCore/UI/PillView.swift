@@ -68,6 +68,8 @@ public final class PillModel: ObservableObject {
     @Published public var pasteHint: Bool = false
     @Published public var motion: MarkMotion = .rest
     @Published public var labels: HotkeyLabels = .placeholder
+    /// What the × does. Not published: it never changes what is drawn.
+    public var onCancel: (() -> Void)?
     public init() {}
 }
 
@@ -76,6 +78,17 @@ public struct PillView: View {
     public init(model: PillModel) { self.model = model }
 
     private var isRecording: Bool { model.state.recordingMode != nil }
+    @State private var hoveringCancel = false
+
+    /// Whether there is anything for × to stop. A notice has already landed and
+    /// idle has nothing running; everything else — recording, the work after it,
+    /// an error waiting to be dismissed — is what the cancel key already handles.
+    private var canCancel: Bool {
+        switch model.state {
+        case .idle, .notice: false
+        default: true
+        }
+    }
     private var accent: Color { RawiColors.pill(PillLabel.token(for: model.state)) }
 
     public var body: some View {
@@ -110,11 +123,23 @@ public struct PillView: View {
                     .transition(.opacity)
             }
 
-            if model.armed {
-                Text("\(model.labels.cancel) to cancel")
-                    .font(.system(size: TypeScale.small))
-                    .foregroundStyle(RawiColors.pill(.faint))
-                    .transition(.opacity)
+            // The cursor has rested on the pill, so it can be clicked. The key is
+            // shown beside the button rather than instead of it: the click is the
+            // answer for the hand already on the mouse, the keycap teaches the
+            // faster gesture for next time.
+            if model.armed, canCancel {
+                HStack(spacing: 7) {
+                    Text(model.labels.cancel)
+                        .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
+                        .foregroundStyle(RawiColors.pill(.faint))
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: Radius.mark)
+                                .strokeBorder(RawiColors.pill(.edge), lineWidth: 1))
+                        .fixedSize()
+                    cancelButton
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
             }
         }
         .padding(.horizontal, 15)
@@ -128,6 +153,22 @@ public struct PillView: View {
         .scaleEffect(model.armed ? 1.03 : 1.0)
         .animation(.easeOut(duration: 0.16), value: model.armed)
         .animation(.easeOut(duration: 0.16), value: model.state)
+    }
+
+    private var cancelButton: some View {
+        Button { model.onCancel?() } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: TypeScale.micro, weight: .bold))
+                .foregroundStyle(RawiColors.pill(hoveringCancel ? .bone : .muted))
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(RawiColors.pill(hoveringCancel ? .clay : .raised)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hoveringCancel = $0 }
+        .animation(.easeOut(duration: 0.12), value: hoveringCancel)
+        .help(model.state.recordingMode != nil ? "Discard this recording" : "Cancel")
+        .accessibilityLabel(model.state.recordingMode != nil ? "Discard recording" : "Cancel")
     }
 
     /// The mark, all the way through. The spinner that used to sit here while the

@@ -8,6 +8,12 @@ private final class NonActivatingPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+/// Takes the first click. A panel that never becomes key would otherwise spend
+/// the click on "activating" and the × would need pressing twice.
+private final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 @MainActor
 public final class PillWindow {
     private let model = PillModel()
@@ -42,6 +48,12 @@ public final class PillWindow {
 
     public func setLabels(_ labels: HotkeyLabels) { model.labels = labels }
 
+    /// Called when the × is clicked.
+    public var onCancel: (() -> Void)? {
+        get { model.onCancel }
+        set { model.onCancel = newValue }
+    }
+
     public func hide() {
         stopCursorTracking()
         proximity.reset()
@@ -51,7 +63,7 @@ public final class PillWindow {
     }
 
     private func makePanel() -> NSPanel {
-        let hosting = NSHostingView(rootView: PillView(model: model))
+        let hosting = FirstClickHostingView(rootView: PillView(model: model))
         let panel = NonActivatingPanel(
             contentRect: NSRect(x: 0, y: 0, width: 340, height: 40),
             styleMask: [.borderless, .nonactivatingPanel],

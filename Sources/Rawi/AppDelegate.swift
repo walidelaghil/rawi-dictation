@@ -55,6 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        // The pill's × is the cancel key, clicked.
+        pill.onCancel = { [weak self] in
+            Task { @MainActor in await self?.controller.cancelRequested() }
+        }
         // Without this, an accessory app's own windows have no ⌘A, ⌘C or ⌘V:
         // AppKit resolves those through the main menu, which an LSUIElement app
         // does not get by default.
