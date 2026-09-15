@@ -16,6 +16,11 @@ public protocol TextInserting: AnyObject, Sendable {
     /// theirs.
     @discardableResult
     func replace(staged: String, with text: String) -> Bool
+
+    /// `replace`, without the paste: for when there is nowhere to paste into and
+    /// the clipboard is the delivery.
+    @discardableResult
+    func upgrade(staged: String, with text: String) -> Bool
 }
 
 /// Places text on the pasteboard and synthesizes Cmd-V into the focused app.
@@ -46,6 +51,15 @@ public final class TextInserter: TextInserting, @unchecked Sendable {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         return AXIsProcessTrusted() ? postCommandV() : false
+    }
+
+    @discardableResult
+    public func upgrade(staged: String, with text: String) -> Bool {
+        let pasteboard = NSPasteboard.general
+        guard pasteboard.string(forType: .string) == staged else { return false }
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        return true
     }
 
     public func insert(_ text: String, restoringClipboard: Bool) -> Bool {

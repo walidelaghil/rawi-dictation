@@ -61,6 +61,15 @@ public final class DictationController {
     public private(set) var recent: [RecentDictation] = []
     private let recentLimit = 5
 
+    /// True while the last dictation is sitting on the clipboard waiting for ⌘V:
+    /// there was no text field to put it in, or no permission to paste. The pill
+    /// shows the ⌘V hint from this, and only from this — a hint shown after the
+    /// text already landed teaches you to press a key that pastes it twice.
+    public private(set) var awaitingManualPaste = false
+
+    /// Decides whether there is a text field to paste into.
+    public var focusProbe: any FocusProbing = NoFocusProbe()
+
     /// The language whisper detected on the last transcript, for the menu.
     public private(set) var lastDetectedLanguage: String?
 
@@ -203,6 +212,10 @@ public final class DictationController {
             // Captured at key-press, not at insert: focus can move while you speak,
             // and the app you were looking at is the one that shaped the dictation.
             captured = frontmostApp()
+            awaitingManualPaste = false
+            // Chromium and Electron build their accessibility tree on request.
+            // Asking now gives it the whole sentence to finish.
+            focusProbe.prepare()
             capturedIntent = intent
             capturedVocabulary = vocabulary()
             capturedDestination = destination(captured.bundleID)
@@ -449,12 +462,29 @@ public final class DictationController {
         stageTimings.cleanup = cleanupStarted.duration(to: .now).milliseconds
         let insertStarted = ContinuousClock.now
         state = .inserting
-        // If the raw text is still the thing on the clipboard, upgrade it. If you
-        // have already pasted or copied something else, it is left alone.
-        let pasted = earlyPaste && text != raw
-            ? inserter.replace(staged: raw, with: text)
-            : inserter.insert(text,
-                              restoringClipboard: config.output.restorePreviousClipboard)
+        // Where the cursor is decides the delivery. A text field gets the paste;
+        // anywhere else gets the clipboard and a hint, because a synthetic ⌘V into
+        // a file list or a canvas does nothing at best and something else at worst.
+        let focus = focusProbe.probe()
+        log.info("Focus: \(focusProbe.lastSeen)")
+        let pasted: Bool
+        var onClipboard = true
+        if focus == .notEditable {
+            pasted = false
+            if earlyPaste {
+                // The raw text is already there; upgrade it if it is still yours.
+                if text != raw { onClipboard = inserter.upgrade(staged: raw, with: text) }
+            } else {
+                inserter.stage(text)
+            }
+        } else {
+            // If the raw text is still the thing on the clipboard, upgrade it. If
+            // you have already pasted or copied something else, it is left alone.
+            pasted = earlyPaste && text != raw
+                ? inserter.replace(staged: raw, with: text)
+                : inserter.insert(text,
+                                  restoringClipboard: config.output.restorePreviousClipboard)
+        }
         // Recorded whether or not the synthetic paste landed. On a Mac that cannot
         // grant Accessibility the clipboard *is* the delivery mechanism — pressing
         // ⌘V is the user completing the insertion, not the dictation failing.
@@ -482,11 +512,19 @@ public final class DictationController {
         if pasted {
             log.info("Inserted \(text.count) characters")
             state = .idle
+        } else if focus == .notEditable {
+            log.info("No text field has focus; left \(text.count) characters on the clipboard")
+            // Said plainly, the way the clipboard is: it was not typed anywhere,
+            // it is ready to paste wherever you are going next.
+            awaitingManualPaste = onClipboard
+            state = .notice(onClipboard ? "Copied" : PillLabel.landed(text))
+            scheduleErrorClear()
         } else {
             log.warn("""
                 Could not paste: Accessibility permission is not granted. \
                 The text is on the clipboard. Press Cmd-V to insert it.
                 """)
+            awaitingManualPaste = true
             // Ends on your words rather than on an instruction: what you want to
             // know here is whether it heard you, not how to paste.
             state = .notice(PillLabel.landed(text))

@@ -29,6 +29,8 @@ public final class MenuPanelModel: ObservableObject {
 public struct MenuPanelView: View {
     @ObservedObject var model: MenuPanelModel
     @State private var hovered: String?
+    /// The Recent row that was just copied, so its icon can say so for a moment.
+    @State private var copiedRow: Int?
 
     public init(model: MenuPanelModel) { self.model = model }
 
@@ -211,32 +213,67 @@ public struct MenuPanelView: View {
                 .padding(.horizontal, 15).padding(.bottom, 9)
         } else {
             VStack(spacing: 0) {
-                ForEach(model.recent) { item in
-                    Button { model.onCopy?(item) } label: {
-                        HStack(spacing: 10) {
-                            Text(item.script == .arabic ? "AR" : "EN")
-                                .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
-                                .foregroundStyle(item.script == .arabic ? c(.lapis) : c(.faint))
-                                .frame(width: 22, alignment: .leading)
-                            Text(item.oneLine)
-                                .font(.system(size: TypeScale.body))
-                                .foregroundStyle(c(.bone))
-                                .lineLimit(1)
-                                .environment(\.layoutDirection,
-                                             item.script == .arabic ? .rightToLeft : .leftToRight)
-                            Spacer(minLength: 8)
-                            Text(item.timestamp)
-                                .font(.system(size: TypeScale.micro).monospaced())
-                                .foregroundStyle(c(.faint))
-                        }
-                        .padding(.horizontal, 15).padding(.vertical, 6)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Copy again")
+                // Keyed by position: the rows are rebuilt from history on every
+                // refresh, with fresh ids, and hover must not flicker off when they are.
+                ForEach(Array(model.recent.enumerated()), id: \.element.id) { index, item in
+                    recentRow(item, index: index)
                 }
             }
             .padding(.bottom, 6)
+        }
+    }
+
+    private func recentRow(_ item: RecentDictation, index: Int) -> some View {
+        let key = "recent-\(index)"
+        let isHovered = hovered == key
+        let justCopied = copiedRow == index
+        return Button { copy(item, row: index) } label: {
+            HStack(spacing: 10) {
+                Text(item.script == .arabic ? "AR" : "EN")
+                    .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
+                    .foregroundStyle(item.script == .arabic ? c(.lapis) : c(.faint))
+                    .frame(width: 22, alignment: .leading)
+                Text(item.oneLine)
+                    .font(.system(size: TypeScale.body))
+                    .foregroundStyle(c(.bone))
+                    .lineLimit(1)
+                    .environment(\.layoutDirection,
+                                 item.script == .arabic ? .rightToLeft : .leftToRight)
+                Spacer(minLength: 8)
+                // The time and the copy icon share one slot at the far right, so
+                // hovering never shifts the text or truncates it further.
+                ZStack(alignment: .trailing) {
+                    Text(item.timestamp)
+                        .font(.system(size: TypeScale.micro).monospaced())
+                        .foregroundStyle(c(.faint))
+                        .opacity(isHovered || justCopied ? 0 : 1)
+                    Image(systemName: justCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: TypeScale.small, weight: .semibold))
+                        // Saffron is the invitation; verdigris is done — the same
+                        // contract the pill and the menu bar mark keep.
+                        .foregroundStyle(c(justCopied ? .verdigris : .saffron))
+                        .opacity(isHovered || justCopied ? 1 : 0)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+            }
+            .padding(.horizontal, 15).padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(isHovered ? c(.raised) : .clear)
+        .onHover { hovered = $0 ? key : (hovered == key ? nil : hovered) }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(.easeOut(duration: 0.12), value: justCopied)
+        .help(justCopied ? "Copied" : "Copy")
+        .accessibilityLabel("Copy: \(item.oneLine)")
+    }
+
+    private func copy(_ item: RecentDictation, row: Int) {
+        model.onCopy?(item)
+        copiedRow = row
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.2))
+            if copiedRow == row { copiedRow = nil }
         }
     }
 

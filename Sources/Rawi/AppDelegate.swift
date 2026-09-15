@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recorder = AudioRecorder()
     private let inserter: TextInserter
     private let pill = PillWindow()
+    private let focusProbe = SystemFocusProbe()
     private var history: HistoryStore!
     private var vocabulary: VocabularyStore!
     private var destinations: DestinationStore!
@@ -187,6 +188,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onStateChange = { [weak self] state in
             self?.stateChanged(state)
         }
+        // The same probe the focus trigger reports on, so the log and the paste
+        // decision can never disagree.
+        controller.focusProbe = focusProbe
         controller.vocabulary = { [weak self] in self?.vocabulary.snapshot() ?? .empty }
         controller.destination = { [weak self] bundleID in
             guard let self else { return nil }
@@ -437,6 +441,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .window: self.mainWindow.show()
                 case .menu: self.menuBar.togglePanel()
                 case .undo: _ = self.controller.undoTransform()
+                case .focus:
+                    // Asked after a pause, so whoever sent it can put an app in front.
+                    try? await Task.sleep(for: .seconds(2))
+                    let verdict = self.focusProbe.probe()
+                    self.log.info("Focus probe: \(self.focusProbe.lastSeen) [\(verdict.rawValue)]")
                 case .benchmark:
                     let path = ProcessInfo.processInfo.environment["RAWI_BENCH_WAV"]
                         ?? Config.recordingsDirectory
@@ -722,7 +731,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         pill.show(state: state, level: recorder.level, elapsed: elapsed,
-                  remaining: remaining, pasteHint: !Permissions.current().accessibility,
+                  remaining: remaining, pasteHint: controller.awaitingManualPaste,
                   motion: markMotion)
     }
 

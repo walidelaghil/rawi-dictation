@@ -140,6 +140,96 @@ import Foundation
         #expect(g.ctl.state == .notice("Cleaned transcript."))
     }
 
+    // MARK: Where the text goes
+
+    @Test("a focused text field gets the paste, and no hint") func pastesIntoAField() async {
+        let g = make()
+        let focus = FakeFocus(); focus.result = .editable
+        g.ctl.focusProbe = focus
+        await g.ctl.handle(.beganHold)
+        #expect(focus.prepared == 1)          // asked at key-press, not at paste time
+        await g.ctl.handle(.endedHold)
+        #expect(g.ins.inserted == ["Cleaned transcript."])
+        #expect(!g.ctl.awaitingManualPaste)
+        #expect(g.ctl.state == .idle)
+    }
+
+    @Test("with no text field, nothing is pasted and the pill says Copied") func noField() async {
+        var config = Config.default
+        config.output.deliverRawFirst = false
+        let g = make(config: config)
+        let focus = FakeFocus(); focus.result = .notEditable
+        g.ctl.focusProbe = focus
+        await g.ctl.handle(.beganHold)
+        await g.ctl.handle(.endedHold)
+        #expect(g.ins.inserted.isEmpty)       // no synthetic ⌘V into a file list
+        #expect(g.ins.staged == ["Cleaned transcript."])
+        #expect(g.ctl.awaitingManualPaste)
+        #expect(g.ctl.state == .notice("Copied"))
+    }
+
+    @Test("with no text field, the early raw text is upgraded without pasting") func noFieldEarly() async {
+        let g = make()                        // deliverRawFirst is the default
+        let focus = FakeFocus(); focus.result = .notEditable
+        g.ctl.focusProbe = focus
+        await g.ctl.handle(.beganHold)
+        await g.ctl.handle(.endedHold)
+        #expect(g.ins.inserted.isEmpty)
+        #expect(g.ins.upgraded.map(\.to) == ["Cleaned transcript."])
+        #expect(g.ctl.awaitingManualPaste)
+        #expect(g.ctl.state == .notice("Copied"))
+    }
+
+    @Test("if you copied something else meanwhile, no hint points at the wrong text") func noFieldClipboardMoved() async {
+        let g = make()
+        g.ins.stagedSurvives = false
+        let focus = FakeFocus(); focus.result = .notEditable
+        g.ctl.focusProbe = focus
+        await g.ctl.handle(.beganHold)
+        await g.ctl.handle(.endedHold)
+        #expect(!g.ctl.awaitingManualPaste)
+        #expect(g.ctl.state == .notice("Cleaned transcript."))
+    }
+
+    @Test("an app that will not say still gets the paste") func unknownPastes() async {
+        let g = make()
+        let focus = FakeFocus(); focus.result = .unknown
+        g.ctl.focusProbe = focus
+        await g.ctl.handle(.beganHold)
+        await g.ctl.handle(.endedHold)
+        #expect(g.ins.inserted == ["Cleaned transcript."])
+    }
+
+    @Test("the hint is cleared when the next dictation starts") func hintResets() async {
+        var config = Config.default
+        config.output.deliverRawFirst = false
+        let g = make(config: config)
+        g.ctl.noticeDuration = .milliseconds(10)
+        let focus = FakeFocus(); focus.result = .notEditable
+        g.ctl.focusProbe = focus
+        await g.ctl.handle(.beganHold)
+        await g.ctl.handle(.endedHold)
+        #expect(g.ctl.awaitingManualPaste)
+        #expect(await waitUntil { g.ctl.state == .idle })
+        focus.result = .editable
+        await g.ctl.handle(.beganHold)
+        #expect(!g.ctl.awaitingManualPaste)
+    }
+
+    @Test("the decision reads roles the way the probe measured them") func classify() {
+        // Measured on this Mac: TextEdit, a Brave input, the Claude app's prompt.
+        #expect(SystemFocusProbe.classify(role: "AXTextArea", valueSettable: true, hasSelectedRange: true) == .editable)
+        #expect(SystemFocusProbe.classify(role: "AXTextField", valueSettable: true, hasSelectedRange: true) == .editable)
+        // Finder's file list, and a Brave page with nothing focused.
+        #expect(SystemFocusProbe.classify(role: "AXOutline", valueSettable: false, hasSelectedRange: false) == .notEditable)
+        #expect(SystemFocusProbe.classify(role: "AXWebArea", valueSettable: false, hasSelectedRange: true) == .notEditable)
+        // A slider has a settable value but no text selection.
+        #expect(SystemFocusProbe.classify(role: "AXSlider", valueSettable: true, hasSelectedRange: false) == .notEditable)
+        // A custom text view with an unusual role still behaves like text.
+        #expect(SystemFocusProbe.classify(role: "AXGroup", valueSettable: true, hasSelectedRange: true) == .editable)
+        #expect(SystemFocusProbe.classify(role: nil, valueSettable: false, hasSelectedRange: false) == .unknown)
+    }
+
     @Test("a second beganHold while recording is ignored") func reentrancy() async {
         let g = make()
         await g.ctl.handle(.beganHold)

@@ -93,6 +93,23 @@ final class FakeInserter: TextInserting, @unchecked Sendable {
         inserted.append(text)
         return succeed
     }
+
+    /// Clipboard-only deliveries, which never count as inserted.
+    var upgraded: [(from: String, to: String)] = []
+    @discardableResult
+    func upgrade(staged from: String, with text: String) -> Bool {
+        guard stagedSurvives else { return false }
+        upgraded.append((from, text))
+        return true
+    }
+}
+
+final class FakeFocus: FocusProbing, @unchecked Sendable {
+    var result: FocusedInput = .editable
+    var prepared = 0
+    func prepare() { prepared += 1 }
+    func probe() -> FocusedInput { result }
+    var lastSeen: String { "fake: \(result.rawValue)" }
 }
 
 final class FakeLog: Logging, @unchecked Sendable {

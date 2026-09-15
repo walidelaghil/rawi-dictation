@@ -115,8 +115,8 @@ public struct PillView: View {
             // The paste hint is secondary now, and only appears where it is true:
             // on a Mac that can auto-paste, there is nothing to press.
             if model.pasteHint, case .notice = model.state {
-                Text("⌘V")
-                    .font(.system(size: TypeScale.small, weight: .medium).monospaced())
+                Text("⌘V to paste")
+                    .font(.system(size: TypeScale.small, weight: .medium))
                     .foregroundStyle(RawiColors.pill(.saffron))
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Capsule().fill(RawiColors.pill(.raised)))
