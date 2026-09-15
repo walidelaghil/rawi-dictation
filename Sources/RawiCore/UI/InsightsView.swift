@@ -332,7 +332,7 @@ private struct UsageTab: View {
                             }
                         }
                         .frame(height: 22)
-                        Text("\(place.dictations.formatted()) \(place.place.label.uppercased())")
+                        Text("\(place.dictations.formatted()) \(place.place.label(count: place.dictations).uppercased())")
                             .font(.system(size: TypeScale.micro, weight: .semibold))
                             .tracking(0.8)
                             .foregroundStyle(c(.bone))

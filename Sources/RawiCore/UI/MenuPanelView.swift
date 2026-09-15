@@ -4,6 +4,7 @@ import SwiftUI
 public final class MenuPanelModel: ObservableObject {
     @Published public var state: DictationState = .idle
     @Published public var level: Double = 0
+    @Published public var peak: Double = 0
     @Published public var elapsed: Duration = .zero
     @Published public var detectedLanguage: String?
     @Published public var recent: [RecentDictation] = []
@@ -75,7 +76,8 @@ public struct MenuPanelView: View {
             }
 
             if isLive {
-                LevelStrip(level: model.level, accent: c(.saffron), idle: c(.edge))
+                LevelStrip(level: model.level, peak: model.peak, accent: c(.saffron), idle: c(.edge),
+                           peakColor: c(.bone))
                 if let language = model.detectedLanguage {
                     HStack(spacing: 7) {
                         Text("DETECTED")
@@ -317,20 +319,22 @@ public struct MenuPanelView: View {
 /// The level meter as it appears in the menu — wider and flatter than the pill's.
 struct LevelStrip: View {
     let level: Double
+    var peak: Double = 0
     let accent: Color
     let idle: Color
+    var peakColor: Color = .white
 
     var body: some View {
+        let lit = MeterBars.lit(level: level, bars: 34)
+        let peakIndex = MeterBars.peakIndex(peak: peak, bars: 34)
         HStack(spacing: 2) {
             ForEach(0..<34, id: \.self) { index in
-                let lit = pow(min(max(level, 0), 1), 0.6) * 34 > Double(index)
                 Capsule()
-                    .fill(lit ? accent : idle)
+                    .fill(index < lit ? accent : index == peakIndex ? peakColor.opacity(0.85) : idle)
                     .frame(width: 2, height: barHeight(index))
             }
         }
         .frame(height: 15)
-        .animation(.linear(duration: 0.05), value: level)
     }
 
     private func barHeight(_ index: Int) -> CGFloat {

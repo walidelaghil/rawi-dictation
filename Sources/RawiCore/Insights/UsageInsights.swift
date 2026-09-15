@@ -17,6 +17,11 @@ public enum DictationPlace: String, CaseIterable, Sendable {
         }
     }
 
+    /// The label for a count: "1 work message", "22 work messages".
+    public func label(count: Int) -> String {
+        count == 1 && label.hasSuffix("s") ? String(label.dropLast()) : label
+    }
+
     /// SF Symbol for the row.
     public var symbol: String {
         switch self {

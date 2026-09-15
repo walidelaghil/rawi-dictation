@@ -23,10 +23,10 @@ public final class PillWindow {
 
     public init() {}
 
-    public func show(state: DictationState, level: Double,
+    public func show(state: DictationState, level: Double, peak: Double = 0,
                      elapsed: Duration, remaining: Duration?, pasteHint: Bool = false,
                      motion: MarkMotion = .rest) {
-        update(state: state, level: level, elapsed: elapsed, remaining: remaining,
+        update(state: state, level: level, peak: peak, elapsed: elapsed, remaining: remaining,
                pasteHint: pasteHint, motion: motion)
         let panel = panel ?? makePanel()
         self.panel = panel
@@ -35,13 +35,14 @@ public final class PillWindow {
         startCursorTracking()
     }
 
-    public func update(state: DictationState, level: Double,
+    public func update(state: DictationState, level: Double, peak: Double = 0,
                        elapsed: Duration, remaining: Duration?, pasteHint: Bool = false,
                        motion: MarkMotion = .rest) {
         model.motion = motion
         model.pasteHint = pasteHint
         model.state = state
         model.level = level
+        model.peak = peak
         model.elapsed = elapsed
         model.remaining = remaining
     }

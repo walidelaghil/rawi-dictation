@@ -59,6 +59,8 @@ public enum PillLabel {
 public final class PillModel: ObservableObject {
     @Published public var state: DictationState = .idle
     @Published public var level: Double = 0
+    /// The loudest recent moment, left behind by `MeterBallistics`.
+    @Published public var peak: Double = 0
     @Published public var elapsed: Duration = .zero
     @Published public var remaining: Duration?
     /// True once the cursor has genuinely rested on the pill — see `PillProximity`.
@@ -100,7 +102,7 @@ public struct PillView: View {
                 .fixedSize()
 
             if isRecording {
-                LevelMeter(level: model.level, accent: accent)
+                LevelMeter(level: model.level, peak: model.peak, accent: accent)
                 Text(PillLabel.elapsed(model.elapsed))
                     .font(.system(size: TypeScale.small).monospacedDigit())
                     .foregroundStyle(RawiColors.pill(.muted))
@@ -183,29 +185,47 @@ public struct PillView: View {
 }
 
 /// Level meter. Bars light with a mild curve so quiet speech still shows movement —
-/// a flat mapping makes a normal speaking voice look like silence.
+/// a flat mapping makes a normal speaking voice look like silence. The motion comes
+/// from `MeterBallistics`; this only draws where it has got to.
 struct LevelMeter: View {
     let level: Double
+    var peak: Double = 0
     let accent: Color
-    private let barCount = 20
+    var barCount = 20
+    var tallest: CGFloat = 14
+    var shortest: CGFloat = 5
 
     var body: some View {
+        let lit = MeterBars.lit(level: level, bars: barCount)
+        let peakIndex = MeterBars.peakIndex(peak: peak, bars: barCount)
         HStack(spacing: 2) {
             ForEach(0..<barCount, id: \.self) { index in
-                let threshold = Double(index) / Double(barCount)
-                let scaled = pow(min(max(level, 0), 1), 0.6)
                 Capsule()
-                    .fill(scaled > threshold ? accent : RawiColors.pill(.edge))
+                    .fill(index < lit ? accent
+                          : index == peakIndex ? RawiColors.pill(.bone).opacity(0.85)
+                          : RawiColors.pill(.edge))
                     .frame(width: 2, height: barHeight(index))
             }
         }
-        .frame(height: 15)
-        .animation(.linear(duration: 0.05), value: level)
+        .frame(height: tallest + 1)
     }
 
     private func barHeight(_ index: Int) -> CGFloat {
         let mid = Double(barCount - 1) / 2
         let distance = abs(Double(index) - mid) / mid
-        return 5 + (1 - distance) * 9
+        return shortest + (1 - distance) * (tallest - shortest)
+    }
+}
+
+/// Which bars are lit, shared by the pill and the menu panel so both meters agree.
+enum MeterBars {
+    static func lit(level: Double, bars: Int) -> Int {
+        Int((pow(min(max(level, 0), 1), 0.6) * Double(bars)).rounded(.up))
+    }
+
+    /// The bar the peak marker sits on, or nil when there is no peak above the level.
+    static func peakIndex(peak: Double, bars: Int) -> Int? {
+        guard peak > 0.02 else { return nil }
+        return min(bars - 1, Int((pow(min(peak, 1), 0.6) * Double(bars)).rounded(.up)) - 1)
     }
 }

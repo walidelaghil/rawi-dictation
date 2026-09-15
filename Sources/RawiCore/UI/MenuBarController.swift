@@ -94,7 +94,7 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
         button.toolTip = "Rawi: \(PillLabel.text(for: state))"
     }
 
-    public func updateLive(level: Double, elapsed: Duration, detectedLanguage: String?,
+    public func updateLive(level: Double, peak: Double = 0, elapsed: Duration, detectedLanguage: String?,
                            motion: MarkMotion = .rest) {
         // Redrawn only when something would actually look different: at 30 updates
         // a second, repainting the status item for a 0.01 change is battery spent
@@ -112,6 +112,7 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
         }
         panel.motion = motion
         panel.level = level
+        panel.peak = peak
         panel.elapsed = elapsed
         panel.detectedLanguage = detectedLanguage
     }

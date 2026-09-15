@@ -49,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// One timeline for the mark, shared by the menu bar, the pill and the panel.
     /// Three separate animations would drift apart within a second.
     private var markMotion = MarkMotion.rest
+    private var meter = MeterBallistics()
     private var stateEnteredAt = Date()
     private var lastFrameAt = Date()
 
@@ -853,6 +854,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastFrameAt = now
         markMotion.advance(to: state, dt: dt,
                            elapsed: now.timeIntervalSince(stateEnteredAt))
+        if state.recordingMode != nil { meter.advance(raw: recorder.level, dt: dt) } else { meter.reset() }
         let elapsed: Duration = recordingStart.map { $0.duration(to: .now) } ?? .zero
         var remaining: Duration?
         if state.recordingMode == .handsFree {
@@ -861,7 +863,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // The ⌘V hint only appears where it is true: with Accessibility granted
         // the text is already in the document.
-        menuBar?.updateLive(level: recorder.level, elapsed: elapsed,
+        menuBar?.updateLive(level: meter.level, peak: meter.peak, elapsed: elapsed,
                             detectedLanguage: controller.lastDetectedLanguage,
                             motion: markMotion)
         // Once the mark has finished returning to a waveform there is nothing left
@@ -872,7 +874,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pill.hide()
             return
         }
-        pill.show(state: state, level: recorder.level, elapsed: elapsed,
+        pill.show(state: state, level: meter.level, peak: meter.peak, elapsed: elapsed,
                   remaining: remaining, pasteHint: controller.awaitingManualPaste,
                   motion: markMotion)
     }
