@@ -129,4 +129,27 @@ import Foundation
         #expect(learned.count <= TermLearner.limit)
         #expect(learned.first!.occurrences >= learned.last!.occurrences)
     }
+
+    @Test("two real words a letter or two apart are not one term") func billingBuilding() {
+        // What actually happened: replays of a test sentence said "billing" 26
+        // times, one real dictation said "building", and the pair was learned as
+        // one word heard two ways.
+        let entries = heard(["billing", "billing", "building", "billing"], times: 7, overDays: 3)
+        let learned = TermLearner.learn(from: entries, known: [], blocked: [])
+        #expect(!learned.contains { $0.term.lowercased() == "billing" })
+        #expect(!learned.contains { $0.term.lowercased() == "building" })
+    }
+
+    @Test("an ordinary word is never enforced, even with a garbled neighbour") func actually() {
+        let entries = heard(["actually", "actually", "actualy", "actually"], times: 6, overDays: 3)
+        let learned = TermLearner.learn(from: entries, known: [], blocked: [])
+        #expect(!learned.contains { $0.term.lowercased() == "actually" })
+    }
+
+    @Test("the spell checker knows ordinary words and not names") func spellCheck() {
+        #expect(SpellCheck.isOrdinaryEnglish("billing"))
+        #expect(SpellCheck.isOrdinaryEnglish("actually"))
+        #expect(!SpellCheck.isOrdinaryEnglish("sallah"))
+    }
 }
+

@@ -67,6 +67,13 @@ public final class DictationController {
     /// text already landed teaches you to press a key that pastes it twice.
     public private(set) var awaitingManualPaste = false
 
+    /// Reads back what was just typed, so a spelling you fix is learned.
+    public var editWatcher: (any EditWatching)?
+    /// Whether this app's fields may be read back at all. Set by the app from the
+    /// same privacy exclusions history uses: a password manager's fields are
+    /// never looked at, corrected or not.
+    public var mayWatchEdits: (String?) -> Bool = { _ in false }
+
     /// Decides whether there is a text field to paste into.
     public var focusProbe: any FocusProbing = NoFocusProbe()
 
@@ -121,6 +128,10 @@ public final class DictationController {
         let app: (name: String?, bundleID: String?)
         let vocabulary: VocabularySnapshot
         let destination: DestinationRule?
+        /// False for a verification run. A benchmark replaying the same recording
+        /// is not something you said, and history is what the dictionary learns
+        /// from: 26 replays of one test sentence taught it "billing".
+        var records = true
     }
 
     /// Incremented whenever a new dictation starts. A pipeline remembers the
@@ -251,6 +262,9 @@ public final class DictationController {
             // and the app you were looking at is the one that shaped the dictation.
             captured = frontmostApp()
             awaitingManualPaste = false
+            // The last dictation's field gets one final look before this one
+            // types anything that could move it.
+            editWatcher?.flush()
             // Chromium and Electron build their accessibility tree on request.
             // Asking now gives it the whole sentence to finish.
             focusProbe.prepare()
@@ -498,7 +512,8 @@ public final class DictationController {
         // The dictionary, applied deterministically. The model layers are
         // unreliable — 1.5b ignores a glossary entirely — so the guarantee lives in
         // code that cannot decline.
-        text = TermCorrector.apply(text, terms: context.vocabulary.terms)
+        text = TermCorrector.apply(text, terms: context.vocabulary.terms,
+                                  aliases: context.vocabulary.aliases)
 
         // Snippets, after the guard, so an expanded address can never be mistaken
         // for the model rewriting your words.
@@ -538,13 +553,13 @@ public final class DictationController {
         // Recorded whether or not the synthetic paste landed. On a Mac that cannot
         // grant Accessibility the clipboard *is* the delivery mechanism — pressing
         // ⌘V is the user completing the insertion, not the dictation failing.
-        remember(text)
-        onRecord?(HistoryEntry(
+        if context.records { remember(text) }
+        if context.records { onRecord?(HistoryEntry(
             at: Date(), cleaned: text, raw: raw,
             destination: context.destination?.name,
             script: ScriptDetector.detect(text),
             appName: context.app.name, bundleID: context.app.bundleID,
-            durationSeconds: duration, peakLevel: peak, guardRejected: rejected))
+            durationSeconds: duration, peakLevel: peak, guardRejected: rejected)) }
 
         stageTimings.insert = insertStarted.duration(to: .now).milliseconds
         if earlyPaste, case .notice = state {
@@ -561,6 +576,9 @@ public final class DictationController {
         if !keepAudio { try? FileManager.default.removeItem(at: recordingURL) }
         if pasted {
             log.info("Inserted \(text.count) characters")
+            if context.records, gen == self.generation, mayWatchEdits(context.app.bundleID) {
+                editWatcher?.watch(inserted: text, appName: context.app.name)
+            }
             publish(.idle, for: gen)
         } else if focus == .notEditable {
             log.info("No text field has focus; left \(text.count) characters on the clipboard")
@@ -639,7 +657,8 @@ public final class DictationController {
 
     /// Runs the pipeline again on audio that was kept when it failed the first
     /// time. Everything downstream is the ordinary path.
-    public func retry(audioPath: String, appName: String?, bundleID: String?) async {
+    public func retry(audioPath: String, appName: String?, bundleID: String?,
+                      records: Bool = true) async {
         guard state == .idle else { return }
         let url = URL(fileURLWithPath: audioPath)
         guard FileManager.default.fileExists(atPath: audioPath) else {
@@ -669,7 +688,8 @@ public final class DictationController {
         }
         await finishText(raw, recordingURL: url, duration: 0, peak: 0, keepAudio: true,
                          timings: Timings(transcribe: started.duration(to: .now).milliseconds),
-                         context: currentContext, generation: generation)
+                         context: { var c = currentContext; c.records = records; return c }(),
+                         generation: generation)
     }
 
     private func remember(_ text: String) {

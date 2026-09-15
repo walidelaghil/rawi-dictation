@@ -52,10 +52,11 @@ carries no execution risk.
 - **Field-level destination awareness** — knowing you are in Jira's description
   box rather than its title. Needs Accessibility; impossible on this Mac. Page-level
   (app + browser URL) is the ceiling and is in v2 scope.
-- **Auto-paste** — needs Accessibility. Clipboard plus ⌘V is the accepted design,
-  not a gap to close. Revisit only if IT grants a PPPC profile.
-- **Learn-from-corrections beyond the dictionary** — watching how you edit inserted
-  text would need Accessibility. The dictionary's two-correction rule is the
-  achievable subset and is in v2 scope.
+- ~~**Auto-paste**~~ — shipped once Accessibility was granted (2026-09-15). Rawi
+  pastes only when a text field has focus, and copies with a ⌘V hint otherwise.
+- ~~**Learn from corrections**~~ — shipped (2026-09-15). After a paste, Rawi reads
+  back the stretch it typed and learns a spelling you fix, the way Wispr Flow's
+  dictionary fills itself. Learning beyond single-word spelling (rephrasings,
+  style) is still out of scope.
 - **Streaming partial transcription** — large engineering lift; at ~2s round trip
   it solves a wait that is not really there.

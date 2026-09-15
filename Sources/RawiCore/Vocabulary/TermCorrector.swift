@@ -23,7 +23,9 @@ public enum TermCorrector {
     ]
 
     /// The exact spelling wins wherever a close variant appears.
-    public static func apply(_ text: String, terms: [String]) -> String {
+    public static func apply(_ text: String, terms: [String],
+                             aliases: [String: String] = [:]) -> String {
+        let text = aliases.isEmpty ? text : replaceAliases(in: text, aliases: aliases)
         let cleaned = terms
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { $0.count >= 4 }
@@ -38,6 +40,29 @@ public enum TermCorrector {
         let single = ordered.filter { !$0.contains(" ") }
         guard !single.isEmpty else { return result }
         return replaceTokens(in: result, terms: single)
+    }
+
+    // MARK: - What you corrected
+
+    /// Exact replacements taught by your own corrections: whisper wrote "Kanjee",
+    /// you changed it to "Kandji", so "Kanjee" is Kandji from now on. Exact rather
+    /// than near, because a correction can be far from what was heard, and exact
+    /// is what makes that safe. Only misheard spellings that are not ordinary words
+    /// are ever stored as aliases, so "cloud" can never become "Claude".
+    private static func replaceAliases(in text: String, aliases: [String: String]) -> String {
+        var out = ""
+        var token = ""
+        func flush() {
+            guard !token.isEmpty else { return }
+            out += aliases[token.lowercased()] ?? token
+            token = ""
+        }
+        for character in text {
+            if character.isLetter || character.isNumber { token.append(character) }
+            else { flush(); out.append(character) }
+        }
+        flush()
+        return out
     }
 
     // MARK: - Single words

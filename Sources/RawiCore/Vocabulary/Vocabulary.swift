@@ -7,13 +7,39 @@ public struct DictionaryTerm: Codable, Sendable, Equatable, Identifiable {
     /// Suggested by Rawi and accepted, rather than typed in. Marked so it can be
     /// removed without wondering where it came from.
     public var addedAutomatically: Bool
+    /// Learned because you fixed Rawi's spelling of it in a document. The strongest
+    /// evidence there is, so the spelling-based learner never drops one.
+    public var learnedFromCorrection: Bool
+    /// What whisper wrote before you corrected it. Used to put the right spelling
+    /// in directly next time, where the two are too far apart to be a near miss.
+    public var heardAs: [String]
 
     public init(id: UUID = UUID(), term: String, note: String = "",
-                addedAutomatically: Bool = false) {
+                addedAutomatically: Bool = false, learnedFromCorrection: Bool = false,
+                heardAs: [String] = []) {
         self.id = id
         self.term = term
         self.note = note
         self.addedAutomatically = addedAutomatically
+        self.learnedFromCorrection = learnedFromCorrection
+        self.heardAs = heardAs
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, term, note, addedAutomatically, learnedFromCorrection, heardAs
+    }
+
+    /// Tolerant on purpose. The synthesised decoder fails on a missing key, and
+    /// one failing term fails the whole file — snippets included — so a field
+    /// added in a newer build would have silently emptied an older dictionary.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        term = try c.decode(String.self, forKey: .term)
+        note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        addedAutomatically = try c.decodeIfPresent(Bool.self, forKey: .addedAutomatically) ?? false
+        learnedFromCorrection = try c.decodeIfPresent(Bool.self, forKey: .learnedFromCorrection) ?? false
+        heardAs = try c.decodeIfPresent([String].self, forKey: .heardAs) ?? []
     }
 }
 
@@ -36,13 +62,16 @@ public struct VocabularySnapshot: Sendable, Equatable {
     /// The exact spellings, for the deterministic corrector.
     public let terms: [String]
     public let snippets: [Snippet]
+    /// Misheard spelling → the one you corrected it to.
+    public let aliases: [String: String]
 
     public init(whisperPrompt: String, glossary: String,
-                terms: [String] = [], snippets: [Snippet]) {
+                terms: [String] = [], snippets: [Snippet], aliases: [String: String] = [:]) {
         self.whisperPrompt = whisperPrompt
         self.glossary = glossary
         self.terms = terms
         self.snippets = snippets
+        self.aliases = aliases
     }
 
     public static let empty = VocabularySnapshot(whisperPrompt: "", glossary: "",
@@ -56,6 +85,20 @@ public final class VocabularyStore: @unchecked Sendable {
         /// Terms you removed. Without this, anything learned automatically comes
         /// straight back on the next dictation and removing it means nothing.
         var blocked: [String] = []
+
+        init(terms: [DictionaryTerm], snippets: [Snippet], blocked: [String] = []) {
+            self.terms = terms
+            self.snippets = snippets
+            self.blocked = blocked
+        }
+
+        /// A missing list is an empty list, not a reason to discard the others.
+        init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            terms = try c.decodeIfPresent([DictionaryTerm].self, forKey: .terms) ?? []
+            snippets = try c.decodeIfPresent([Snippet].self, forKey: .snippets) ?? []
+            blocked = try c.decodeIfPresent([String].self, forKey: .blocked) ?? []
+        }
     }
 
     private let url: URL
@@ -121,11 +164,14 @@ public final class VocabularyStore: @unchecked Sendable {
             let manual = Set(payload.terms.filter { !$0.addedAutomatically }
                 .map { $0.term.lowercased() })
 
+            // Only its own terms: a correction you made is not evidence this learner
+            // can overrule by not seeing the word again.
+            let isMine = { (t: DictionaryTerm) in t.addedAutomatically && !t.learnedFromCorrection }
             let dropped = payload.terms
-                .filter { $0.addedAutomatically && wanted[$0.term.lowercased()] == nil }
+                .filter { isMine($0) && wanted[$0.term.lowercased()] == nil }
                 .map(\.term)
             payload.terms.removeAll {
-                $0.addedAutomatically && wanted[$0.term.lowercased()] == nil
+                isMine($0) && wanted[$0.term.lowercased()] == nil
             }
 
             var added: [String] = []
@@ -143,6 +189,38 @@ public final class VocabularyStore: @unchecked Sendable {
             }
             if !added.isEmpty || !dropped.isEmpty { save() }
             return (added, dropped)
+        }
+    }
+
+    /// You changed Rawi's `heard` into `fixed` in a document. Returns true when
+    /// `fixed` is new to the dictionary.
+    @discardableResult
+    public func learnCorrection(heard: String, fixed: String, app: String?,
+                                alias: Bool = true) -> Bool {
+        let fixedTrimmed = fixed.trimmingCharacters(in: .whitespacesAndNewlines)
+        let heardLower = heard.lowercased()
+        guard !fixedTrimmed.isEmpty else { return false }
+        return lock.withLock {
+            // You removed it once; one more correction does not overrule that.
+            guard !payload.blocked.contains(fixedTrimmed.lowercased()) else { return false }
+            if let index = payload.terms.firstIndex(where: {
+                $0.term.compare(fixedTrimmed, options: .caseInsensitive) == .orderedSame
+            }) {
+                if alias, heardLower != fixedTrimmed.lowercased(),
+                   !payload.terms[index].heardAs.contains(heardLower) {
+                    payload.terms[index].heardAs.append(heardLower)
+                    save()
+                }
+                return false
+            }
+            let place = app.map { " in \($0)" } ?? ""
+            payload.terms.append(DictionaryTerm(
+                term: fixedTrimmed,
+                note: "you corrected “\(heard)”\(place)",
+                addedAutomatically: true, learnedFromCorrection: true,
+                heardAs: alias && heardLower != fixedTrimmed.lowercased() ? [heardLower] : []))
+            save()
+            return true
         }
     }
 
@@ -166,10 +244,12 @@ public final class VocabularyStore: @unchecked Sendable {
     }
 
     public func snapshot() -> VocabularySnapshot {
-        VocabularySnapshot(whisperPrompt: whisperPrompt(),
-                           glossary: glossaryClause(),
-                           terms: terms.map(\.term),
-                           snippets: snippets)
+        var aliases: [String: String] = [:]
+        for term in terms { for heard in term.heardAs { aliases[heard] = term.term } }
+        return VocabularySnapshot(whisperPrompt: whisperPrompt(),
+                                  glossary: glossaryClause(),
+                                  terms: terms.map(\.term),
+                                  snippets: snippets, aliases: aliases)
     }
 
     /// Comma-joined terms for the decoder hint (`whisper-cli --prompt`, and the

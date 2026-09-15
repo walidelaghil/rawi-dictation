@@ -71,7 +71,9 @@ public enum TermLearner {
 
     public static func learn(from entries: [HistoryEntry],
                              known: [DictionaryTerm],
-                             blocked: [String]) -> [LearnedTerm] {
+                             blocked: [String],
+                             isOrdinaryWord: (String) -> Bool = SpellCheck.isOrdinaryEnglish)
+        -> [LearnedTerm] {
         let knownLower = Set(known.map { $0.term.lowercased() })
         let blockedLower = Set(blocked.map { $0.lowercased() })
 
@@ -117,6 +119,12 @@ public enum TermLearner {
             let distinct = Set(cluster.map { $0.lowercased() })
             // One spelling is one spelling, however often you said it.
             guard distinct.count >= 2 else { continue }
+            // Two real words are two words, not one word heard two ways. "billing"
+            // and "building" are two letters apart, and treating them as spellings
+            // of one term taught the corrector to turn every building into billing.
+            // A garble leaves a non-word behind; without one there is no evidence.
+            let latin = cluster.filter { ScriptDetector.detect($0) == .latin }
+            if !latin.isEmpty, latin.allSatisfy({ isOrdinaryWord($0.lowercased()) }) { continue }
 
             let occurrences = cluster.reduce(0) { $0 + (counts[$1] ?? 0) }
             let dayCount = Set(cluster.flatMap { days[$0] ?? [] }).count
@@ -135,6 +143,11 @@ public enum TermLearner {
                         : (counts[$0] ?? 0) > (counts[$1] ?? 0)
                 }
             guard let dominant = enforceable.first else { continue }
+            // An ordinary word written in lower case is never a term, whatever its
+            // neighbours look like: enforcing "actually" rewrites "actual". A
+            // capitalised one may be a name — Notion is a word and a product.
+            if ScriptDetector.detect(dominant) == .latin, dominant == dominant.lowercased(),
+               isOrdinaryWord(dominant) { continue }
             let dominantCount = counts[dominant] ?? 0
             // Without a favourite we would be guessing which spelling you meant,
             // and enforcing a guess is worse than enforcing nothing.

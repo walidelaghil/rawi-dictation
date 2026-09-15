@@ -25,7 +25,7 @@ public enum RemoteTrigger {
         case undo
         /// Runs the whole pipeline on a WAV, for timing. Same code path a retry
         /// takes, so the numbers are the app's own rather than a benchmark's.
-        case benchmark, focus
+        case benchmark, focus, editSelfTest
     }
 
     private static let name = "com.welaghil.rawi.trigger"

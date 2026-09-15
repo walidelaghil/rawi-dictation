@@ -192,6 +192,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The same probe the focus trigger reports on, so the log and the paste
         // decision can never disagree.
         controller.focusProbe = focusProbe
+        // The dictionary fills itself the way Wispr Flow's does: from what you fix.
+        let watcher = SystemEditWatcher()
+        watcher.onCorrection = { [weak self] correction, app in
+            guard let self else { return }
+            let isNew = self.vocabulary.learnCorrection(heard: correction.heard,
+                                                        fixed: correction.fixed, app: app,
+                                                        alias: correction.aliasable)
+            if isNew {
+                self.log.info("Learned “\(correction.fixed)” — you corrected “\(correction.heard)” in \(app ?? "an app")")
+                self.mainWindow.reload()
+            }
+        }
+        watcher.onNote = { [weak self] note in self?.log.info("Edit watch: \(note)") }
+        controller.editWatcher = watcher
+        controller.mayWatchEdits = { [weak self] bundleID in
+            guard let self else { return false }
+            return self.config.history.enabled && !self.config.history.excludes(bundleID)
+        }
         controller.vocabulary = { [weak self] in self?.vocabulary.snapshot() ?? .empty }
         controller.destination = { [weak self] bundleID in
             guard let self else { return nil }
@@ -445,6 +463,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .window: self.mainWindow.show()
                 case .menu: self.menuBar.togglePanel()
                 case .undo: _ = self.controller.undoTransform()
+                case .editSelfTest:
+                    // Paste a known sentence into the focused field, correct it
+                    // through Accessibility after a moment, and let the real watcher
+                    // find the correction. Used with a scratch document in front.
+                    try? await Task.sleep(for: .seconds(2))
+                    let sentence = "We manage every laptop with Kanjee now."
+                    guard self.inserter.insert(sentence, restoringClipboard: true) else {
+                        self.log.warn("Edit self-test: could not paste"); return
+                    }
+                    self.controller.editWatcher?.watch(inserted: sentence, appName: "Self-test")
+                    try? await Task.sleep(for: .seconds(2))
+                    let edited = SystemEditWatcher.simulateCorrection(from: "Kanjee", to: "Kandji")
+                    self.log.info("Edit self-test: correction \(edited)")
                 case .focus:
                     // Asked after a pause, so whoever sent it can put an app in front.
                     try? await Task.sleep(for: .seconds(2))
@@ -455,7 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         ?? Config.recordingsDirectory
                             .appendingPathComponent("benchmark.wav").path
                     await self.controller.retry(audioPath: path, appName: "Benchmark",
-                                                bundleID: "benchmark")
+                                                bundleID: "benchmark", records: false)
                 }
             }
         }

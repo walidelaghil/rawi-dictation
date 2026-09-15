@@ -123,3 +123,11 @@ final class FakeLog: Logging, @unchecked Sendable {
         lock.withLock { _lines.append("\(level): \(message)") }
     }
 }
+
+@MainActor
+final class FakeEditWatcher: EditWatching {
+    var watched: [(text: String, app: String?)] = []
+    var flushes = 0
+    func watch(inserted: String, appName: String?) { watched.append((inserted, appName)) }
+    func flush() { flushes += 1 }
+}
