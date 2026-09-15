@@ -167,7 +167,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildGraph() {
         let env = DotEnv.load(from: Config.envFile)
-        history = HistoryStore(limit: config.history.limit)
+        // Sealed by default. If the keychain will not hand over a key, history still
+        // works, unsealed, and the log says so rather than losing every dictation.
+        var cipher: (any HistoryCipher)?
+        if config.history.encrypted {
+            do { cipher = try KeychainHistoryCipher() }
+            catch { log.error("History encryption unavailable (\(error)); writing it unsealed") }
+        }
+        history = HistoryStore(limit: config.history.limit,
+                               retentionDays: config.history.retentionDays, cipher: cipher)
+        log.info("History: \(history.count) entries, \(cipher == nil ? "plain" : "encrypted"), "
+                 + (config.history.retentionDays == 0 ? "kept until the limit"
+                    : "kept \(config.history.retentionDays) days"))
         vocabulary = VocabularyStore()
         destinations = DestinationStore()
         transforms = TransformStore()
@@ -826,6 +837,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         publishHotkeyLabels()
         if transformsChanged { wireTransforms(env: env)
         wirePolish(env: env) }
+        history.setRetention(days: config.history.retentionDays)
         applyAppearance()
         log.info("Config reloaded (engine=\(config.engine.rawValue), "
                  + "cleanup=\(config.cleanup.provider.rawValue), hotkey=\(config.hotkey))")

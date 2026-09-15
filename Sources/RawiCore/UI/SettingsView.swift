@@ -254,6 +254,7 @@ public struct SettingsView: View {
                 keysSection
                 transcriptionSection
                 cleanupSection
+                historySection
                 fileSection
             }
             .padding(.horizontal, 24).padding(.vertical, 22)
@@ -378,6 +379,32 @@ public struct SettingsView: View {
                        + "a different one.")
                         .font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                 }
+            }
+        }
+    }
+
+    // MARK: - History
+
+    private var historySection: some View {
+        section("History", "What Rawi keeps of what you said, and for how long.") {
+            VStack(alignment: .leading, spacing: 10) {
+                picker(HistorySettings.retentionChoices.map { (String($0.days), $0.label) },
+                       selected: String(model.config.history.retentionDays)) { raw in
+                    model.config.history.retentionDays = Int(raw) ?? 90
+                    model.save()
+                }
+                Text(model.config.history.retentionDays == 0
+                     ? "Kept until there are \(model.config.history.limit) dictations, then the oldest go first."
+                     : "Older dictations are deleted, along with any recording kept for a retry.")
+                    .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
+                    .fixedSize(horizontal: false, vertical: true)
+                Label(model.config.history.encrypted
+                      ? "Encrypted on this Mac. The key is in your login keychain and never leaves it."
+                      : "Stored as plain text. Set history.encrypted to true in config.json to seal it.",
+                      systemImage: model.config.history.encrypted ? "lock.fill" : "lock.open")
+                    .font(.system(size: TypeScale.small))
+                    .foregroundStyle(model.config.history.encrypted ? c(.muted) : c(.clay))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

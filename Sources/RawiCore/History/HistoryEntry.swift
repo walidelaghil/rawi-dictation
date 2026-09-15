@@ -115,11 +115,23 @@ public struct HistorySettings: Codable, Sendable, Equatable {
     /// a plaintext log is a genuine liability, so they are excluded out of the box
     /// rather than waiting for the user to think of it.
     public var excludedBundleIDs: [String]
+    /// Days an entry is kept. 0 keeps it until `limit` pushes it out.
+    public var retentionDays: Int
+    /// Seal the file with a key held in the login keychain.
+    public var encrypted: Bool
 
-    public init(enabled: Bool, limit: Int, excludedBundleIDs: [String]) {
+    /// The windows offered on the settings screen.
+    public static let retentionChoices: [(days: Int, label: String)] = [
+        (7, "A week"), (30, "30 days"), (90, "90 days"), (365, "A year"), (0, "Until the limit"),
+    ]
+
+    public init(enabled: Bool, limit: Int, excludedBundleIDs: [String],
+                retentionDays: Int = 90, encrypted: Bool = true) {
         self.enabled = enabled
         self.limit = limit
         self.excludedBundleIDs = excludedBundleIDs
+        self.retentionDays = retentionDays
+        self.encrypted = encrypted
     }
 
     public init(from decoder: any Decoder) throws {
@@ -129,6 +141,8 @@ public struct HistorySettings: Codable, Sendable, Equatable {
         limit = try c.decodeIfPresent(Int.self, forKey: .limit) ?? d.limit
         excludedBundleIDs = try c.decodeIfPresent([String].self, forKey: .excludedBundleIDs)
             ?? d.excludedBundleIDs
+        retentionDays = try c.decodeIfPresent(Int.self, forKey: .retentionDays) ?? d.retentionDays
+        encrypted = try c.decodeIfPresent(Bool.self, forKey: .encrypted) ?? d.encrypted
     }
 
     public func excludes(_ bundleID: String?) -> Bool {
