@@ -64,7 +64,7 @@ here — `"يعني الـ API مو شغال، لازم نسوي deploy"` is mos
 technical terms, and must route to the Arabic-capable model. Conversely an English
 sentence quoting a single Arabic word must not. 15% of letters is the boundary.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 import Testing
@@ -116,20 +116,20 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `swift test --filter ScriptDetectorTests`
 Expected: FAIL — `ScriptDetector` not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Count letters with `Character.isLetter`; count as Arabic any scalar in
 `0x0600–0x06FF`, `0x0750–0x077F`, `0x08A0–0x08FF`, `0xFB50–0xFDFF`, `0xFE70–0xFEFF`.
 Return `.latin` when there are no letters at all.
 
-- [ ] **Step 4: Run to verify pass** — `swift test --filter ScriptDetectorTests` → PASS, 9 tests.
+- [x] **Step 4: Run to verify pass** — `swift test --filter ScriptDetectorTests` → PASS, 9 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/RawiCore/Transcribe/ScriptDetector.swift Tests/RawiTests/ScriptDetectorTests.swift
@@ -166,7 +166,7 @@ public var models: CleanupModels
 `cleanup.models`. Decoding must not fail. Map the old single value onto `latin`,
 leave `arabic` at its default, and drop the old key on the next save.
 
-- [ ] **Step 1: Write the failing tests** (append to `ConfigTests.swift`)
+- [x] **Step 1: Write the failing tests** (append to `ConfigTests.swift`)
 
 ```swift
 @Suite("Cleanup models") struct CleanupModelsTests {
@@ -211,16 +211,16 @@ leave `arabic` at its default, and drop the old key on the next save.
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — `swift test --filter "Cleanup models"` → FAIL.
+- [x] **Step 2: Run to verify failure** — `swift test --filter "Cleanup models"` → FAIL.
 
-- [ ] **Step 3: Implement.** Add `CleanupModels`. In `CleanupSettings.init(from:)`,
+- [x] **Step 3: Implement.** Add `CleanupModels`. In `CleanupSettings.init(from:)`,
 decode `models` if present; otherwise build one from a legacy `model` string;
 otherwise use defaults. Give `CleanupSettings` an explicit `encode(to:)` that emits
 `provider`, `models`, `prompt` and never `model`.
 
-- [ ] **Step 4: Run tests** — PASS, 5 new tests; whole suite still green.
+- [x] **Step 4: Run tests** — PASS, 5 new tests; whole suite still green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/RawiCore/Config/Config.swift Tests/RawiTests/ConfigTests.swift
@@ -259,7 +259,7 @@ property of cleanup, so it stays behind the protocol.
 **Cancellation:** `cancel()` must cancel whichever child is in flight — a route
 decided per call means the provider cannot assume which one that is.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 import Testing
@@ -349,15 +349,15 @@ final class SpyCleanup: CleanupProvider, @unchecked Sendable {
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — `swift test --filter RoutedCleanup` → FAIL.
+- [x] **Step 2: Run to verify failure** — `swift test --filter RoutedCleanup` → FAIL.
 
-- [ ] **Step 3: Implement** `RoutedCleanup` with an `NSLock`-guarded cache of
+- [x] **Step 3: Implement** `RoutedCleanup` with an `NSLock`-guarded cache of
 built providers keyed by model name, plus a `lastUsed` reference for `cancel()`.
 Default `makeProvider` builds a `ChatCleanup` with the given kind, key and prompt.
 
-- [ ] **Step 4: Run tests** — PASS, 8 tests.
+- [x] **Step 4: Run tests** — PASS, 8 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/RawiCore/Cleanup Tests/RawiTests/RoutedCleanupTests.swift
@@ -406,7 +406,7 @@ Downloads come from `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/<
 Write to a `.partial` file and move into place only on success, so an interrupted
 download can never masquerade as an installed model.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 import Testing
@@ -464,11 +464,11 @@ import Foundation
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — `swift test --filter ModelStore` → FAIL.
-- [ ] **Step 3: Implement.** `download` uses `URLSession.bytes(for:)` to stream and
+- [x] **Step 2: Run to verify failure** — `swift test --filter ModelStore` → FAIL.
+- [x] **Step 3: Implement.** `download` uses `URLSession.bytes(for:)` to stream and
 report progress against `expectedContentLength`.
-- [ ] **Step 4: Run tests** — PASS, 8 tests.
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run tests** — PASS, 8 tests.
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/RawiCore/Models Tests/RawiTests/ModelStoreTests.swift
@@ -490,7 +490,7 @@ git commit -m "feat: model store with presence, paths and resumable-safe downloa
 - Produces: `Probes` gains `turboModelFound: Bool`; `FirstRunSetup.detect` selects
   `.whispercpp` only when the **multilingual** model is present.
 
-- [ ] **Step 1: Update first-run detection tests**
+- [x] **Step 1: Update first-run detection tests**
 
 ```swift
 @Test("local engine requires the multilingual model, not just any model") func needsTurbo() {
@@ -513,7 +513,7 @@ git commit -m "feat: model store with presence, paths and resumable-safe downloa
 Add `public var needsModelDownload: Bool` to `Config` as a computed property:
 `engine == .whispercpp && ModelStore.model(forPath: whispercpp.model).map { !ModelStore.isInstalled($0) } ?? true`.
 
-- [ ] **Step 2: Write the end-to-end test** (skipped when the model is absent)
+- [x] **Step 2: Write the end-to-end test** (skipped when the model is absent)
 
 ```swift
 import Testing
@@ -570,9 +570,9 @@ import Foundation
 }
 ```
 
-- [ ] **Step 3: Run both** — `swift test --filter "Language end to end"` → PASS, 2 tests.
+- [x] **Step 3: Run both** — `swift test --filter "Language end to end"` → PASS, 2 tests.
 
-- [ ] **Step 4: Update `Doctor.swift`** to print the resolved transcription model
+- [x] **Step 4: Update `Doctor.swift`** to print the resolved transcription model
 with its multilingual flag, and both cleanup models with the script each serves:
 
 ```
@@ -587,11 +587,11 @@ Cleanup
   arabic                   qwen2.5:3b
 ```
 
-- [ ] **Step 5: Update `AppDelegate`** — `makeCleanup` now returns the routed
+- [x] **Step 5: Update `AppDelegate`** — `makeCleanup` now returns the routed
 provider, and the fallback when the local engine has no model logs which model to
 download rather than failing silently.
 
-- [ ] **Step 6: Migrate the live config and verify by hand**
+- [x] **Step 6: Migrate the live config and verify by hand**
 
 ```bash
 make install
@@ -601,7 +601,7 @@ Expected: engine `whispercpp`, model `large-v3-turbo-q5_0`, language `auto`, and
 both cleanup models listed. The existing `~/.config/rawi/config.json` must still
 load — it carries the v1 `cleanup.model` key.
 
-- [ ] **Step 7: Full suite and commit**
+- [x] **Step 7: Full suite and commit**
 
 ```bash
 swift test
@@ -615,12 +615,12 @@ git commit -m "feat: one hotkey for English and Arabic via auto-detect and route
 
 Automated tests cannot hold the key or speak. After Task 5:
 
-- [ ] Hold `⌥Space`, speak English → correct text on the clipboard
-- [ ] Hold `⌥Space`, speak Arabic → **Arabic** text, not English, not empty
-- [ ] Speak a mixed sentence with English technical terms → both scripts survive
-- [ ] `~/Library/Logs/Rawi/rawi.log` shows the detected language and the cleanup model chosen
-- [ ] Round trip is ~2.8 s and feels acceptable in use
-- [ ] Deleting `~/.config/rawi/config.json` and relaunching writes a working config
+- [x] Hold `⌥Space`, speak English → correct text on the clipboard
+- [x] Hold `⌥Space`, speak Arabic → **Arabic** text, not English, not empty
+- [x] Speak a mixed sentence with English technical terms → both scripts survive
+- [x] `~/Library/Logs/Rawi/rawi.log` shows the detected language and the cleanup model chosen
+- [x] Round trip is ~2.8 s and feels acceptable in use
+- [x] Deleting `~/.config/rawi/config.json` and relaunching writes a working config
 
 ---
 

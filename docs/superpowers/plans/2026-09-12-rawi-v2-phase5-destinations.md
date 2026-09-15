@@ -77,8 +77,8 @@ Shipped defaults: Jira ticket, Google Docs, Slack DM, Slack, commit message
 register** — never about content, because the guard would reject that and
 should.
 
-- [ ] **Step 1:** Failing tests — defaults exist and are enabled, round-trip, a user rule can be added and removed, built-ins can be disabled but not deleted.
-- [ ] **Step 2–5:** verify failure, implement, verify pass, commit.
+- [x] **Step 1:** Failing tests — defaults exist and are enabled, round-trip, a user rule can be added and removed, built-ins can be disabled but not deleted.
+- [x] **Step 2–5:** verify failure, implement, verify pass, commit.
 
 ---
 
@@ -99,7 +99,7 @@ the same tier, the longer URL pattern wins — so `…/client/*/D*` (a Slack DM)
 beats `…/client/*` (any Slack), which is the entire reason DMs can be treated
 differently.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 @Test("a bundle-only rule matches its app")
@@ -112,7 +112,7 @@ differently.
 @Test("a glob is anchored, so slack.com does not match evilslack.com")
 ```
 
-- [ ] **Step 2–5:** verify failure, implement, verify pass, commit.
+- [x] **Step 2–5:** verify failure, implement, verify pass, commit.
 
 ---
 
@@ -131,10 +131,10 @@ Verified: Chrome answers in **0.16 s**. The timeout exists for the case where a
 browser is busy or has no window — measured error `-1719` — where the right
 answer is no rule, not a stalled dictation.
 
-- [ ] **Step 1:** Failing tests — a non-browser bundle returns nil without running a script; an unknown bundle returns nil; the scriptable map covers Chrome, Safari, Arc, Edge, Brave.
-- [ ] **Step 2:** Implement with `NSAppleScript` on a background queue and a hard timeout.
-- [ ] **Step 3:** A live test, skipped unless a browser with a window is running.
-- [ ] **Step 4–5:** verify, commit.
+- [x] **Step 1:** Failing tests — a non-browser bundle returns nil without running a script; an unknown bundle returns nil; the scriptable map covers Chrome, Safari, Arc, Edge, Brave.
+- [x] **Step 2:** Implement with `NSAppleScript` on a background queue and a hard timeout.
+- [x] **Step 3:** A live test, skipped unless a browser with a window is running.
+- [x] **Step 4–5:** verify, commit.
 
 ---
 
@@ -142,11 +142,11 @@ answer is no rule, not a stalled dictation.
 
 **Files:** `DictationController.swift`, `AppDelegate.swift`.
 
-- [ ] **Step 1:** Controller gains `destination: ((String?) -> DestinationRule?)?`, resolved at key-press alongside the app and vocabulary.
-- [ ] **Step 2:** The matched instruction is appended to the cleanup prompt, after the glossary.
-- [ ] **Step 3:** `HistoryEntry` gains `destination: String?` so history shows which rule shaped it.
-- [ ] **Step 4:** Failing tests — the instruction reaches the prompt; no match means no change; the guard still rejects a rule-driven cleanup that loses the dictation.
-- [ ] **Step 5–6:** verify, commit.
+- [x] **Step 1:** Controller gains `destination: ((String?) -> DestinationRule?)?`, resolved at key-press alongside the app and vocabulary.
+- [x] **Step 2:** The matched instruction is appended to the cleanup prompt, after the glossary.
+- [x] **Step 3:** `HistoryEntry` gains `destination: String?` so history shows which rule shaped it.
+- [x] **Step 4:** Failing tests — the instruction reaches the prompt; no match means no change; the guard still rejects a rule-driven cleanup that loses the dictation.
+- [x] **Step 5–6:** verify, commit.
 
 ---
 
@@ -157,19 +157,19 @@ answer is no rule, not a stalled dictation.
 Rule list with match, instruction and an enable toggle; the three-tier capability
 note behind the **ⓘ**; the rail grows to four.
 
-- [ ] **Step 1–4:** build, wire, install, verify by hand, commit.
+- [x] **Step 1–4:** build, wire, install, verify by hand, commit.
 
 ---
 
 ## Manual verification
 
-- [ ] Dictate into Slack — output is one short paragraph, no sign-off
-- [ ] Dictate into a Jira ticket in Chrome — the first Automation prompt appears; allow it; output is structured
-- [ ] Dictate into a Slack **DM** — shorter than a channel message
-- [ ] Dictate in Terminal — imperative mood, short first line
-- [ ] Disable a rule — output reverts to plain cleanup
-- [ ] History shows which destination shaped each entry
-- [ ] Deny the Automation prompt — dictation still works, no rule applied, no hang
+- [x] Dictate into Slack — output is one short paragraph, no sign-off
+- [x] Dictate into a Jira ticket in Chrome — the first Automation prompt appears; allow it; output is structured
+- [x] Dictate into a Slack **DM** — shorter than a channel message
+- [x] Dictate in Terminal — imperative mood, short first line
+- [x] Disable a rule — output reverts to plain cleanup
+- [x] History shows which destination shaped each entry
+- [x] Deny the Automation prompt — dictation still works, no rule applied, no hang
 
 ---
 

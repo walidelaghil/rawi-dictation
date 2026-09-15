@@ -168,6 +168,10 @@ Each phase ships something usable on its own.
 
 ## 9. Out of scope
 
-Commands / speech-to-action · auto-paste · field-level destinations ·
-learn-from-edits beyond the dictionary · streaming partial transcription ·
-accounts, sync, telemetry of any kind · Windows or Linux.
+Streaming partial transcription · accounts, sync, telemetry of any kind ·
+Windows or Linux.
+
+**Brought into scope after v2 shipped (2026-09-15),** once Accessibility could be
+granted on this Mac: auto-paste into a focused text field (copy and a ⌘V hint
+otherwise), learning dictionary spellings from the corrections you make, and —
+in progress — field-level destinations and Commands.

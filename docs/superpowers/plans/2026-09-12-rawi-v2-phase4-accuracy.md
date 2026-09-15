@@ -92,8 +92,8 @@ public final class VocabularyStore: @unchecked Sendable {
 }
 ```
 
-- [ ] **Step 1:** Write failing tests: round-trip, duplicate terms are rejected case-insensitively, `whisperPrompt` caps and never truncates mid-term, `glossaryClause` is empty with no terms.
-- [ ] **Step 2–5:** verify failure, implement, verify pass, commit — `feat: dictionary and snippet store`
+- [x] **Step 1:** Write failing tests: round-trip, duplicate terms are rejected case-insensitively, `whisperPrompt` caps and never truncates mid-term, `glossaryClause` is empty with no terms.
+- [x] **Step 2–5:** verify failure, implement, verify pass, commit — `feat: dictionary and snippet store`
 
 ---
 
@@ -111,7 +111,7 @@ punctuation cleanup adds. Longest trigger wins, so "my work email" beats
 "my email". Expansion is a single pass — an expansion containing another
 trigger is not re-expanded, because that is how you get a loop.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 @Test("expands a trigger") // "send it to my email" -> the address
@@ -124,7 +124,7 @@ trigger is not re-expanded, because that is how you get a loop.
 @Test("no snippets means the text is returned untouched")
 ```
 
-- [ ] **Step 2–5:** verify failure, implement, verify pass, commit — `feat: snippet expansion`
+- [x] **Step 2–5:** verify failure, implement, verify pass, commit — `feat: snippet expansion`
 
 ---
 
@@ -140,12 +140,12 @@ misses. Measured: *Sala→Salla*, which layer 1 did not rescue.
 
 Both are needed; either alone leaves errors.
 
-- [ ] **Step 1:** `WhisperCppEngine` gains `initialPrompt: String`; passed as `--prompt` only when non-empty.
-- [ ] **Step 2:** `RoutedCleanup` gains a `glossary: String` appended to the prompt it hands each provider.
-- [ ] **Step 3:** `DictationController` gains `vocabulary: (() -> VocabularySnapshot)?` so it can read terms and snippets at dictation time without owning the store.
-- [ ] **Step 4:** Tests assert the prompt reaches the process arguments and the glossary reaches the request body.
-- [ ] **Step 5:** Live test with the real model, asserting the dictionary changes the transcript.
-- [ ] **Step 6: Commit** — `feat: inject dictionary terms into both whisper and cleanup`
+- [x] **Step 1:** `WhisperCppEngine` gains `initialPrompt: String`; passed as `--prompt` only when non-empty.
+- [x] **Step 2:** `RoutedCleanup` gains a `glossary: String` appended to the prompt it hands each provider.
+- [x] **Step 3:** `DictationController` gains `vocabulary: (() -> VocabularySnapshot)?` so it can read terms and snippets at dictation time without owning the store.
+- [x] **Step 4:** Tests assert the prompt reaches the process arguments and the glossary reaches the request body.
+- [x] **Step 5:** Live test with the real model, asserting the dictionary changes the transcript.
+- [x] **Step 6: Commit** — `feat: inject dictionary terms into both whisper and cleanup`
 
 ---
 
@@ -169,8 +169,8 @@ A candidate is a token that recurs, is not a common word, is not already known, 
 is at least four characters. Capitalised mid-sentence tokens rank first — proper
 nouns are what whisper mangles, and they are what you want in the dictionary.
 
-- [ ] **Step 1:** Failing tests: recurrence threshold, stopwords excluded, known terms excluded, case-insensitive dedupe, Arabic tokens, ranking.
-- [ ] **Step 2–5:** verify failure, implement, verify pass, commit — `feat: suggest dictionary terms from recurring words in history`
+- [x] **Step 1:** Failing tests: recurrence threshold, stopwords excluded, known terms excluded, case-insensitive dedupe, Arabic tokens, ranking.
+- [x] **Step 2–5:** verify failure, implement, verify pass, commit — `feat: suggest dictionary terms from recurring words in history`
 
 ---
 
@@ -184,21 +184,21 @@ nouns are what whisper mangles, and they are what you want in the dictionary.
 - **History gains "Add to dictionary"** on a row, which is the user-initiated
   correction path that replaces the auto-learn we cannot build.
 
-- [ ] **Step 1–4:** build, wire, install, verify by hand.
-- [ ] **Step 5: Commit** — `feat: dictionary and snippets screens`
+- [x] **Step 1–4:** build, wire, install, verify by hand.
+- [x] **Step 5: Commit** — `feat: dictionary and snippets screens`
 
 ---
 
 ## Manual verification
 
-- [ ] Add "Salla" to the dictionary; dictate a sentence containing it; it comes out right
-- [ ] Add a snippet "my email"; say it mid-sentence; the address appears
-- [ ] Say a snippet trigger inside a longer word — it does not expand
-- [ ] An Arabic snippet expands
-- [ ] Dictate the same mangled proper noun three times; it appears as a suggestion
-- [ ] Accept a suggestion; it becomes a term
-- [ ] "Add to dictionary" from a History row works
-- [ ] Both screens render in light and dark
+- [x] Add "Salla" to the dictionary; dictate a sentence containing it; it comes out right
+- [x] Add a snippet "my email"; say it mid-sentence; the address appears
+- [x] Say a snippet trigger inside a longer word — it does not expand
+- [x] An Arabic snippet expands
+- [x] Dictate the same mangled proper noun three times; it appears as a suggestion
+- [x] Accept a suggestion; it becomes a term
+- [x] "Add to dictionary" from a History row works
+- [x] Both screens render in light and dark
 
 ---
 

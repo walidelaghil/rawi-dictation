@@ -73,7 +73,7 @@ public struct HistorySettings: Codable, Sendable, Equatable {
 are where a plaintext log is a genuine liability, so `1Password` and `Messages`
 are excluded out of the box rather than waiting for the user to think of it.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 @Suite("HistoryEntry") struct HistoryEntryTests {
@@ -113,8 +113,8 @@ are excluded out of the box rather than waiting for the user to think of it.
 }
 ```
 
-- [ ] **Step 2: Run to verify failure.** - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run tests.** - [ ] **Step 5: Commit** — `feat: history record and settings, with exclusions on by default`
+- [x] **Step 2: Run to verify failure.** - [x] **Step 3: Implement.**
+- [x] **Step 4: Run tests.** - [x] **Step 5: Commit** — `feat: history record and settings, with exclusions on by default`
 
 ---
 
@@ -143,7 +143,7 @@ At 500 rows, loading and scanning in memory is free.
 parse and keeps going — a truncated write during a crash should cost the last
 dictation, not the history.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 @Suite("HistoryStore") struct HistoryStoreTests {
@@ -224,7 +224,7 @@ dictation, not the history.
 }
 ```
 
-- [ ] **Step 2–5:** verify failure, implement, verify pass, commit — `feat: append-only history store that survives a corrupt line`
+- [x] **Step 2–5:** verify failure, implement, verify pass, commit — `feat: append-only history store that survives a corrupt line`
 
 ---
 
@@ -253,7 +253,7 @@ public enum HistorySearch {
 **Search covers raw *and* cleaned.** You remember what you said, not what came
 out — if cleanup removed "basically", searching for it must still find the entry.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 @Suite("HistorySearch") struct HistorySearchTests {
@@ -317,7 +317,7 @@ out — if cleanup removed "basically", searching for it must still find the ent
 }
 ```
 
-- [ ] **Step 2–5:** verify failure, implement, verify pass, commit — `feat: history search across both cleaned and raw text`
+- [x] **Step 2–5:** verify failure, implement, verify pass, commit — `feat: history search across both cleaned and raw text`
 
 ---
 
@@ -342,10 +342,10 @@ The History screen: a search field, script and app filters, and rows showing the
 cleaned text with the raw line beneath. The **ⓘ** beside the title holds the
 explanation, per the approved design. Copy re-copies; delete removes one entry.
 
-- [ ] **Step 1: Build the window and view.**
-- [ ] **Step 2:** Wire the menu's Settings gear to add **Open Rawi**, and make it show the window.
-- [ ] **Step 3:** `make install`, open the window, confirm it lists real dictations.
-- [ ] **Step 4: Commit** — `feat: app window with searchable history`
+- [x] **Step 1: Build the window and view.**
+- [x] **Step 2:** Wire the menu's Settings gear to add **Open Rawi**, and make it show the window.
+- [x] **Step 3:** `make install`, open the window, confirm it lists real dictations.
+- [x] **Step 4: Commit** — `feat: app window with searchable history`
 
 ---
 
@@ -353,7 +353,7 @@ explanation, per the approved design. Copy re-copies; delete removes one entry.
 
 **Files:** Modify `DictationController.swift`, `AppDelegate.swift`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 @MainActor @Suite("History recording") struct HistoryRecordingTests {
@@ -366,23 +366,23 @@ explanation, per the approved design. Copy re-copies; delete removes one entry.
 `DictationController` gains `public var onRecord: ((HistoryEntry) -> Void)?`, fired
 only after a successful insertion — the same rule Phase 2's Recent uses.
 
-- [ ] **Step 2–4:** verify failure, implement, verify pass.
-- [ ] **Step 5:** Frontmost app name and bundle ID come from `NSWorkspace`, captured at key-press. No permission needed.
-- [ ] **Step 6: Commit** — `feat: record every inserted dictation to history`
+- [x] **Step 2–4:** verify failure, implement, verify pass.
+- [x] **Step 5:** Frontmost app name and bundle ID come from `NSWorkspace`, captured at key-press. No permission needed.
+- [x] **Step 6: Commit** — `feat: record every inserted dictation to history`
 
 ---
 
 ## Manual verification
 
-- [ ] Dictate three times; open the window; all three are listed, newest first
-- [ ] Search a filler word that cleanup removed — the entry is found and the raw line shown
-- [ ] Search in Arabic — it matches
-- [ ] Filter by app and by language
-- [ ] Copy re-copies; ⌘V pastes it
-- [ ] Dictate into 1Password — **nothing is recorded**
-- [ ] Purge empties the list and the file
-- [ ] Switch to Light — the window follows, the pill stays dark
-- [ ] Quit and relaunch — history is still there
+- [x] Dictate three times; open the window; all three are listed, newest first
+- [x] Search a filler word that cleanup removed — the entry is found and the raw line shown
+- [x] Search in Arabic — it matches
+- [x] Filter by app and by language
+- [x] Copy re-copies; ⌘V pastes it
+- [x] Dictate into 1Password — **nothing is recorded**
+- [x] Purge empties the list and the file
+- [x] Switch to Light — the window follows, the pill stays dark
+- [x] Quit and relaunch — history is still there
 
 ---
 

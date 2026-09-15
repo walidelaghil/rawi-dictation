@@ -58,7 +58,7 @@ public enum ResolvedAppearance: String, Sendable, CaseIterable { case dark, ligh
 ```
 `Config` gains `public var appearance: Appearance` defaulting to `.system`, decoded tolerantly like every other key.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 import Testing
@@ -103,10 +103,10 @@ import AppKit
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — `swift test --filter AppearanceTests` → FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run tests** — PASS, 7 tests.
-- [ ] **Step 5: Commit** — `feat: appearance setting with system, dark and light`
+- [x] **Step 2: Run to verify failure** — `swift test --filter AppearanceTests` → FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run tests** — PASS, 7 tests.
+- [x] **Step 5: Commit** — `feat: appearance setting with system, dark and light`
 
 ---
 
@@ -136,7 +136,7 @@ public enum RawiColors {
 Values are the approved direction-A palette. Accents share chroma and lightness and
 vary only in hue, so none shouts over the others.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 import Testing
@@ -216,10 +216,10 @@ func contrastRatio(_ a: String, _ b: String) -> Double {
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — FAIL.
-- [ ] **Step 3: Implement.** Store hex per token per appearance in one table, so adding a token forces both values.
-- [ ] **Step 4: Run tests** — PASS, 7 tests. Tune the light palette until the contrast assertions hold; they are the specification, not a suggestion.
-- [ ] **Step 5: Commit** — `feat: semantic colour tokens with contrast-checked light and dark`
+- [x] **Step 2: Run to verify failure** — FAIL.
+- [x] **Step 3: Implement.** Store hex per token per appearance in one table, so adding a token forces both values.
+- [x] **Step 4: Run tests** — PASS, 7 tests. Tune the light palette until the contrast assertions hold; they are the specification, not a suggestion.
+- [x] **Step 5: Commit** — `feat: semantic colour tokens with contrast-checked light and dark`
 
 ---
 
@@ -244,7 +244,7 @@ else would arm it and swallow the click the user intended for the app behind.
 **Why slop:** a cursor resting exactly on the border should not flicker between
 armed and not.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 import Testing
@@ -314,12 +314,12 @@ import Foundation
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — FAIL.
-- [ ] **Step 3: Implement `PillProximity`.**
-- [ ] **Step 4: Run tests** — PASS, 7 tests.
-- [ ] **Step 5: Rewrite `PillWindow`.** `ignoresMouseEvents = true` by default; a 30 Hz timer feeds `NSEvent.mouseLocation` and the panel frame into `PillProximity`; on arming, set `ignoresMouseEvents = false` and expand. The panel keeps `canBecomeKey = false` — that has not changed and is still load-bearing.
-- [ ] **Step 6: Rewrite `PillView`** to the approved design, every colour from `RawiColors.pill(_:)`.
-- [ ] **Step 7: Run the full suite and commit** — `feat: click-through pill that arms only on a deliberate hover`
+- [x] **Step 2: Run to verify failure** — FAIL.
+- [x] **Step 3: Implement `PillProximity`.**
+- [x] **Step 4: Run tests** — PASS, 7 tests.
+- [x] **Step 5: Rewrite `PillWindow`.** `ignoresMouseEvents = true` by default; a 30 Hz timer feeds `NSEvent.mouseLocation` and the panel frame into `PillProximity`; on arming, set `ignoresMouseEvents = false` and expand. The panel keeps `canBecomeKey = false` — that has not changed and is still load-bearing.
+- [x] **Step 6: Rewrite `PillView`** to the approved design, every colour from `RawiColors.pill(_:)`.
+- [x] **Step 7: Run the full suite and commit** — `feat: click-through pill that arms only on a deliberate hover`
 
 ---
 
@@ -350,7 +350,7 @@ keyboard focus), Recent behind a disclosure, footer.
 
 An `NSPopover` hosts the SwiftUI view, anchored to the status item button.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```swift
 import Testing
@@ -376,11 +376,11 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — FAIL.
-- [ ] **Step 3: Implement `MenuActions` and `MenuPanelView`.**
-- [ ] **Step 4: Rewrite `MenuBarController`** to present the popover, keeping the existing behaviours: enable toggle, launch at login, permission warnings, open config, reveal logs, quit. Add the appearance picker.
-- [ ] **Step 5: Run tests** — PASS.
-- [ ] **Step 6: Commit** — `feat: menu bar dropdown matching the approved design`
+- [x] **Step 2: Run to verify failure** — FAIL.
+- [x] **Step 3: Implement `MenuActions` and `MenuPanelView`.**
+- [x] **Step 4: Rewrite `MenuBarController`** to present the popover, keeping the existing behaviours: enable toggle, launch at login, permission warnings, open config, reveal logs, quit. Add the appearance picker.
+- [x] **Step 5: Run tests** — PASS.
+- [x] **Step 6: Commit** — `feat: menu bar dropdown matching the approved design`
 
 ---
 
@@ -388,11 +388,11 @@ import Testing
 
 **Files:** Modify `Sources/Rawi/AppDelegate.swift`, `Sources/Rawi/Doctor.swift`.
 
-- [ ] **Step 1:** Apply `config.appearance` to `NSApp.appearance` at launch and whenever it changes; re-apply on config hot-reload.
-- [ ] **Step 2:** Observe `AppleInterfaceThemeChangedNotification` on `DistributedNotificationCenter` so `system` follows a live OS switch without a restart.
-- [ ] **Step 3:** Add `appearance` to the doctor output.
-- [ ] **Step 4:** `make install`, relaunch, confirm the doctor reports it.
-- [ ] **Step 5:** Commit — `feat: apply appearance at launch and follow live system changes`
+- [x] **Step 1:** Apply `config.appearance` to `NSApp.appearance` at launch and whenever it changes; re-apply on config hot-reload.
+- [x] **Step 2:** Observe `AppleInterfaceThemeChangedNotification` on `DistributedNotificationCenter` so `system` follows a live OS switch without a restart.
+- [x] **Step 3:** Add `appearance` to the doctor output.
+- [x] **Step 4:** `make install`, relaunch, confirm the doctor reports it.
+- [x] **Step 5:** Commit — `feat: apply appearance at launch and follow live system changes`
 
 ---
 
@@ -400,16 +400,16 @@ import Testing
 
 Automated tests cannot see. After Task 5:
 
-- [ ] Menu bar dropdown matches the approved design; hover each action to see its name
-- [ ] Tab to the actions — the name appears on keyboard focus too
-- [ ] Recent collapses and expands; the state persists while the popover is open
-- [ ] Switch appearance to Light — menu and window follow, **pill stays dark**
-- [ ] Switch to System, then flip macOS between light and dark — Rawi follows live
-- [ ] Text stays readable in both themes, everywhere
-- [ ] **Put a clickable button under the pill and click it while recording — the click lands**
-- [ ] Rest the cursor on the pill for a moment — it solidifies and expands
-- [ ] Move the cursor across the pill without stopping — it does not arm
-- [ ] `Commands` appears nowhere in the UI
+- [x] Menu bar dropdown matches the approved design; hover each action to see its name
+- [x] Tab to the actions — the name appears on keyboard focus too
+- [x] Recent collapses and expands; the state persists while the popover is open
+- [x] Switch appearance to Light — menu and window follow, **pill stays dark**
+- [x] Switch to System, then flip macOS between light and dark — Rawi follows live
+- [x] Text stays readable in both themes, everywhere
+- [x] **Put a clickable button under the pill and click it while recording — the click lands**
+- [x] Rest the cursor on the pill for a moment — it solidifies and expands
+- [x] Move the cursor across the pill without stopping — it does not arm
+- [x] `Commands` appears nowhere in the UI
 
 ---
 
