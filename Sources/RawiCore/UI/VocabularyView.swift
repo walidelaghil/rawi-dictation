@@ -80,7 +80,7 @@ public struct DictionaryScreen: View {
             ScreenHeader(title: "Dictionary", appearance: model.appearance,
                          showInfo: $model.showInfo,
                          info: "Rawi learns the names and jargon you use without being asked. "
-                             + "When you fix a word it typed — Sala to Salla — it learns the "
+                             + "When you fix a word it typed, say Sala to Salla, it learns the "
                              + "spelling you chose and uses it next time. It also notices names "
                              + "whisper spells differently from day to day. Ordinary English "
                              + "words are never learned: enforcing the wrong spelling is worse "
