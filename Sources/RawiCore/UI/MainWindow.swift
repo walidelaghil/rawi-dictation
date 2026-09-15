@@ -20,7 +20,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     private let destinations: DestinationsViewModel
     private let store: HistoryStore
     public let transforms: TransformsViewModel
-    private let insights: InsightsViewModel
+    public let insights: InsightsViewModel
     public let settings: SettingsViewModel
 
     public init(store: HistoryStore, vocabularyStore: VocabularyStore,

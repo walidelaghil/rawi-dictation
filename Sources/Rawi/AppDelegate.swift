@@ -226,6 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                  + (config.history.retentionDays == 0 ? "kept until the limit"
                     : "kept \(config.history.retentionDays) days"))
         vocabulary = VocabularyStore()
+        let profileCipher = cipher
         destinations = DestinationStore()
         transforms = TransformStore()
         mainWindow = MainWindow(
@@ -296,6 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         wireTransforms(env: env)
         wirePolish(env: env)
+        wireInsightsWriter(env: env)
         controller.onRecord = { [weak self] entry in
             guard let self else { return }
             guard self.config.history.enabled else { return }
@@ -310,6 +312,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.mainWindow.reload()
             self.menuBar.setRecent(self.recentFromHistory())
         }
+        mainWindow.insights.terms = { [weak self] in self?.vocabulary.terms.map(\.term) ?? [] }
+        mainWindow.insights.taught = { [weak self] in
+            self?.vocabulary.terms.filter(\.learnedFromCorrection).reversed().map(\.term) ?? []
+        }
+        mainWindow.insights.profileStore = VoiceProfileStore(cipher: profileCipher)
         menuBar = MenuBarController(controller: controller, log: log)
         publishHotkeyLabels()
         menuBar.onOpenWindow = { [weak self] in self?.mainWindow.show() }
@@ -400,6 +407,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .filter { $0.kind == .dictation }
             .prefix(limit)
             .map { RecentDictation(text: $0.cleaned, script: $0.script, at: $0.at) }
+    }
+
+    /// The model that writes the voice profile on Insights: the transform model,
+    /// since the job is writing, not cleaning. Nil when there is no model to ask.
+    private func wireInsightsWriter(env: DotEnv) {
+        let kind = config.cleanup.provider
+        let model = config.cleanup.transformModel.isEmpty ? config.cleanup.models.arabic
+                                                          : config.cleanup.transformModel
+        let key: String? = switch kind {
+        case .openai: env["OPENAI_API_KEY"]
+        case .anthropic: env["ANTHROPIC_API_KEY"]
+        case .ollama, .off: nil
+        }
+        guard kind != .off, kind == .ollama || !(key ?? "").isEmpty, !model.isEmpty else {
+            mainWindow.insights.writer = nil
+            return
+        }
+        mainWindow.insights.writer = { system, request in
+            try await ChatCleanup(kind: kind, apiKey: key, model: model, prompt: system,
+                                  wrap: { $0 }).clean(request, instruction: "")
+        }
     }
 
     /// The polisher, when the mode asks for one. Built here with the rest of the
@@ -883,7 +911,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if hotkeyChanged { startMonitoring() }
         publishHotkeyLabels()
         if transformsChanged { wireTransforms(env: env)
-        wirePolish(env: env) }
+        wirePolish(env: env)
+        wireInsightsWriter(env: env) }
         history.setRetention(days: config.history.retentionDays)
         applyAppearance()
         log.info("Config reloaded (engine=\(config.engine.rawValue), "
