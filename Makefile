@@ -1,8 +1,11 @@
 # Rawi build. TCC permission grants bind to the code signature, so an
 # ad-hoc identity ("-") means re-granting Accessibility and Input Monitoring on
-# every rebuild. Create a self-signed certificate once and pass it here to make
-# grants persist -- see README "Keeping permissions across rebuilds".
-SIGN_IDENTITY ?= -
+# every rebuild: the grant is pinned to one build's hash. A certificate named
+# "Rawi Local Signing" in the login keychain is used automatically when present,
+# which pins grants to the certificate instead -- see README "Keeping
+# permissions across rebuilds". Without one, the build falls back to ad-hoc.
+LOCAL_CERT    := Rawi Local Signing
+SIGN_IDENTITY ?= $(shell security find-certificate -c "$(LOCAL_CERT)" >/dev/null 2>&1 && echo "$(LOCAL_CERT)" || echo -)
 # ~/Applications needs no sudo, and TCC grants and login items behave identically
 # there. Override with INSTALL_DIR=/Applications if you prefer (needs admin).
 INSTALL_DIR   ?= $(HOME)/Applications
@@ -36,6 +39,7 @@ bundle: build
 	iconutil -c icns build/Rawi.iconset -o $(APP)/Contents/Resources/Rawi.icns
 	codesign --force --sign "$(SIGN_IDENTITY)" --timestamp=none $(APP)
 	@codesign -dv $(APP) 2>&1 | grep -E 'Identifier|Signature' || true
+	@codesign -dr - $(APP) 2>&1 | grep designated || true
 	@echo "Built $(APP)"
 
 install: bundle

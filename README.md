@@ -214,20 +214,38 @@ TCC permission grants are bound to an app's **code signature**. The default
 ad-hoc signature (`-`) changes on every build, so each `make install` looks like a
 brand-new app and you have to re-grant Accessibility and Input Monitoring.
 
-Fix it once with a self-signed certificate:
-
-1. Open **Keychain Access** → menu **Keychain Access → Certificate Assistant →
-   Create a Certificate…**
-2. Name: `Rawi Dev` · Identity Type: **Self Signed Root** · Certificate
-   Type: **Code Signing** → Create.
-3. Build with it from then on:
+Fix it once with a self-signed certificate named **`Rawi Local Signing`**.
+`make` picks it up automatically when it is in your login keychain, and falls
+back to ad-hoc when it is not:
 
 ```bash
-make install SIGN_IDENTITY="Rawi Dev"
+cat > cert.cnf <<'EOF'
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+CN = Rawi Local Signing
+[ext]
+basicConstraints = critical,CA:false
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+EOF
+openssl req -x509 -newkey rsa:2048 -nodes -keyout rawi.key -out rawi.crt -days 3650 -config cert.cnf
+openssl pkcs12 -export -legacy -inkey rawi.key -in rawi.crt -name "Rawi Local Signing" -out rawi.p12 -passout pass:rawi
+security import rawi.p12 -k ~/Library/Keychains/login.keychain-db -P rawi -T /usr/bin/codesign
+rm rawi.key rawi.p12 cert.cnf
 ```
 
-Grants now survive rebuilds. Put it in your shell profile if you like:
-`export SIGN_IDENTITY="Rawi Dev"`.
+`security find-identity -p codesigning` will list it as `CSSMERR_TP_NOT_TRUSTED`.
+That is expected and harmless: signing does not need the certificate to be
+trusted, and nothing here asks macOS to trust it.
+
+Check it worked: `make install` prints the designated requirement. Ad-hoc pins it
+to one build (`cdhash H"…"`); the certificate pins it to itself
+(`certificate leaf = H"…"`), which is what lets a grant outlive a rebuild. Grant
+the permissions **after** switching — a grant made to an ad-hoc build does not
+carry over.
 
 ---
 
