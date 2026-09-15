@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let inserter: TextInserter
     private let pill = PillWindow()
     private var setupWindow: SetupWindow?
+    private var checklistWasComplete = true
+    private var checklistTimer: Timer?
     /// Where launch time goes, logged once.
     private var launchMarks: [String] = []
     private let focusProbe = SystemFocusProbe()
@@ -103,6 +105,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // state unlogged for as long as the prompt sat on screen.
             self.learnTerms()
             self.logPermissions()
+            self.refreshChecklist()
+            self.checklistTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+                MainActor.assumeIsolated { self.refreshChecklist() }
+            }
             self.menuBar.refresh(state: .idle, permissions: Permissions.current())
             self.menuBar.setRecent(self.recentFromHistory())
             Task { @MainActor [weak self] in
@@ -125,16 +131,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// What setup still has outstanding, for the rail and the menu panel.
+    ///
+    /// Checked on a timer as well as at the obvious moments: permissions are granted
+    /// in another app, and a model finishes downloading in its own time, so nothing
+    /// here can wait to be told.
+    private func refreshChecklist() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let status = await SetupStatus.current(config: self.config)
+            let checklist = SetupChecklist.make(status: status, config: self.config)
+            self.mainWindow.setup.checklist = checklist
+            self.menuBar.setOutstanding(checklist.isComplete ? nil : checklist)
+            if checklist.isComplete != self.checklistWasComplete {
+                self.checklistWasComplete = checklist.isComplete
+                if !checklist.isComplete {
+                    self.log.warn("Setup outstanding: "
+                                  + checklist.outstanding.map { "\($0.title) — \($0.detail)" }
+                                      .joined(separator: " | "))
+                }
+            }
+        }
+    }
+
     /// First-run setup, also reachable later from the menu bar.
-    private func showSetup() {
+    private func showSetup(at step: SetupStep? = nil) {
         let window = setupWindow ?? SetupWindow()
         setupWindow = window
+        if let step { window.model.step = step }
         window.model.settings.onCapture = mainWindow.settings.onCapture
         window.model.launchedWithInputMonitoring = Permissions.current().inputMonitoring
             && monitor is HotkeyMonitor
         window.model.onFinish = { [weak self] in
             self?.setupWindow?.close()
             self?.log.info("Setup finished")
+            self?.refreshChecklist()
         }
         window.model.onRestart = { [weak self] in self?.relaunch() }
         window.show(appearance: config.appearance.resolved(systemIsDark: Appearance.systemIsDark))
@@ -326,6 +357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onUndo = { [weak self] in _ = self?.controller.undoTransform() }
         menuBar.onOpenSettings = { [weak self] in self?.mainWindow.show(.settings) }
         menuBar.onOpenSetup = { [weak self] in self?.showSetup() }
+        mainWindow.onOpenSetup = { [weak self] step in self?.showSetup(at: step) }
         // Let go of the global hotkeys while one is being recorded, or the key you
         // are trying to assign is swallowed by the key it is already assigned to.
         mainWindow.settings.onCapture = { [weak self] capturing in
@@ -919,6 +951,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wirePolish(env: env)
         wireInsightsWriter(env: env) }
         history.setRetention(days: config.history.retentionDays)
+        refreshChecklist()
         applyAppearance()
         log.info("Config reloaded (engine=\(config.engine.rawValue), "
                  + "cleanup=\(config.cleanup.provider.rawValue), hotkey=\(config.hotkey))")

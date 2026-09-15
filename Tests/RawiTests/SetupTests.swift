@@ -250,3 +250,117 @@ import SwiftUI
         }
     }
 }
+
+@Suite("What is still to do") struct SetupChecklistTests {
+    func status(mic: Bool = true, ax: Bool = true, whisper: Bool = true, model: Bool = true,
+                detector: Bool = true, ollama: Bool = true, missing: [String] = []) -> SetupStatus {
+        SetupStatus(microphone: mic, accessibility: ax, inputMonitoring: false, whisperInstalled: whisper,
+                    transcriptionModel: model, detectorModel: detector, ollamaReachable: ollama,
+                    ollamaMissing: missing)
+    }
+    var polishOn: Config { var c = Config.default; c.cleanup.provider = .ollama; return c }
+
+    @Test("a finished setup has nothing outstanding") func complete() {
+        let list = SetupChecklist.make(status: status(), config: polishOn)
+        #expect(list.isComplete)
+        #expect(!list.isBlocked)
+    }
+
+    @Test("what Rawi cannot work without is marked as blocking") func blocking() {
+        #expect(SetupChecklist.make(status: status(mic: false), config: polishOn).isBlocked)
+        #expect(SetupChecklist.make(status: status(model: false), config: polishOn).isBlocked)
+        // Skipping these costs you something, but dictation still works.
+        #expect(!SetupChecklist.make(status: status(ax: false), config: polishOn).isBlocked)
+        #expect(!SetupChecklist.make(status: status(detector: false), config: polishOn).isBlocked)
+    }
+
+    @Test("polish turned on but not working is said out loud, not silently ignored") func halfPolish() {
+        let missing = SetupChecklist.make(status: status(missing: ["qwen2.5:3b"]), config: polishOn)
+        #expect(!missing.isComplete)
+        #expect(missing.outstanding.first?.detail.contains("typing what it heard") == true)
+        let stopped = SetupChecklist.make(status: status(ollama: false, missing: ["qwen2.5:3b"]), config: polishOn)
+        #expect(stopped.outstanding.first?.detail.contains("Ollama is not running") == true)
+    }
+
+    @Test("polish turned off is a choice, not an outstanding item") func polishOff() {
+        var config = Config.default
+        config.cleanup.provider = .off
+        let list = SetupChecklist.make(status: status(ollama: false, missing: ["x"]), config: config)
+        #expect(list.isComplete)
+    }
+
+    @Test("every item points at the step that fixes it") func steps() {
+        let list = SetupChecklist.make(status: status(mic: false, ax: false, whisper: false, model: false,
+                                                      detector: false, ollama: false, missing: ["x"]),
+                                       config: polishOn)
+        #expect(list.outstanding.map(\.step) == [.microphone, .paste, .models, .models, .polish])
+    }
+}
+
+@MainActor
+@Suite("Complete setup proof") struct CompleteSetupProofTests {
+    @Test("complete setup proof", .enabled(if: ProcessInfo.processInfo.environment["RAWI_PROOF_CHECKLIST"] != nil))
+    func proof() throws {
+        let out = URL(fileURLWithPath: ProcessInfo.processInfo.environment["RAWI_PROOF_CHECKLIST"]!)
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let window = MainWindow(store: HistoryStore(url: dir.appendingPathComponent("h.jsonl")),
+                                vocabularyStore: VocabularyStore(url: dir.appendingPathComponent("v.json")),
+                                destinationStore: DestinationStore(url: dir.appendingPathComponent("d.json")),
+                                transformStore: TransformStore(url: dir.appendingPathComponent("t.json")),
+                                appearance: .dark)
+        var config = Config.default
+        config.cleanup.provider = .ollama
+        window.setup.checklist = SetupChecklist.make(
+            status: SetupStatus(microphone: true, accessibility: false, inputMonitoring: false,
+                                whisperInstalled: true, transcriptionModel: false, detectorModel: true,
+                                ollamaReachable: true, ollamaMissing: ["qwen2.5:3b"]),
+            config: config)
+        let host = NSHostingView(rootView: window.testRootView())
+        host.frame = NSRect(x: 0, y: 0, width: 980, height: 620)
+        host.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        host.layoutSubtreeIfNeeded()
+        let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+        host.cacheDisplay(in: host.bounds, to: rep)
+
+        let panel = MenuPanelModel()
+        panel.setupOutstanding = window.setup.checklist
+        panel.recent = [RecentDictation(text: "Move the launch to Tuesday", script: .latin)]
+        panel.labels = HotkeyLabels(dictate: "⌥", transform: "⌥⌘Space", cancel: "⌥esc")
+        let panelHost = NSHostingView(rootView: MenuPanelView(model: panel))
+        panelHost.frame = NSRect(x: 0, y: 0, width: 340, height: 320)
+        panelHost.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        let panelRep = panelHost.bitmapImageRepForCachingDisplay(in: panelHost.bounds)!
+        panelHost.cacheDisplay(in: panelHost.bounds, to: panelRep)
+
+        let gap: CGFloat = 14
+        let size = NSSize(width: host.bounds.width + panelHost.bounds.width + gap * 3,
+                          height: max(host.bounds.height, panelHost.bounds.height) + gap * 2)
+        let sheet = NSImage(size: size, flipped: false) { _ in
+            NSColor(white: 0.45, alpha: 1).setFill()
+            NSRect(origin: .zero, size: size).fill()
+            NSImage(size: host.bounds.size, flipped: false) { _ in rep.draw(); return true }
+                .draw(at: NSPoint(x: gap, y: gap), from: .zero, operation: .sourceOver, fraction: 1)
+            NSImage(size: panelHost.bounds.size, flipped: false) { _ in panelRep.draw(); return true }
+                .draw(at: NSPoint(x: host.bounds.width + gap * 2, y: size.height - gap - panelHost.bounds.height),
+                      from: .zero, operation: .sourceOver, fraction: 1)
+            return true
+        }
+        try NSBitmapImageRep(data: sheet.tiffRepresentation!)!.representation(using: .png, properties: [:])!.write(to: out)
+    }
+}
+
+@Suite("Checklist rows are distinct") struct ChecklistIdentityTests {
+    @Test("two items on one step still have their own identity") func ids() {
+        var config = Config.default
+        config.cleanup.provider = .ollama
+        let list = SetupChecklist.make(
+            status: SetupStatus(microphone: true, accessibility: true, inputMonitoring: true,
+                                whisperInstalled: true, transcriptionModel: false, detectorModel: false,
+                                ollamaReachable: true, ollamaMissing: []),
+            config: config)
+        #expect(Set(list.items.map(\.id)).count == list.items.count)
+        #expect(list.items.filter { $0.step == .models }.count == 2)
+    }
+}

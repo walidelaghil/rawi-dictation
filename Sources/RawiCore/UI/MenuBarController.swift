@@ -31,7 +31,14 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
     /// Opens the window on its Settings screen. The gear keeps the few items that
     /// belong in a menu — the ones that act rather than configure.
     public var onOpenSettings: (() -> Void)?
-    public var onOpenSetup: (() -> Void)?
+    public var onOpenSetup: (() -> Void)? {
+        didSet { panel.onOpenSetup = onOpenSetup }
+    }
+
+    /// What setup still has outstanding, or nil when it is done.
+    public func setOutstanding(_ checklist: SetupChecklist?) {
+        panel.setupOutstanding = checklist
+    }
 
     public init(controller: DictationController, log: any Logging) {
         self.controller = controller

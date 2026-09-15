@@ -21,6 +21,13 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     private let store: HistoryStore
     public let transforms: TransformsViewModel
     public let insights: InsightsViewModel
+    /// What setup still has outstanding, shown in the rail.
+    public let setup = SetupChecklistModel()
+    /// Opens the setup window at a step.
+    public var onOpenSetup: ((SetupStep) -> Void)? {
+        get { setup.onOpen }
+        set { setup.onOpen = newValue }
+    }
     public let settings: SettingsViewModel
 
     public init(store: HistoryStore, vocabularyStore: VocabularyStore,
@@ -105,7 +112,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     public func testRootView() -> some View {
         MainWindowView(history: model, vocabulary: vocabulary, destinations: destinations,
                        transforms: transforms, insights: insights, settings: settings,
-                       selection: selection)
+                       selection: selection, setup: setup)
     }
 
     public func close() { window?.close() }
@@ -126,7 +133,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
             rootView: MainWindowView(history: model, vocabulary: vocabulary,
                                      destinations: destinations, transforms: transforms,
                                      insights: insights, settings: settings,
-                                     selection: selection))
+                                     selection: selection, setup: setup))
         window.appearance = NSAppearance(
             named: model.appearance == .dark ? .darkAqua : .aqua)
         return window
@@ -171,6 +178,7 @@ struct MainWindowView: View {
     @ObservedObject var insights: InsightsViewModel
     @ObservedObject var settings: SettingsViewModel
     @ObservedObject var selection: ScreenSelection
+    @ObservedObject var setup: SetupChecklistModel
     private var screen: Screen { selection.screen }
 
     private func c(_ token: ColorToken) -> Color {
@@ -218,6 +226,8 @@ struct MainWindowView: View {
 
             Spacer()
 
+            SetupChecklistCard(model: setup, appearance: history.appearance)
+
             VStack(alignment: .leading, spacing: 3) {
                 Text("Stays on this Mac")
                     .font(.system(size: TypeScale.small, weight: .semibold))
@@ -251,5 +261,60 @@ struct MainWindowView: View {
         .padding(.horizontal, 9).padding(.vertical, 7)
         .background(RoundedRectangle(cornerRadius: Radius.control)
             .fill(selected ? c(.raised) : .clear))
+    }
+}
+
+
+/// The rail's "Complete setup" list.
+@MainActor
+public final class SetupChecklistModel: ObservableObject {
+    @Published public var checklist: SetupChecklist?
+    public var onOpen: ((SetupStep) -> Void)?
+    public init() {}
+}
+
+struct SetupChecklistCard: View {
+    @ObservedObject var model: SetupChecklistModel
+    let appearance: ResolvedAppearance
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
+
+    var body: some View {
+        if let checklist = model.checklist, !checklist.isComplete {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 6) {
+                    Text("Complete setup")
+                        .font(.system(size: TypeScale.small, weight: .semibold))
+                        .foregroundStyle(c(.saffron))
+                    Spacer()
+                    Text("\(checklist.items.count - checklist.outstanding.count)/\(checklist.items.count)")
+                        .font(.system(size: TypeScale.micro).monospacedDigit())
+                        .foregroundStyle(c(.faint))
+                }
+                ForEach(checklist.items) { item in
+                    Button { model.onOpen?(item.step) } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 7) {
+                            Image(systemName: item.done ? "checkmark.circle.fill"
+                                  : item.required ? "exclamationmark.circle" : "circle")
+                                .font(.system(size: TypeScale.small))
+                                .foregroundStyle(item.done ? c(.verdigris)
+                                                 : item.required ? c(.clay) : c(.faint))
+                            Text(item.title)
+                                .font(.system(size: TypeScale.small))
+                                .foregroundStyle(item.done ? c(.faint) : c(.bone))
+                                .strikethrough(item.done, color: c(.faint))
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(item.done ? "Done" : item.detail)
+                }
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.raised))
+                .overlay(RoundedRectangle(cornerRadius: Radius.control)
+                    .strokeBorder(c(.saffron).opacity(checklist.isBlocked ? 0.55 : 0.3))))
+            .padding(.bottom, 4)
+        }
     }
 }

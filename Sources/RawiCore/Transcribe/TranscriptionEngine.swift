@@ -25,8 +25,9 @@ public enum TranscriptionError: Error, LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .binaryNotFound(let b): "whisper-cli not found (looked for “\(b)”)"
-        case .modelNotFound(let m): "Whisper model not found at \(m)"
+        // Plain words: this reaches the pill, where a file path helps nobody.
+        case .binaryNotFound: "whisper.cpp is not installed"
+        case .modelNotFound: "The speech model is not downloaded"
         case .processFailed(let code, let tail): "whisper-cli exited \(code): \(tail)"
         case .serverRejected(let status, let detail):
             status == 400

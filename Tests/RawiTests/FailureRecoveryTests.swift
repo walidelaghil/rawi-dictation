@@ -45,7 +45,7 @@ func waitUntil(_ timeout: Duration = .seconds(5),
         await ctl.handle(.endedHold)
         #expect(store.all().count == 1)
         #expect(store.all().first?.kind == .failed)
-        #expect(store.all().first?.failure?.contains("whisper-cli") == true)
+        #expect(store.all().first?.failure?.contains("whisper") == true)
     }
 
     @Test("the audio it kept is named in the entry, not only in a log file")

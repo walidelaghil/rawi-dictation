@@ -13,11 +13,15 @@ public final class MenuPanelModel: ObservableObject {
     @Published public var motion: MarkMotion = .rest
     /// The shortcuts as bound, not as defaulted.
     @Published public var labels: HotkeyLabels = .placeholder
+    /// Set when something from setup is still outstanding. The footer then offers
+    /// to finish it rather than opening the window on a screen that will not say so.
+    @Published public var setupOutstanding: SetupChecklist?
 
     public var onAction: ((String) -> Void)?
     public var onCopy: ((RecentDictation) -> Void)?
     public var onSettings: (() -> Void)?
     public var onOpenWindow: (() -> Void)?
+    public var onOpenSetup: (() -> Void)?
     public var onQuit: (() -> Void)?
     public var onUndo: (() -> Void)?
     @Published public var canUndo = false
@@ -283,8 +287,20 @@ public struct MenuPanelView: View {
 
     private var footer: some View {
         HStack(spacing: 14) {
-            Button { model.onOpenWindow?() } label: {
-                Text("Open Rawi").font(.system(size: TypeScale.body)).foregroundStyle(c(.muted))
+            Button {
+                model.setupOutstanding == nil ? model.onOpenWindow?() : model.onOpenSetup?()
+            } label: {
+                if let outstanding = model.setupOutstanding {
+                    HStack(spacing: 6) {
+                        Image(systemName: outstanding.isBlocked ? "exclamationmark.circle.fill" : "circle.dashed")
+                            .font(.system(size: TypeScale.small))
+                        Text("Complete setup").font(.system(size: TypeScale.body, weight: .medium))
+                    }
+                    .foregroundStyle(c(.saffron))
+                    .help(outstanding.outstanding.map(\.title).joined(separator: ", ") + " still to do")
+                } else {
+                    Text("Open Rawi").font(.system(size: TypeScale.body)).foregroundStyle(c(.muted))
+                }
             }
             .buttonStyle(.plain)
             Button { model.onSettings?() } label: {
