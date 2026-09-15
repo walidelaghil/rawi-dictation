@@ -8,7 +8,7 @@ public enum RecordingMode: Equatable, Sendable { case pushToTalk, handsFree }
 
 /// What the recording is for. Captured at key-press, because it is the key you
 /// pressed that decides — not anything discoverable later from the audio.
-public enum RecordingIntent: Equatable, Sendable { case dictate, transform }
+public enum RecordingIntent: Equatable, Sendable { case dictate, transform, command }
 
 public enum DictationState: Equatable, Sendable {
     case idle
@@ -211,6 +211,12 @@ public final class DictationController {
 
     /// Esc. Drops a recording, or aborts work already running.
     public func cancelRequested() async {
+        // A confirmation waiting for you is the first thing Esc should drop.
+        if commandRunner?.cancel() == true {
+            log.info("Command cancelled")
+            state = .idle
+            return
+        }
         switch state {
         case .error:
             state = .idle                    // Esc acknowledges a failure
@@ -405,6 +411,13 @@ public final class DictationController {
         if capturedIntent == .transform {
             try? FileManager.default.removeItem(at: recording.url)
             await runTransform(spoken: raw)
+            return
+        }
+        // A command is not text either: what you said names an action, and the
+        // words never reach your document.
+        if capturedIntent == .command {
+            try? FileManager.default.removeItem(at: recording.url)
+            await runCommand(spoken: raw)
             return
         }
         await finishText(raw, recordingURL: recording.url,
@@ -642,6 +655,43 @@ public final class DictationController {
             let message = (error as? TransformError)?.errorDescription ?? "Transform failed"
             state = .error(message)
         }
+    }
+
+    /// Runs what you said as a command, or says why it could not.
+    public var commandRunner: CommandRunner?
+
+    private func runCommand(spoken: String) async {
+        guard let commandRunner else {
+            state = .error("Commands are not set up")
+            return
+        }
+        do {
+            let message = try await commandRunner.heard(spoken)
+            log.info("Command: \(message)")
+            state = .notice(message)
+            scheduleErrorClear()
+        } catch {
+            log.warn("Command: \(error.localizedDescription)")
+            state = .error(error.localizedDescription)
+        }
+    }
+
+    /// The command key again, while a confirmation is showing: yes.
+    public func confirmCommand() async -> Bool {
+        guard let commandRunner, commandRunner.pending != nil else { return false }
+        do {
+            guard let message = try await commandRunner.confirm() else {
+                state = .idle
+                return true
+            }
+            log.info("Command ran: \(message)")
+            state = .notice(message)
+            scheduleErrorClear()
+        } catch {
+            log.warn("Command failed: \(error.localizedDescription)")
+            state = .error(error.localizedDescription)
+        }
+        return true
     }
 
     /// A failed dictation, with the audio that outlived it.

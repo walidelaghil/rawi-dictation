@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusProbe = SystemFocusProbe()
     private var history: HistoryStore!
     private var vocabulary: VocabularyStore!
+    private var commands: CommandStore!
     private var destinations: DestinationStore!
     private var transforms: TransformStore!
     private var mainWindow: MainWindow!
@@ -40,6 +41,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                         minHold: .milliseconds(250))
     /// Its own pattern: a transform hold must not be read as the second tap of a
     /// dictation, and vice versa.
+    private var commandMonitor: CarbonHotkeyMonitor?
+    private var commandTapPattern = TapPattern(doubleTapWindow: .milliseconds(350),
+                                               minHold: .milliseconds(250))
     private var transformTapPattern = TapPattern(doubleTapWindow: .milliseconds(350),
                                                  minHold: .milliseconds(250))
 
@@ -261,9 +265,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let profileCipher = cipher
         destinations = DestinationStore()
         transforms = TransformStore()
+        commands = CommandStore()
         mainWindow = MainWindow(
             store: history, vocabularyStore: vocabulary, destinationStore: destinations,
-            transformStore: transforms,
+            transformStore: transforms, commandStore: commands,
             appearance: config.appearance.resolved(systemIsDark: Appearance.systemIsDark))
         let engine = makeEngine(env: env)
         warmEngine(engine)
@@ -351,6 +356,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.vocabulary.terms.filter(\.learnedFromCorrection).reversed().map(\.term) ?? []
         }
         mainWindow.insights.profileStore = VoiceProfileStore(cipher: profileCipher)
+        let performer = SystemCommandPerformer(env: env)
+        controller.commandRunner = CommandRunner(store: commands, performer: performer)
+        mainWindow.commands.perform = { action, text in try await performer.perform(action, text: text) }
+        mainWindow.commands.key = HotkeyConfig.symbolic(config.commandHotkey)
         menuBar = MenuBarController(controller: controller, log: log)
         publishHotkeyLabels()
         menuBar.onOpenWindow = { [weak self] in self?.mainWindow.show() }
@@ -406,7 +415,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // in the app said so.
         let bound = config.effectiveDictateHotkey(inputMonitoringGranted: granted)
         let assignments = [("Dictate", bound), ("Transform clipboard", config.transformHotkey),
-                           ("Cancel", config.cancelHotkey)]
+                           ("Speak a command", config.commandHotkey), ("Cancel", config.cancelHotkey)]
         let clashing = HotkeyConfig.clashes(in: assignments)
         if !clashing.isEmpty {
             log.warn("""
@@ -637,6 +646,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Outside the catch on purpose: dictation failing to bind is no reason for
         // transforms to lose their key too.
         startTransformHotkey(dictateKey: activeDictateKey)
+        startCommandHotkey(dictateKey: activeDictateKey)
     }
 
     private func startEventTap() throws {
@@ -764,6 +774,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         transformMonitor = monitor
         log.info("Transform on \(config.transformHotkey) (no permissions required)")
+    }
+
+    /// The command key, on its own Carbon registration like the transform key.
+    private func startCommandHotkey(dictateKey: HotkeyMatcher?) {
+        commandMonitor?.stop()
+        commandMonitor = nil
+        guard case .keyCode(let code, let mods)? = HotkeyConfig.parse(config.commandHotkey) else {
+            log.warn("commandHotkey “\(config.commandHotkey)” is not a modifier+key combination; "
+                     + "commands have no key.")
+            return
+        }
+        if case .keyCode(let dc, let dm)? = dictateKey, dc == code, dm == mods {
+            log.warn("commandHotkey “\(config.commandHotkey)” is the dictation hotkey; "
+                     + "commands have no key until one of them changes.")
+            return
+        }
+        let monitor = CarbonHotkeyMonitor(
+            keyCode: nil, modifiers: [],
+            transformKeyCode: code, transformModifiers: mods,
+            onTransformPress: {
+                MainActor.assumeIsolated {
+                    // The same key answers a confirmation that is already on screen.
+                    let press: @MainActor () -> Void = {
+                        self.feed(self.commandTapPattern.press(at: .now), intent: .command)
+                    }
+                    Task { @MainActor [controller = self.controller] in
+                        let answered = await controller?.confirmCommand() ?? false
+                        if !answered { press() }
+                    }
+                }
+            },
+            onTransformRelease: {
+                MainActor.assumeIsolated {
+                    guard self.controller.commandRunner?.pending == nil else { return }
+                    self.feed(self.commandTapPattern.release(at: .now), intent: .command)
+                }
+            })
+        do { try monitor.start() } catch {
+            log.warn("Command hotkey failed to register: \(error.localizedDescription)")
+            return
+        }
+        guard monitor.transformRegistered else {
+            log.warn("Another app already owns \(config.commandHotkey); change commandHotkey in "
+                     + "\(Config.configFile.path).")
+            return
+        }
+        commandMonitor = monitor
+        log.info("Commands on \(config.commandHotkey) (no permissions required)")
     }
 
     private func feed(_ outcome: TapOutcome, intent: RecordingIntent = .dictate) {
@@ -932,6 +990,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let hotkeyChanged = reloaded.hotkey != config.hotkey
             || reloaded.transformHotkey != config.transformHotkey
+            || reloaded.commandHotkey != config.commandHotkey
         let transformsChanged = reloaded.cleanup != config.cleanup
         config = reloaded
         let env = DotEnv.load(from: Config.envFile)

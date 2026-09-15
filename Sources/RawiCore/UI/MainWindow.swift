@@ -20,6 +20,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     private let destinations: DestinationsViewModel
     private let store: HistoryStore
     public let transforms: TransformsViewModel
+    public let commands: CommandsViewModel
     public let insights: InsightsViewModel
     /// What setup still has outstanding, shown in the rail.
     public let setup = SetupChecklistModel()
@@ -32,12 +33,13 @@ public final class MainWindow: NSObject, NSWindowDelegate {
 
     public init(store: HistoryStore, vocabularyStore: VocabularyStore,
                 destinationStore: DestinationStore, transformStore: TransformStore,
-                appearance: ResolvedAppearance) {
+                commandStore: CommandStore = CommandStore(), appearance: ResolvedAppearance) {
         self.store = store
         self.model = HistoryViewModel(store: store)
         self.vocabulary = VocabularyViewModel(store: vocabularyStore, history: store)
         self.destinations = DestinationsViewModel(store: destinationStore)
         self.transforms = TransformsViewModel(store: transformStore)
+        self.commands = CommandsViewModel(store: commandStore)
         self.insights = InsightsViewModel(store: store)
         self.settings = SettingsViewModel()
         super.init()
@@ -45,6 +47,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         vocabulary.appearance = appearance
         destinations.appearance = appearance
         transforms.appearance = appearance
+        commands.appearance = appearance
         insights.appearance = appearance
         settings.appearance = appearance
     }
@@ -71,6 +74,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         vocabulary.appearance = appearance
         destinations.appearance = appearance
         transforms.appearance = appearance
+        commands.appearance = appearance
         insights.appearance = appearance
         settings.appearance = appearance
         window?.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
@@ -111,8 +115,8 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     /// hides density problems that only appear next to the rail at 980 points.
     public func testRootView() -> some View {
         MainWindowView(history: model, vocabulary: vocabulary, destinations: destinations,
-                       transforms: transforms, insights: insights, settings: settings,
-                       selection: selection, setup: setup)
+                       transforms: transforms, commands: commands, insights: insights,
+                       settings: settings, selection: selection, setup: setup)
     }
 
     public func close() { window?.close() }
@@ -132,7 +136,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         window.contentView = NSHostingView(
             rootView: MainWindowView(history: model, vocabulary: vocabulary,
                                      destinations: destinations, transforms: transforms,
-                                     insights: insights, settings: settings,
+                                     commands: commands, insights: insights, settings: settings,
                                      selection: selection, setup: setup))
         window.appearance = NSAppearance(
             named: model.appearance == .dark ? .darkAqua : .aqua)
@@ -151,6 +155,7 @@ public final class ScreenSelection: ObservableObject {
 public enum Screen: String, CaseIterable {
     case history = "History"
     case transforms = "Transforms"
+    case commands = "Commands"
     case insights = "Insights"
     case dictionary = "Dictionary"
     case snippets = "Snippets"
@@ -161,6 +166,7 @@ public enum Screen: String, CaseIterable {
         switch self {
         case .history: "clock"
         case .transforms: "wand.and.sparkles"
+        case .commands: "bolt"
         case .insights: "chart.bar"
         case .dictionary: "character.book.closed"
         case .snippets: "scissors"
@@ -175,6 +181,7 @@ struct MainWindowView: View {
     @ObservedObject var vocabulary: VocabularyViewModel
     @ObservedObject var destinations: DestinationsViewModel
     @ObservedObject var transforms: TransformsViewModel
+    @ObservedObject var commands: CommandsViewModel
     @ObservedObject var insights: InsightsViewModel
     @ObservedObject var settings: SettingsViewModel
     @ObservedObject var selection: ScreenSelection
@@ -192,6 +199,7 @@ struct MainWindowView: View {
             switch screen {
             case .history: HistoryView(model: history)
             case .transforms: TransformsView(model: transforms)
+            case .commands: CommandsView(model: commands)
             case .insights: InsightsView(model: insights)
             case .dictionary: DictionaryScreen(model: vocabulary)
             case .snippets: SnippetsScreen(model: vocabulary)

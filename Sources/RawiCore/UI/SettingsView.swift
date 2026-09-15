@@ -43,12 +43,13 @@ public final class SettingsViewModel: ObservableObject {
     /// Which keys exist, in the order the screen lists them. The label is what a
     /// clash is reported against, so it is the user's word for the key.
     public enum Key: String, CaseIterable {
-        case dictate, transform, cancel
+        case dictate, transform, command, cancel
 
         public var label: String {
             switch self {
             case .dictate: "Dictate"
             case .transform: "Transform clipboard"
+            case .command: "Speak a command"
             case .cancel: "Cancel"
             }
         }
@@ -57,6 +58,7 @@ public final class SettingsViewModel: ObservableObject {
             switch self {
             case .dictate: "Hold to speak. Double-tap for hands-free."
             case .transform: "Hold, say what to do with the clipboard."
+            case .command: "Hold, say a command. Nothing is typed."
             case .cancel: "Drops a recording, or stops work already running."
             }
         }
@@ -115,6 +117,7 @@ public final class SettingsViewModel: ObservableObject {
         case .dictate: config.effectiveDictateHotkey(
             inputMonitoringGranted: inputMonitoringGranted)
         case .transform: config.transformHotkey
+        case .command: config.commandHotkey
         case .cancel: config.cancelHotkey
         }
     }
@@ -180,6 +183,7 @@ public final class SettingsViewModel: ObservableObject {
             // get on a Mac that cannot grant Input Monitoring.
             if HotkeyConfig.isCarbonCompatible(raw) { config.fallbackHotkey = raw }
         case .transform: config.transformHotkey = raw
+        case .command: config.commandHotkey = raw
         case .cancel: config.cancelHotkey = raw
         }
         save()

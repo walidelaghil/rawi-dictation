@@ -220,6 +220,9 @@ public struct Config: Codable, Sendable, Equatable {
     /// Registered through Carbon whichever backend dictation uses, because Carbon
     /// needs no permission — the transform key should not depend on one.
     public var transformHotkey: String
+    /// Hold to speak a command. Its own key on purpose: a phrase you dictate must
+    /// never be mistaken for a command you meant.
+    public var commandHotkey: String = "ctrl+option+c"
     public var engine: EngineKind
     public var whispercpp: WhisperCppSettings
     public var api: APISettings
@@ -238,6 +241,7 @@ public struct Config: Codable, Sendable, Equatable {
                 fallbackHotkey: String = "ctrl+option+space",
                 cancelHotkey: String = "ctrl+option+escape",
                 transformHotkey: String = "ctrl+option+t",
+                commandHotkey: String = "ctrl+option+c",
                 engine: EngineKind,
                 whispercpp: WhisperCppSettings, api: APISettings,
                 cleanup: CleanupSettings, output: OutputSettings,
@@ -252,6 +256,7 @@ public struct Config: Codable, Sendable, Equatable {
         self.fallbackHotkey = fallbackHotkey
         self.cancelHotkey = cancelHotkey
         self.transformHotkey = transformHotkey
+        self.commandHotkey = commandHotkey
         self.engine = engine
         self.whispercpp = whispercpp
         self.api = api
@@ -281,6 +286,7 @@ public struct Config: Codable, Sendable, Equatable {
         cancelHotkey = try c.decodeIfPresent(String.self, forKey: .cancelHotkey) ?? d.cancelHotkey
         transformHotkey = try c.decodeIfPresent(String.self, forKey: .transformHotkey)
             ?? d.transformHotkey
+        commandHotkey = try c.decodeIfPresent(String.self, forKey: .commandHotkey) ?? d.commandHotkey
         engine = try c.decodeIfPresent(EngineKind.self, forKey: .engine) ?? d.engine
         whispercpp = try c.decodeIfPresent(WhisperCppSettings.self, forKey: .whispercpp)
             ?? d.whispercpp
