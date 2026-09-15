@@ -1,0 +1,289 @@
+<title>Rawi Meter Ballistics</title>
+<style>
+  :root {
+    --ink: #12161C; --surface: #1A1F27; --raised: #232933; --edge: #333B47;
+    --bone: #E7EBF0; --muted: #A3AEBD; --faint: #86909C;
+    --saffron: #E0A039; --lapis: #9084F0;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ink); color: var(--bone);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    padding-inline: 20px; padding-block: 32px 48px;
+  }
+  main { max-width: 760px; margin: 0 auto; display: grid; gap: 28px; }
+  h1 { font-size: 26px; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.01em; text-wrap: balance; }
+  .lede { color: var(--muted); max-width: 62ch; margin: 0; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+
+  .compare { display: grid; gap: 14px; }
+  .lane {
+    display: grid; grid-template-columns: 150px 1fr; gap: 18px; align-items: center;
+    background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; padding: 16px 18px;
+  }
+  .lane h2 { font-size: 13px; font-weight: 600; margin: 0; }
+  .lane .how { font-size: 12px; color: var(--faint); margin: 3px 0 0; }
+  .lane.proposed h2 { color: var(--saffron); }
+  .stage { display: grid; gap: 10px; min-width: 0; }
+
+  /* The pill, drawn as Rawi draws it. */
+  .pill {
+    justify-self: start; display: inline-flex; align-items: center; gap: 10px;
+    background: rgba(18, 22, 28, .94); border: 1px solid var(--edge); border-radius: 999px;
+    padding: 9px 15px; box-shadow: 0 4px 12px rgba(0,0,0,.38);
+  }
+  .pill .label { font-size: 14px; font-weight: 500; }
+  .pill .time { font-size: 12px; color: var(--muted); }
+  .mark { width: 17px; height: 17px; }
+  .bars { display: flex; align-items: center; gap: 2px; height: 15px; }
+  .bars i { display: block; width: 2px; border-radius: 1px; background: var(--edge); }
+
+  canvas.trace { width: 100%; height: 56px; display: block; border-radius: 9px; background: var(--ink); }
+
+  .controls {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px 22px;
+    background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; padding: 16px 18px;
+  }
+  .controls .full { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .controls label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  .controls label span.val { color: var(--bone); }
+  input[type=range] { width: 100%; accent-color: var(--saffron); }
+  button {
+    font: inherit; font-size: 13px; color: var(--bone); background: var(--raised);
+    border: 1px solid var(--edge); border-radius: 9px; padding: 6px 12px; cursor: pointer;
+  }
+  button[aria-pressed=true] { border-color: var(--saffron); color: var(--saffron); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--faint); flex-wrap: wrap; }
+  .legend b { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; border-radius: 1px; }
+
+  .notes { display: grid; gap: 10px; color: var(--muted); max-width: 64ch; }
+  .notes p { margin: 0; }
+  .notes strong { color: var(--bone); font-weight: 600; }
+  @media (max-width: 560px) { .lane { grid-template-columns: 1fr; } }
+</style>
+
+<main>
+  <header>
+    <h1>How the level meter should move</h1>
+    <p class="lede">Both pills below hear the same voice at the same moment. The top one is how Rawi's meter moves today. The bottom one is the proposal: it rises the instant you speak and settles back slowly, like the meters on a mixing desk, so it reads as your voice rather than as flicker.</p>
+  </header>
+
+  <section class="compare" aria-label="Side by side">
+    <div class="lane">
+      <div><h2>Today</h2><p class="how">follows the raw level, 50 ms smoothing both ways</p></div>
+      <div class="stage">
+        <div class="pill"><svg class="mark" viewBox="0 0 24 24"><polyline id="markA" fill="none" stroke="#E0A039" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="label">Listening</span><span class="bars" id="barsA"></span><span class="time mono" id="timeA">0:00</span></div>
+        <canvas class="trace" id="traceA" aria-label="Trace of today's meter against the voice"></canvas>
+      </div>
+    </div>
+    <div class="lane proposed">
+      <div><h2>Proposed</h2><p class="how">fast rise, slow fall, a peak that lingers</p></div>
+      <div class="stage">
+        <div class="pill"><svg class="mark" viewBox="0 0 24 24"><polyline id="markB" fill="none" stroke="#E0A039" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="label">Listening</span><span class="bars" id="barsB"></span><span class="time mono" id="timeB">0:00</span></div>
+        <canvas class="trace" id="traceB" aria-label="Trace of the proposed meter against the voice"></canvas>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b style="background:#86909C"></b>your voice (raw loudness)</span>
+      <span><b style="background:#A3AEBD"></b>today's meter</span>
+      <span><b style="background:#E0A039"></b>proposed meter</span>
+      <span><b style="background:#E7EBF0"></b>peak marker</span>
+    </div>
+  </section>
+
+  <section class="controls" aria-label="Controls">
+    <div class="full" role="group" aria-label="What is being said">
+      <button id="v-sentence" aria-pressed="true">A normal sentence</button>
+      <button id="v-fast" aria-pressed="false">Fast talker</button>
+      <button id="v-pauses" aria-pressed="false">Thinking pauses</button>
+      <button id="v-mic" aria-pressed="false">Use my microphone</button>
+      <span id="micNote" class="mono" style="font-size:12px;color:var(--faint)"></span>
+    </div>
+    <label for="attack">Rise time <span class="val mono" id="attackVal">10 ms</span>
+      <input id="attack" type="range" min="1" max="120" value="10"></label>
+    <label for="release">Fall time <span class="val mono" id="releaseVal">350 ms</span>
+      <input id="release" type="range" min="50" max="1200" step="10" value="350"></label>
+    <label for="hold">Peak lingers for <span class="val mono" id="holdVal">700 ms</span>
+      <input id="hold" type="range" min="0" max="2000" step="50" value="700"></label>
+  </section>
+
+  <section class="notes">
+    <p><strong>What to look for.</strong> Watch the gaps between words. Today the bars drop to nothing between syllables and jump back, which is why the meter looks nervous. The proposal keeps a little of each word as it fades, so a sentence reads as one continuous shape.</p>
+    <p><strong>It never lies about silence.</strong> Stop talking and the proposed meter is empty within about a second. Rise time stays short on purpose: the first thing you want from a microphone meter is proof it heard you start.</p>
+    <p><strong>The peak marker</strong> is the one brighter bar left behind at your loudest recent moment. It answers "am I loud enough?" at a glance, and it can be dropped if it feels like one detail too many.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const BARS = 20;
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = id => document.getElementById(id);
+
+  function makeBars(el) {
+    const mid = (BARS - 1) / 2, list = [];
+    for (let i = 0; i < BARS; i++) {
+      const bar = document.createElement("i");
+      const distance = Math.abs(i - mid) / mid;
+      bar.style.height = (5 + (1 - distance) * 9) + "px";
+      el.appendChild(bar); list.push(bar);
+    }
+    return list;
+  }
+  const barsA = makeBars($("barsA")), barsB = makeBars($("barsB"));
+
+  // The Rawi mark: a waveform whose middle points swell with the level.
+  function markPoints(level) {
+    const amp = 2 + level * 6;
+    const pts = [[2,12],[6,12],[8,12-amp*0.5],[11,12+amp],[14,12-amp],[17,12+amp*0.5],[19,12],[22,12]];
+    return pts.map(p => p.join(",")).join(" ");
+  }
+
+  function paintBars(bars, level, peak) {
+    const scaled = Math.pow(Math.min(Math.max(level, 0), 1), 0.6);
+    const peakIndex = peak == null ? -1 : Math.min(BARS - 1, Math.floor(Math.pow(peak, 0.6) * BARS));
+    bars.forEach((bar, i) => {
+      const lit = scaled > i / BARS;
+      bar.style.background = i === peakIndex && peakIndex > 0 && !lit ? "#E7EBF0" : lit ? "#E0A039" : "#333B47";
+    });
+  }
+
+  // --- Voices -------------------------------------------------------------
+  // A speech-like loudness envelope: syllables of 120-220 ms, words of 2-4
+  // syllables, gaps between them, and the frame-to-frame jitter a real RMS
+  // reading has. Deterministic per voice so both lanes always agree.
+  function makeVoice(kind) {
+    let seed = { sentence: 7, fast: 11, pauses: 23 }[kind];
+    const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const events = []; let t = 0.3;
+    const total = 9;
+    while (t < total) {
+      const syllables = 2 + Math.floor(rand() * 3);
+      for (let s = 0; s < syllables; s++) {
+        const len = kind === "fast" ? 0.09 + rand() * 0.06 : 0.12 + rand() * 0.1;
+        events.push({ start: t, len, amp: 0.45 + rand() * 0.5 });
+        t += len + (kind === "fast" ? 0.02 : 0.04 + rand() * 0.05);
+      }
+      t += kind === "pauses" ? (rand() < 0.35 ? 0.9 + rand() * 0.8 : 0.2 + rand() * 0.25)
+         : kind === "fast" ? 0.08 + rand() * 0.1 : 0.15 + rand() * 0.3;
+    }
+    return { total: t + 0.6, level(time) {
+      const x = time % (t + 0.6);
+      let v = 0.015;
+      for (const e of events) {
+        if (x < e.start || x > e.start + e.len + 0.15) continue;
+        const into = x - e.start;
+        const shape = into < 0.02 ? into / 0.02 : Math.exp(-(into - 0.02) / 0.09);
+        v = Math.max(v, e.amp * shape);
+      }
+      return v;
+    }};
+  }
+
+  let voiceKind = "sentence", voice = makeVoice(voiceKind);
+  let analyser = null, micBuffer = null;
+
+  function setVoice(kind) {
+    voiceKind = kind;
+    for (const k of ["sentence", "fast", "pauses", "mic"]) $("v-" + k).setAttribute("aria-pressed", String(k === kind));
+    if (kind !== "mic") voice = makeVoice(kind);
+  }
+  $("v-sentence").onclick = () => setVoice("sentence");
+  $("v-fast").onclick = () => setVoice("fast");
+  $("v-pauses").onclick = () => setVoice("pauses");
+  $("v-mic").onclick = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const ctx = new AudioContext();
+      analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      micBuffer = new Float32Array(analyser.fftSize);
+      $("micNote").textContent = "listening";
+      setVoice("mic");
+    } catch {
+      $("micNote").textContent = "the microphone is not available on this page; the recorded voices still show the difference";
+    }
+  };
+
+  // --- Controls ------------------------------------------------------------
+  const knobs = { attack: 10, release: 350, hold: 700 };
+  for (const [id, unit] of [["attack", "ms"], ["release", "ms"], ["hold", "ms"]]) {
+    const input = $(id);
+    const sync = () => { knobs[id] = Number(input.value); $(id + "Val").textContent = input.value + " " + unit; };
+    input.addEventListener("input", sync); sync();
+  }
+
+  // --- Meters --------------------------------------------------------------
+  let today = 0, proposed = 0, peak = 0, peakAge = 0;
+  const history = [];
+  const HISTORY = 180;
+
+  function drawTrace(canvas, line, color, withPeak) {
+    const dpr = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== w * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+    const g = canvas.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const x = i => (i / (HISTORY - 1)) * w;
+    const y = v => h - 6 - Math.min(1, v) * (h - 12);
+    const plot = (key, stroke, width) => {
+      g.beginPath();
+      history.forEach((s, i) => (i ? g.lineTo(x(i), y(s[key])) : g.moveTo(x(i), y(s[key]))));
+      g.strokeStyle = stroke; g.lineWidth = width; g.stroke();
+    };
+    // Area under the voice, so the meter line reads against a shape.
+    g.beginPath(); g.moveTo(0, h);
+    history.forEach((s, i) => g.lineTo(x(i), y(s.raw)));
+    g.lineTo(x(history.length - 1), h); g.closePath();
+    g.fillStyle = "rgba(134,144,156,0.16)"; g.fill();
+    plot(line, color, 2);
+    if (withPeak) plot("peak", "rgba(231,235,240,0.55)", 1);
+  }
+
+  let last = performance.now(), clock = 0;
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now; clock += dt;
+
+    let raw;
+    if (voiceKind === "mic" && analyser) {
+      analyser.getFloatTimeDomainData(micBuffer);
+      let sum = 0; for (const s of micBuffer) sum += s * s;
+      raw = Math.min(1, Math.sqrt(sum / micBuffer.length) * 6);
+    } else {
+      raw = voice.level(clock) * (0.78 + Math.random() * 0.22);
+    }
+
+    // Today: one time constant both ways.
+    today += (raw - today) * (1 - Math.exp(-dt / 0.05));
+
+    // Proposed: separate rise and fall.
+    const tau = (raw > proposed ? knobs.attack : knobs.release) / 1000;
+    proposed += (raw - proposed) * (1 - Math.exp(-dt / Math.max(tau, 0.001)));
+    if (proposed >= peak) { peak = proposed; peakAge = 0; }
+    else if ((peakAge += dt * 1000) > knobs.hold) {
+      peak += (proposed - peak) * (1 - Math.exp(-dt / (knobs.release / 1000)));
+    }
+
+    history.push({ raw, today, proposed, peak });
+    if (history.length > HISTORY) history.shift();
+
+    paintBars(barsA, today, null);
+    paintBars(barsB, proposed, knobs.hold > 0 ? peak : null);
+    $("markA").setAttribute("points", markPoints(today));
+    $("markB").setAttribute("points", markPoints(proposed));
+    const secs = Math.floor(clock), label = Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0");
+    $("timeA").textContent = label; $("timeB").textContent = label;
+    drawTrace($("traceA"), "today", "#A3AEBD", false);
+    drawTrace($("traceB"), "proposed", "#E0A039", knobs.hold > 0);
+
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  // With reduced motion, show a settled still frame of a mid-sentence moment.
+  if (reduce) { for (let i = 0; i < 90; i++) frame(last + 16.7 * (i + 1)); }
+  else requestAnimationFrame(frame);
+})();
+</script>
