@@ -94,6 +94,40 @@ public enum CleanupProviderFactory {
         }
     }
 
+    /// The provider a polish pass runs through.
+    ///
+    /// Like `makeTransformer`, and for the same reason: the cleaner's prompt
+    /// forbids exactly the rewriting this stage exists to do, so it cannot be the
+    /// same provider with a different argument. Always the stronger local model —
+    /// the small one translates Arabic instead of rewriting it. `nil` when cleanup
+    /// is off, or when the mode is `clean`: there is nothing to ask.
+    public static func makePolisher(config: Config, env: DotEnv) throws
+        -> (any CleanupProvider)? {
+        guard config.cleanup.mode == .polish else { return nil }
+        let model = config.cleanup.polishModel.isEmpty
+            ? config.cleanup.models.arabic
+            : config.cleanup.polishModel
+        switch config.cleanup.provider {
+        case .off:
+            return nil
+        case .ollama:
+            return ChatCleanup(kind: .ollama, apiKey: nil, model: model,
+                               prompt: polishSystemPrompt, wrap: wrapTranscript)
+        case .openai:
+            guard let key = env["OPENAI_API_KEY"], !key.isEmpty else {
+                throw CleanupError.missingAPIKey("OPENAI_API_KEY")
+            }
+            return ChatCleanup(kind: .openai, apiKey: key, model: model,
+                               prompt: polishSystemPrompt, wrap: wrapTranscript)
+        case .anthropic:
+            guard let key = env["ANTHROPIC_API_KEY"], !key.isEmpty else {
+                throw CleanupError.missingAPIKey("ANTHROPIC_API_KEY")
+            }
+            return ChatCleanup(kind: .anthropic, apiKey: key, model: model,
+                               prompt: polishSystemPrompt, wrap: wrapTranscript)
+        }
+    }
+
     /// Default model per script for a provider, used by first-run detection.
     ///
     /// The local pair is the benchmarked outcome: 1.5b is faithful and fast on

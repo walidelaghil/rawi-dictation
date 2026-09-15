@@ -81,6 +81,10 @@ public final class DictationController {
 
     /// Set when transforms are wired. Absent, the transform key does nothing but say so.
     public var transformRunner: TransformRunner?
+    /// The polisher, when `cleanup.mode` is `polish`. Set from outside like the
+    /// transform runner, because both are the same provider graph the app already
+    /// builds, and the controller has no business building providers.
+    public var polisher: (any CleanupProvider)?
 
     /// Fired with the transform that ran, for the log and the menu.
     public var onTransform: ((TransformRunner.Outcome) -> Void)?
@@ -171,6 +175,7 @@ public final class DictationController {
             cancelled = true
             transcriber.cancel()
             cleanup.cancel()
+            polisher?.cancel()
             transformRunner?.cancel()
             log.info("Cancelled in-flight transcription")
             state = .idle
@@ -384,24 +389,40 @@ public final class DictationController {
         // Nothing to clean, nothing to wait for. Whisper punctuates and capitalises
         // on its own; asking a model to confirm that costs a second of GPU and
         // slows the next dictation down too.
-        let worthCleaning = CleanupNeeded.check(raw)
+        // Polishing is cleanup's stronger sibling, not a second round trip: when it
+        // runs it does the cleaner's job as well, so the text meets exactly one
+        // model either way and the stage costs what it always cost.
+        let polisher = config.cleanup.mode == .polish ? self.polisher : nil
+        let worthCleaning = polisher != nil ? PolishNeeded.check(raw)
+                                            : CleanupNeeded.check(raw)
         if !worthCleaning {
             log.info("Nothing to clean up; keeping the transcript as heard")
         }
         if !earlyPaste, worthCleaning { state = .cleaning }
         do {
             guard worthCleaning else { throw CleanupSkipped.nothingToDo }
-            let candidate = try await cleanup.clean(
-                raw, instruction: capturedDestination?.instruction ?? "")
+            let instruction = capturedDestination?.instruction ?? ""
             // The model is not trusted blindly: a local model will sometimes answer
             // or obey the dictation instead of cleaning it. Inserting the raw
             // transcript is always better than inserting the model's invention.
-            switch CleanupGuard.check(raw: raw, cleaned: candidate) {
-            case .accept:
-                text = candidate
-            case .reject(let reason):
-                rejected = true
-                log.warn("Cleanup rejected (\(reason)); inserting raw transcript")
+            if let polisher {
+                let candidate = try await polisher.clean(raw, instruction: instruction)
+                switch PolishGuard.check(raw: raw, polished: candidate) {
+                case .accept:
+                    text = candidate
+                case .reject(let reason):
+                    rejected = true
+                    log.warn("Polish rejected (\(reason)); inserting raw transcript")
+                }
+            } else {
+                let candidate = try await cleanup.clean(raw, instruction: instruction)
+                switch CleanupGuard.check(raw: raw, cleaned: candidate) {
+                case .accept:
+                    text = candidate
+                case .reject(let reason):
+                    rejected = true
+                    log.warn("Cleanup rejected (\(reason)); inserting raw transcript")
+                }
             }
         } catch is CleanupSkipped {
             // Expected, and not a failure: the transcript was already clean.
@@ -423,7 +444,7 @@ public final class DictationController {
         // "first…, second…, third…" is a list, and here it becomes one. Last,
         // because it is the only stage that adds line breaks, and every stage
         // before it reads the text as one line.
-        if config.output.formatSpokenLists { text = SpokenLists.format(text) }
+        if config.output.formatSpokenLists { text = SpokenStructure.format(text) }
 
         stageTimings.cleanup = cleanupStarted.duration(to: .now).milliseconds
         let insertStarted = ContinuousClock.now

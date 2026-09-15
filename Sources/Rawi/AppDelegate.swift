@@ -211,6 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         wireTransforms(env: env)
+        wirePolish(env: env)
         controller.onRecord = { [weak self] entry in
             guard let self else { return }
             guard self.config.history.enabled else { return }
@@ -314,6 +315,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .filter { $0.kind == .dictation }
             .prefix(limit)
             .map { RecentDictation(text: $0.cleaned, script: $0.script, at: $0.at) }
+    }
+
+    /// The polisher, when the mode asks for one. Built here with the rest of the
+    /// provider graph, and rebuilt on a config reload so changing the mode or the
+    /// model in config.json takes effect without a relaunch.
+    private func wirePolish(env: DotEnv) {
+        do {
+            controller.polisher = try CleanupProviderFactory.makePolisher(
+                config: config, env: env)
+            if let model = controller.polisher == nil ? nil
+                : (config.cleanup.polishModel.isEmpty ? config.cleanup.models.arabic
+                                                      : config.cleanup.polishModel) {
+                log.info("Cleanup mode: polish — corrections and run-ons via \(model)")
+            } else {
+                log.info("Cleanup mode: clean — filler and punctuation only")
+            }
+        } catch {
+            log.error("Polish disabled: \(error.localizedDescription)")
+            controller.polisher = nil
+        }
     }
 
     /// Transforms need a model. With cleanup off there is nothing to ask, and the
@@ -737,7 +758,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 minHold: .milliseconds(config.minHoldMs))
         if hotkeyChanged { startMonitoring() }
         publishHotkeyLabels()
-        if transformsChanged { wireTransforms(env: env) }
+        if transformsChanged { wireTransforms(env: env)
+        wirePolish(env: env) }
         applyAppearance()
         log.info("Config reloaded (engine=\(config.engine.rawValue), "
                  + "cleanup=\(config.cleanup.provider.rawValue), hotkey=\(config.hotkey))")

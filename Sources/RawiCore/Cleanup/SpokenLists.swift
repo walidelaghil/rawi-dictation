@@ -39,6 +39,10 @@ public enum SpokenLists {
     /// Words a speaker puts before the next item that the written list does not need.
     static let leadIns: Set<String> = ["and", "then", "also", "next", "so", "plus", "ثم", "و"]
 
+    /// Said out loud when you mean a bullet. "Point" after it is optional and
+    /// swallowed either way: nobody wants "Point budget" as a list item.
+    static let bulletCues: Set<String> = ["bullet", "نقطة"]
+
     /// The shortest thing worth calling a list. One "first" is a word; two in
     /// sequence is a structure.
     static let minimumItems = 2
@@ -48,8 +52,17 @@ public enum SpokenLists {
         guard !text.contains("\n") else { return text }
 
         let tokens = tokenize(text)
-        let cues = cueRun(in: tokens)
-        guard cues.count >= minimumItems else { return text }
+        // Ordinals first: "first, second, third" is the commoner way to say a list,
+        // and a dictation that uses both is counting, not bulleting.
+        if let listed = laidOut(text, cues: cueRun(in: tokens), marker: { "\($0 + 1). " }) {
+            return listed
+        }
+        return laidOut(text, cues: bulletRun(in: tokens), marker: { _ in "- " }) ?? text
+    }
+
+    private static func laidOut(_ text: String, cues: [Cue],
+                                marker: (Int) -> String) -> String? {
+        guard cues.count >= minimumItems else { return nil }
 
         let intro = String(text[text.startIndex..<cues[0].start])
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -58,14 +71,36 @@ public enum SpokenLists {
             let end = index + 1 < cues.count ? cues[index + 1].start : text.endIndex
             let item = tidy(String(text[cue.end..<end]))
             // An empty item means this was not the structure it looked like.
-            guard !item.isEmpty else { return text }
+            guard !item.isEmpty else { return nil }
             items.append(item)
         }
 
         var lines: [String] = []
         if !intro.isEmpty { lines.append(introducing(intro)) }
-        for (index, item) in items.enumerated() { lines.append("\(index + 1). \(item)") }
+        for (index, item) in items.enumerated() { lines.append(marker(index) + item) }
         return lines.joined(separator: "\n")
+    }
+
+    /// Every "bullet point" in the dictation, each one the start of an item.
+    private static func bulletRun(in tokens: [Token]) -> [Cue] {
+        var cues: [Cue] = []
+        var index = 0
+        while index < tokens.count {
+            guard bulletCues.contains(tokens[index].word) else { index += 1; continue }
+            let start = tokens[index].start
+            var end = tokens[index].end
+            // "bullet point budget" and "bullet budget" are the same instruction.
+            if index + 1 < tokens.count, ["point", "points"].contains(tokens[index + 1].word) {
+                index += 1
+                end = tokens[index].end
+            }
+            // A cue with nothing after it introduces nothing.
+            if index + 1 < tokens.count {
+                cues.append(Cue(value: cues.count + 1, start: start, end: end))
+            }
+            index += 1
+        }
+        return cues
     }
 
     // MARK: - Finding the run

@@ -95,8 +95,24 @@ public struct CleanupModels: Codable, Sendable, Equatable {
     }
 }
 
+/// What the model is allowed to do to your words.
+public enum CleanupMode: String, Codable, Sendable, CaseIterable {
+    /// Delete filler, fix punctuation, change nothing else. The conservative
+    /// contract, safe on a 1.5b.
+    case clean
+    /// Also apply the corrections you spoke and write your run-ons as sentences.
+    case polish
+}
+
 public struct CleanupSettings: Codable, Sendable, Equatable {
     public var provider: CleanupKind
+    /// Benchmarked on this machine over 13 cases and three local models: polish
+    /// needs the stronger one. qwen2.5:1.5b translates Arabic into English rather
+    /// than rewriting it, and gemma3:4b does the same to clean Arabic while missing
+    /// English corrections. qwen2.5:3b passed all thirteen at 462ms median.
+    public var mode: CleanupMode = .polish
+    /// Empty means the multilingual cleanup model, which is the benchmarked choice.
+    public var polishModel: String = ""
     public var models: CleanupModels
     /// The model transforms use. Separate from cleanup because the job is
     /// different: cleanup must not change your words, a transform must write whole
@@ -107,8 +123,11 @@ public struct CleanupSettings: Codable, Sendable, Equatable {
     public var prompt: String
 
     public init(provider: CleanupKind, models: CleanupModels, prompt: String,
-                transformModel: String = "") {
+                transformModel: String = "", mode: CleanupMode = .polish,
+                polishModel: String = "") {
         self.transformModel = transformModel
+        self.mode = mode
+        self.polishModel = polishModel
         self.provider = provider
         self.models = models
         self.prompt = prompt
