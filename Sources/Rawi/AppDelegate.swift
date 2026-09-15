@@ -490,7 +490,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             matcher: matcher,
             onPress: { MainActor.assumeIsolated { self.feed(self.tapPattern.press(at: .now)) } },
             onRelease: { MainActor.assumeIsolated { self.feed(self.tapPattern.release(at: .now)) } },
-            onEscape: { MainActor.assumeIsolated { self.escapePressed() } })
+            onEscape: { MainActor.assumeIsolated { self.escapePressed() } },
+            onChord: { MainActor.assumeIsolated { self.shortcutNotHold() } })
         try monitor.start()
         self.monitor = monitor
         log.info("Listening for \(config.hotkey) (listen-only tap)")
@@ -616,6 +617,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if outcome == .beganDoubleTap || outcome == .beganHold { pendingTapTimer?.invalidate() }
         guard outcome != .ignored else { return }
         Task { @MainActor in await controller.handle(outcome, intent: intent) }
+    }
+
+    /// The bare dictation modifier was the start of a shortcut — ⌥← held a moment
+    /// too long. The recording it started is dropped without a word: nothing was
+    /// said, and nothing went wrong.
+    private func shortcutNotHold() {
+        tapPattern.reset()
+        pendingTapTimer?.invalidate()
+        log.info("Hotkey was part of a shortcut; recording dropped")
+        Task { @MainActor in await controller.handle(.discardShortTap) }
     }
 
     private func escapePressed() {

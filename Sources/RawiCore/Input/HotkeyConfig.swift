@@ -11,16 +11,25 @@ public enum HotkeyConfig {
     public static let escapeKeyCode: UInt16 = 53
 
     /// Bare modifiers usable on their own as a hold-to-talk key.
+    ///
+    /// Shift is deliberately absent: it is held for every capital letter, and no
+    /// arm delay makes a key you press that often a safe one to talk on.
     static let bareModifiers: [String: CGEventFlags] = [
         "fn": .maskSecondaryFn,
         "function": .maskSecondaryFn,
+        "option": .maskAlternate,
+        "opt": .maskAlternate,
+        "alt": .maskAlternate,
+        "command": .maskCommand,
+        "cmd": .maskCommand,
+        "control": .maskControl,
+        "ctrl": .maskControl,
         "rightoption": .maskAlternate,
         "rightalt": .maskAlternate,
         "rightcommand": .maskCommand,
         "rightcmd": .maskCommand,
         "rightcontrol": .maskControl,
         "rightctrl": .maskControl,
-        "rightshift": .maskShift,
     ]
 
     static let modifierNames: [String: CGEventFlags] = [

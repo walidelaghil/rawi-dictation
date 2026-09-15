@@ -75,11 +75,15 @@ public final class SettingsViewModel: ObservableObject {
 
     /// True when a capture gave up on its own rather than being used.
     @Published public var captureExpired = false
+    /// Why the last key you pressed was not saved. Refusing a key without saying
+    /// so looked exactly like the setting being broken.
+    @Published public var captureProblem: String?
 
     public func beginCapture(_ key: Key) {
         guard recording != key.rawValue else { return }
         pendingClash = nil
         captureExpired = false
+        captureProblem = nil
         recording = key.rawValue
         onCapture?(true)
         // A backstop, not a deadline. Eight seconds was long enough to click the
@@ -124,8 +128,27 @@ public final class SettingsViewModel: ObservableObject {
     /// collided with itself.
     @discardableResult
     public func assign(_ raw: String, to key: Key) -> Assignment {
-        guard HotkeyConfig.isCarbonCompatible(raw) || HotkeyConfig.parse(raw) != nil,
-              case .keyCode? = HotkeyConfig.parse(raw) else { return .unusable }
+        captureProblem = nil
+        switch HotkeyConfig.parse(raw) {
+        case .keyCode?:
+            break
+        case .modifierFlag?:
+            // One modifier on its own is a dictation key, and only where the event
+            // tap can see it. Transform and cancel go through a registration that
+            // can only bind a combination.
+            guard key == .dictate else {
+                captureProblem = "\(key.label) needs a combination, like \(HotkeyConfig.symbolic(value(for: key)))."
+                return .unusable
+            }
+            guard inputMonitoringGranted else {
+                captureProblem = "\(HotkeyConfig.symbolic(raw)) on its own needs Input Monitoring. "
+                    + "Until then, use a combination."
+                return .unusable
+            }
+        case nil:
+            captureProblem = "Rawi can’t use that key. Try a letter, a number, Space or an F-key, with a modifier like ⌥."
+            return .unusable
+        }
         if let owner = Key.allCases.first(where: {
             $0 != key && HotkeyConfig.parse(value(for: $0)) == HotkeyConfig.parse(raw)
         }) {
@@ -299,6 +322,12 @@ public struct SettingsView: View {
                                     })
                         Spacer()
                     }
+                }
+                if let problem = model.captureProblem {
+                    Text(problem)
+                        .font(.system(size: TypeScale.small))
+                        .foregroundStyle(c(.clay))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if let clash = model.pendingClash {
                     // The collision is an offer, not a telling-off: you pressed a
@@ -601,7 +630,7 @@ struct HotkeyField: View {
                                                 : (clashes ? c(.clay) : c(.edge)))))
         }
         .buttonStyle(.plain)
-        .help(recording ? "Press the combination you want, or Escape to keep this one"
+        .help(recording ? "Press a combination, or a single ⌥, ⌘, ⌃ or fn. Escape keeps this one."
                         : "Click, then press the combination you want")
         .onChange(of: recording) { _, isRecording in
             isRecording ? start() : stop()
@@ -611,14 +640,50 @@ struct HotkeyField: View {
 
     private func start() {
         stop()
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        // A lone modifier never sends a key-down, only "modifiers changed". This
+        // recorder used to listen for key-downs alone, so pressing ⌥ by itself
+        // was never heard and the capture quietly timed out.
+        var soloModifier: String?
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+            if event.type == .flagsChanged {
+                let held = event.modifierFlags.intersection([.command, .option, .control,
+                                                             .shift, .function])
+                if held.isEmpty {
+                    // Everything let go. If one modifier went down and came back
+                    // up with nothing else pressed, that modifier is the answer.
+                    if let solo = soloModifier { onCapture(solo) }
+                    soloModifier = nil
+                } else if ([.command, .option, .control, .function] as [NSEvent.ModifierFlags]).contains(held) {
+                    // Keep the first one pressed; a second one joining means a
+                    // combination is coming, not a lone key.
+                    if soloModifier == nil { soloModifier = HotkeyField.soloName(keyCode: event.keyCode) }
+                } else {
+                    soloModifier = nil
+                }
+                return event
+            }
+            soloModifier = nil
             if event.keyCode == HotkeyConfig.escapeKeyCode, event.modifierFlags.isEmpty {
                 onCapture(nil)                       // keep what was there
                 return nil
             }
             let flags = CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))
-            onCapture(HotkeyConfig.string(keyCode: event.keyCode, modifiers: flags))
+            // A key that cannot be a shortcut is still an answer: saying why beats
+            // waiting for the backstop to expire.
+            onCapture(HotkeyConfig.string(keyCode: event.keyCode, modifiers: flags) ?? "")
             return nil                                // never let it reach the app
+        }
+    }
+
+    /// The config name for a modifier key pressed on its own. Shift has none: it
+    /// is not offered as a dictation key.
+    static func soloName(keyCode: UInt16) -> String? {
+        switch keyCode {
+        case 58, 61: "option"
+        case 55, 54: "command"
+        case 59, 62: "control"
+        case 63: "fn"
+        default: nil
         }
     }
 

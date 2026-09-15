@@ -26,7 +26,8 @@ import CoreGraphics
         #expect(HotkeyConfig.parse("") == nil)
         #expect(HotkeyConfig.parse("   ") == nil)
         #expect(HotkeyConfig.parse("banana+z9") == nil)
-        #expect(HotkeyConfig.parse("cmd") == nil)        // modifier alone, not a bare hold key
+        #expect(HotkeyConfig.parse("shift") == nil)      // held for every capital letter
+        #expect(HotkeyConfig.parse("shift+") == nil)
         #expect(HotkeyConfig.parse("d") == nil)          // bare letter needs a modifier
     }
 

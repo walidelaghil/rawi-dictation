@@ -31,6 +31,16 @@ public final class HotkeyMonitor: HotkeyBackend {
     private let onPress: () -> Void
     private let onRelease: () -> Void
     private let onEscape: () -> Void
+    /// A bare modifier turned out to be part of a shortcut after its press went
+    /// out. See `ModifierHold`.
+    private let onChord: () -> Void
+    private var hold = ModifierHold()
+    private var armWork: DispatchWorkItem?
+
+    /// Modifiers that make a bare-modifier press into a shortcut. Caps lock is a
+    /// state of the keyboard, not a key being held with another.
+    static let chordFlags: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl,
+                                           .maskShift, .maskSecondaryFn]
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -40,11 +50,13 @@ public final class HotkeyMonitor: HotkeyBackend {
     public init(matcher: HotkeyMatcher,
                 onPress: @escaping () -> Void,
                 onRelease: @escaping () -> Void,
-                onEscape: @escaping () -> Void) {
+                onEscape: @escaping () -> Void,
+                onChord: @escaping () -> Void = {}) {
         self.matcher = matcher
         self.onPress = onPress
         self.onRelease = onRelease
         self.onEscape = onEscape
+        self.onChord = onChord
     }
 
     public var isRunning: Bool { tap != nil }
@@ -94,6 +106,39 @@ public final class HotkeyMonitor: HotkeyBackend {
         runLoopSource = nil
         modifierIsDown = false
         keyIsDown = false
+        armWork?.cancel()
+        armWork = nil
+        hold.reset()
+    }
+
+    /// Carries out what `ModifierHold` decided. Runs on the main run loop, where
+    /// the tap delivers, so the arm timer and the events never race.
+    private func perform(_ action: ModifierHold.Action) {
+        switch action {
+        case .armLater:
+            armWork?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.perform(self.hold.armFired())
+            }
+            armWork = work
+            let delay = ModifierHold.armDelay.components
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + Double(delay.seconds) + Double(delay.attoseconds) / 1e18,
+                execute: work)
+        case .press:
+            onPress()
+        case .release:
+            onRelease()
+        case .pressAndRelease:
+            armWork?.cancel()
+            onPress()
+            onRelease()
+        case .abandon:
+            onChord()
+        case .none:
+            break
+        }
     }
 
     private func handle(type: CGEventType, event: CGEvent) {
@@ -114,11 +159,23 @@ public final class HotkeyMonitor: HotkeyBackend {
 
         switch matcher {
         case .modifierFlag(let flag):
-            guard type == .flagsChanged else { return }
-            let isDown = event.flags.contains(flag)
-            guard isDown != modifierIsDown else { return }
-            modifierIsDown = isDown
-            isDown ? onPress() : onRelease()
+            switch type {
+            case .flagsChanged:
+                let isDown = event.flags.contains(flag)
+                let othersHeld = !event.flags.intersection(Self.chordFlags)
+                    .subtracting(flag).isEmpty
+                if isDown != modifierIsDown {
+                    modifierIsDown = isDown
+                    perform(isDown ? hold.modifierDown(othersHeld: othersHeld)
+                                   : hold.modifierUp())
+                } else if isDown {
+                    perform(hold.othersChanged(othersHeld: othersHeld))
+                }
+            case .keyDown:
+                if modifierIsDown { perform(hold.keyDown()) }
+            default:
+                return
+            }
 
         case .keyCode(let wanted, let modifiers):
             guard keyCode == wanted else { return }

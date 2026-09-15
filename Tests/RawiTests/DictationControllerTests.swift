@@ -230,6 +230,57 @@ import Foundation
         #expect(SystemFocusProbe.classify(role: nil, valueSettable: false, hasSelectedRange: false) == .unknown)
     }
 
+    // MARK: The key during a notice
+
+    @Test("the key starts the next dictation while a notice is showing") func pressDuringNotice() async {
+        var config = Config.default
+        config.output.deliverRawFirst = false
+        let g = make(config: config)
+        let focus = FakeFocus(); focus.result = .notEditable
+        g.ctl.focusProbe = focus
+        await g.ctl.handle(.beganHold)
+        await g.ctl.handle(.endedHold)
+        #expect(g.ctl.state == .notice("Copied"))
+        await g.ctl.handle(.beganHold)
+        #expect(g.rec.isRecording)
+        #expect(g.ctl.state.recordingMode == .pushToTalk)
+    }
+
+    @Test("a dictation still cleaning up finishes without taking over the next one") func pressDuringCleanup() async {
+        let g = make()                                   // raw text is delivered early
+        g.clean.delay = .milliseconds(300)
+        await g.ctl.handle(.beganHold)
+        let first = Task { await g.ctl.handle(.endedHold) }
+        // The early notice: your words are on the clipboard, cleanup is still going.
+        #expect(await waitUntil { if case .notice = g.ctl.state { true } else { false } })
+        await g.ctl.handle(.beganHold)
+        #expect(g.ctl.state.recordingMode == .pushToTalk)
+        await first.value
+        // The first dictation still landed…
+        #expect(g.ins.inserted == ["Cleaned transcript."])
+        // …and did not paint "Inserting" or "idle" over the recording in progress.
+        #expect(g.rec.isRecording)
+        #expect(g.ctl.state.recordingMode == .pushToTalk)
+        #expect(g.rec.startedURLs.count == 2)
+    }
+
+    @Test("an old notice's timer does not clear a newer notice") func noticeTimerIsItsOwn() async {
+        var config = Config.default
+        config.output.deliverRawFirst = false
+        let g = make(config: config)
+        g.ctl.noticeDuration = .milliseconds(150)
+        let focus = FakeFocus(); focus.result = .notEditable
+        g.ctl.focusProbe = focus
+        await g.ctl.handle(.beganHold)
+        await g.ctl.handle(.endedHold)                   // "Copied", timer running
+        g.eng.result = .success("second transcript")
+        g.clean.result = .success("Second one.")
+        await g.ctl.handle(.beganHold)
+        await g.ctl.handle(.endedHold)                   // a new "Copied"
+        try? await Task.sleep(for: .milliseconds(100))   // past half of the first timer
+        #expect(g.ctl.state == .notice("Copied"))
+    }
+
     @Test("a second beganHold while recording is ignored") func reentrancy() async {
         let g = make()
         await g.ctl.handle(.beganHold)

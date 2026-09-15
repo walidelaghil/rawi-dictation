@@ -57,9 +57,12 @@ final class FakeCleanup: CleanupProvider, @unchecked Sendable {
     var received: [String] = []
     var cancelCount = 0
     var lastInstruction: String = ""
+    /// How long cleanup takes, for tests about what happens meanwhile.
+    var delay: Duration?
     func clean(_ t: String, instruction: String) async throws -> String {
         received.append(t)
         lastInstruction = instruction
+        if let delay { try? await Task.sleep(for: delay) }
         return try result.get()
     }
     func cancel() { cancelCount += 1 }

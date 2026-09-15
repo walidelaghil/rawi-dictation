@@ -218,6 +218,61 @@ func scratchSettings(_ config: Config = .default) -> SettingsViewModel {
         #expect(m.config.transformHotkey == "ctrl+option+space")
     }
 
+    @Test("⌥ on its own can be the dictation key") func bareOption() {
+        let m = model()
+        m.inputMonitoringGranted = true
+        #expect(m.assign("option", to: .dictate) == .saved)
+        #expect(m.config.hotkey == "option")
+        #expect(m.value(for: .dictate) == "option")
+        // The fallback stays a combination: it is what a Mac without Input
+        // Monitoring binds, and it cannot bind a bare key.
+        #expect(m.config.fallbackHotkey != "option")
+        #expect(m.captureProblem == nil)
+    }
+
+    @Test("without Input Monitoring, ⌥ alone is refused and the reason is said") func bareNeedsPermission() {
+        let m = model()
+        m.inputMonitoringGranted = false
+        #expect(m.assign("option", to: .dictate) == .unusable)
+        #expect(m.config.hotkey == "option+space")
+        #expect(m.captureProblem?.contains("Input Monitoring") == true)
+    }
+
+    @Test("transform cannot take a lone modifier, and says so") func bareTransform() {
+        let m = model()
+        m.inputMonitoringGranted = true
+        #expect(m.assign("option", to: .transform) == .unusable)
+        #expect(m.config.transformHotkey == "ctrl+option+space")
+        #expect(m.captureProblem != nil)
+    }
+
+    @Test("a refused key explains itself instead of doing nothing") func unusableExplains() {
+        let m = model()
+        #expect(m.assign("", to: .dictate) == .unusable)
+        #expect(m.captureProblem != nil)
+        _ = m.assign("cmd+shift+d", to: .dictate)
+        #expect(m.captureProblem == nil)      // cleared by the next good key
+    }
+
+    @Test("the recorder names a lone modifier key") func soloNames() {
+        #expect(HotkeyField.soloName(keyCode: 58) == "option")     // left ⌥
+        #expect(HotkeyField.soloName(keyCode: 61) == "option")     // right ⌥
+        #expect(HotkeyField.soloName(keyCode: 55) == "command")
+        #expect(HotkeyField.soloName(keyCode: 59) == "control")
+        #expect(HotkeyField.soloName(keyCode: 63) == "fn")
+        #expect(HotkeyField.soloName(keyCode: 56) == nil)          // shift is not offered
+    }
+
+    @Test("plain modifier names parse on their own and still combine") func parsing() {
+        #expect(HotkeyConfig.parse("option") == .modifierFlag(.maskAlternate))
+        #expect(HotkeyConfig.parse("command") == .modifierFlag(.maskCommand))
+        #expect(HotkeyConfig.parse("control") == .modifierFlag(.maskControl))
+        #expect(HotkeyConfig.parse("shift") == nil)
+        #expect(HotkeyConfig.symbolic("option") == "⌥")
+        #expect(HotkeyConfig.parse("option+space") == .keyCode(49, modifiers: .maskAlternate))
+        #expect(!HotkeyConfig.isCarbonCompatible("option"))
+    }
+
     @Test("a config that already clashes can be repaired from the screen") func repair() {
         // The state this replaces: both keys on ⌥Space, and no way to fix
         // transform because every attempt was rejected as a clash with itself.

@@ -110,6 +110,34 @@ public final class DictationController {
     private var capturedDestination: DestinationRule?
 
     private var currentRecordingURL: URL?
+
+    /// Everything a dictation captured at key-press, as one value.
+    ///
+    /// The live `captured…` properties belong to whichever dictation started most
+    /// recently. Once a new dictation may begin while the last one is still
+    /// cleaning up, the old pipeline has to finish on its own copy, or its history
+    /// row names the app you are dictating into now.
+    struct DictationContext {
+        let app: (name: String?, bundleID: String?)
+        let vocabulary: VocabularySnapshot
+        let destination: DestinationRule?
+    }
+
+    /// Incremented whenever a new dictation starts. A pipeline remembers the
+    /// number it started under, and stops speaking for the pill once a newer one
+    /// exists — it still delivers and records its text, silently.
+    private var generation = 0
+
+    private var currentContext: DictationContext {
+        DictationContext(app: captured, vocabulary: capturedVocabulary,
+                         destination: capturedDestination)
+    }
+
+    /// Sets the state on behalf of pipeline `gen`, unless a newer dictation owns it.
+    private func publish(_ newState: DictationState, for gen: Int) {
+        guard gen == generation else { return }
+        state = newState
+    }
     private var cancelled = false
 
     public init(config: Config,
@@ -204,9 +232,19 @@ public final class DictationController {
         // A held error is dismissed by using the app again, which is the gesture
         // people actually make after reading one.
         if case .error = state { state = .idle }
+        // A notice is a confirmation, not work in progress: pressing the key again
+        // means the next dictation. If the last one is still cleaning up behind its
+        // early notice, it finishes on its own generation and stops touching the
+        // pill — see `publish`.
+        if case .notice = state { state = .idle }
         guard state == .idle else { return }        // ignore key repeat / re-entry
+        // Unique, not just timestamped. Named by the second, two dictations started
+        // in the same second shared one file — and once the key works during a
+        // notice, the first one's cleanup would delete the second one's audio
+        // while you were still speaking into it.
+        let stamp = Int(Date().timeIntervalSince1970)
         let url = Config.recordingsDirectory
-            .appendingPathComponent("dictation-\(Int(Date().timeIntervalSince1970)).wav")
+            .appendingPathComponent("dictation-\(stamp)-\(UUID().uuidString.prefix(8)).wav")
         do {
             cancelled = false
             // Captured at key-press, not at insert: focus can move while you speak,
@@ -219,6 +257,9 @@ public final class DictationController {
             capturedIntent = intent
             capturedVocabulary = vocabulary()
             capturedDestination = destination(captured.bundleID)
+            // Before the recorder can fail: an error from this press must not be
+            // painted over by the pipeline it interrupted.
+            generation += 1
             try recorder.start(to: url)
             currentRecordingURL = url
             let now = ContinuousClock.now
@@ -272,6 +313,9 @@ public final class DictationController {
     private func finishRecording() async {
         guard case .recording = state else { return }
         recordingStartedAt = nil
+        // Taken the moment the key comes up, before anything is awaited.
+        let gen = generation
+        let context = currentContext
 
         let recording: RecordingResult
         do {
@@ -349,12 +393,12 @@ public final class DictationController {
             await runTransform(spoken: raw)
             return
         }
-        stageTimings = Timings(transcribe: transcribeMs)
-
         await finishText(raw, recordingURL: recording.url,
                          duration: Double(recording.duration.components.seconds),
-                         peak: recording.peakLevel, keepAudio: false)
-        currentRecordingURL = nil
+                         peak: recording.peakLevel, keepAudio: false,
+                         timings: Timings(transcribe: transcribeMs),
+                         context: context, generation: gen)
+        if gen == generation { currentRecordingURL = nil }
     }
 
 
@@ -373,10 +417,10 @@ public final class DictationController {
         var ready: Int = 0
         var total: Int { transcribe + cleanup + insert }
     }
-    private var stageTimings = Timings()
-
     private func finishText(_ raw: String, recordingURL: URL, duration: Double,
-                            peak: Double, keepAudio: Bool) async {
+                            peak: Double, keepAudio: Bool, timings: Timings,
+                            context: DictationContext, generation gen: Int) async {
+        var stageTimings = timings
         // Your words go on the clipboard now, before cleanup runs. Cleanup takes
         // about four tenths of a second and only ever removes filler; waiting for
         // it meant waiting to be able to paste at all. If you paste in that window
@@ -396,7 +440,7 @@ public final class DictationController {
             // waited for a stage whose only job is to remove filler.
             stageTimings.ready = stageTimings.transcribe
             log.info("Ready to paste after \(stageTimings.ready)ms")
-            state = .notice(PillLabel.landed(raw))
+            publish(.notice(PillLabel.landed(raw)), for: gen)
         }
         let cleanupStarted = ContinuousClock.now
         // Nothing to clean, nothing to wait for. Whisper punctuates and capitalises
@@ -411,10 +455,10 @@ public final class DictationController {
         if !worthCleaning {
             log.info("Nothing to clean up; keeping the transcript as heard")
         }
-        if !earlyPaste, worthCleaning { state = .cleaning }
+        if !earlyPaste, worthCleaning { publish(.cleaning, for: gen) }
         do {
             guard worthCleaning else { throw CleanupSkipped.nothingToDo }
-            let instruction = capturedDestination?.instruction ?? ""
+            let instruction = context.destination?.instruction ?? ""
             // The model is not trusted blindly: a local model will sometimes answer
             // or obey the dictation instead of cleaning it. Inserting the raw
             // transcript is always better than inserting the model's invention.
@@ -440,19 +484,19 @@ public final class DictationController {
         } catch is CleanupSkipped {
             // Expected, and not a failure: the transcript was already clean.
         } catch {
-            if cancelled { state = .idle; return }
+            if cancelled { publish(.idle, for: gen); return }
             log.warn("LLM cleanup failed (\(error.localizedDescription)); inserting raw transcript")
         }
-        if cancelled { state = .idle; return }
+        if cancelled { publish(.idle, for: gen); return }
 
         // The dictionary, applied deterministically. The model layers are
         // unreliable — 1.5b ignores a glossary entirely — so the guarantee lives in
         // code that cannot decline.
-        text = TermCorrector.apply(text, terms: capturedVocabulary.terms)
+        text = TermCorrector.apply(text, terms: context.vocabulary.terms)
 
         // Snippets, after the guard, so an expanded address can never be mistaken
         // for the model rewriting your words.
-        text = SnippetExpander.expand(text, with: capturedVocabulary.snippets)
+        text = SnippetExpander.expand(text, with: context.vocabulary.snippets)
 
         // "first…, second…, third…" is a list, and here it becomes one. Last,
         // because it is the only stage that adds line breaks, and every stage
@@ -461,7 +505,7 @@ public final class DictationController {
 
         stageTimings.cleanup = cleanupStarted.duration(to: .now).milliseconds
         let insertStarted = ContinuousClock.now
-        state = .inserting
+        publish(.inserting, for: gen)
         // Where the cursor is decides the delivery. A text field gets the paste;
         // anywhere else gets the clipboard and a hint, because a synthetic ⌘V into
         // a file list or a canvas does nothing at best and something else at worst.
@@ -491,16 +535,16 @@ public final class DictationController {
         remember(text)
         onRecord?(HistoryEntry(
             at: Date(), cleaned: text, raw: raw,
-            destination: capturedDestination?.name,
+            destination: context.destination?.name,
             script: ScriptDetector.detect(text),
-            appName: captured.name, bundleID: captured.bundleID,
+            appName: context.app.name, bundleID: context.app.bundleID,
             durationSeconds: duration, peakLevel: peak, guardRejected: rejected))
 
         stageTimings.insert = insertStarted.duration(to: .now).milliseconds
         if earlyPaste, case .notice = state {
             // The clipboard was quietly upgraded underneath a message that is
             // already correct. Leave it alone rather than flashing a second one.
-            scheduleErrorClear()
+            if gen == self.generation { scheduleErrorClear() }
         }
         log.info("""
             Timing: transcribe \(stageTimings.transcribe)ms, \
@@ -511,26 +555,26 @@ public final class DictationController {
         if !keepAudio { try? FileManager.default.removeItem(at: recordingURL) }
         if pasted {
             log.info("Inserted \(text.count) characters")
-            state = .idle
+            publish(.idle, for: gen)
         } else if focus == .notEditable {
             log.info("No text field has focus; left \(text.count) characters on the clipboard")
             // Said plainly, the way the clipboard is: it was not typed anywhere,
             // it is ready to paste wherever you are going next.
-            awaitingManualPaste = onClipboard
-            state = .notice(onClipboard ? "Copied" : PillLabel.landed(text))
-            scheduleErrorClear()
+            if gen == self.generation { awaitingManualPaste = onClipboard }
+            publish(.notice(onClipboard ? "Copied" : PillLabel.landed(text)), for: gen)
+            if gen == self.generation { scheduleErrorClear() }
         } else {
             log.warn("""
                 Could not paste: Accessibility permission is not granted. \
                 The text is on the clipboard. Press Cmd-V to insert it.
                 """)
-            awaitingManualPaste = true
+            if gen == self.generation { awaitingManualPaste = true }
             // Ends on your words rather than on an instruction: what you want to
             // know here is whether it heard you, not how to paste.
-            state = .notice(PillLabel.landed(text))
-            scheduleErrorClear()
+            publish(.notice(PillLabel.landed(text)), for: gen)
+            if gen == self.generation { scheduleErrorClear() }
         }
-        currentRecordingURL = nil
+        if gen == self.generation { currentRecordingURL = nil }
     }
 
     /// Applies a spoken instruction to the clipboard. See `TransformRunner` for why
@@ -617,8 +661,9 @@ public final class DictationController {
             state = .error("Still nothing heard in that recording")
             return
         }
-        stageTimings = Timings(transcribe: started.duration(to: .now).milliseconds)
-        await finishText(raw, recordingURL: url, duration: 0, peak: 0, keepAudio: true)
+        await finishText(raw, recordingURL: url, duration: 0, peak: 0, keepAudio: true,
+                         timings: Timings(transcribe: started.duration(to: .now).milliseconds),
+                         context: currentContext, generation: generation)
     }
 
     private func remember(_ text: String) {
@@ -645,10 +690,13 @@ public final class DictationController {
     /// Only notices clear themselves; a failure waits for you.
     private func scheduleErrorClear() {
         let duration = noticeDuration
+        // The notice this timer is for. A newer dictation's notice is not this
+        // timer's to clear, however similar it looks.
+        let shown = state
         Task { [weak self] in
             try? await Task.sleep(for: duration)
             guard let self else { return }
-            if case .notice = self.state { self.state = .idle }
+            if case .notice = self.state, self.state == shown { self.state = .idle }
         }
     }
 }
