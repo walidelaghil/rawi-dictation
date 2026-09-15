@@ -134,7 +134,7 @@ public struct CleanupSettings: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case provider, models, prompt, transformModel
+        case provider, models, prompt, transformModel, mode, polishModel
         case legacyModel = "model"     // v1 wrote a single model; read it, never write it
     }
 
@@ -145,6 +145,9 @@ public struct CleanupSettings: Codable, Sendable, Equatable {
         prompt = try c.decodeIfPresent(String.self, forKey: .prompt) ?? d.prompt
 
         transformModel = try c.decodeIfPresent(String.self, forKey: .transformModel) ?? ""
+        polishModel = try c.decodeIfPresent(String.self, forKey: .polishModel) ?? ""
+        // A mistyped mode costs you polishing, not every other setting in the file.
+        mode = (try? c.decodeIfPresent(CleanupMode.self, forKey: .mode)) ?? .polish
         if let explicit = try c.decodeIfPresent(CleanupModels.self, forKey: .models) {
             models = explicit
         } else if let legacy = try c.decodeIfPresent(String.self, forKey: .legacyModel) {
@@ -157,10 +160,19 @@ public struct CleanupSettings: Codable, Sendable, Equatable {
 
     /// Explicit so the legacy `model` key is dropped on the next save rather than
     /// lingering as a second source of truth.
+    ///
+    /// Every other key has to be listed here by hand, which is the cost of that.
+    /// `transformModel` once was not, and a Settings save quietly moved transforms
+    /// back onto the model that answered Arabic in Chinese.
+    /// `CleanupSettingsCodingTests` round-trips every field so the next one
+    /// cannot be forgotten the same way.
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(provider, forKey: .provider)
+        try c.encode(mode, forKey: .mode)
         try c.encode(models, forKey: .models)
+        try c.encode(polishModel, forKey: .polishModel)
+        try c.encode(transformModel, forKey: .transformModel)
         try c.encode(prompt, forKey: .prompt)
     }
 }
