@@ -31,6 +31,7 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
     /// Opens the window on its Settings screen. The gear keeps the few items that
     /// belong in a menu — the ones that act rather than configure.
     public var onOpenSettings: (() -> Void)?
+    public var onOpenSetup: (() -> Void)?
 
     public init(controller: DictationController, log: any Logging) {
         self.controller = controller
@@ -177,6 +178,9 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
                                   keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
+        let setup = NSMenuItem(title: "Set up Rawi…", action: #selector(openSetup), keyEquivalent: "")
+        setup.target = self
+        menu.addItem(setup)
         menu.addItem(.separator())
 
         let enabled = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
@@ -231,6 +235,11 @@ public final class MenuBarController: NSObject, NSPopoverDelegate {
     @objc private func openSettings() {
         popover.performClose(nil)
         onOpenSettings?()
+    }
+
+    @objc private func openSetup() {
+        popover.performClose(nil)
+        onOpenSetup?()
     }
 
     @objc private func toggleEnabled() {

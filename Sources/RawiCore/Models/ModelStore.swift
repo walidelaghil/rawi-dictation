@@ -43,12 +43,19 @@ public enum ModelStore {
         WhisperModel(id: "small.en", filename: "ggml-small.en.bin",
                      displayName: "Small (English only)", approxBytes: 487_614_201,
                      multilingual: false),
+        // Not a dictation model: the language detector. Small on purpose — it only
+        // has to say which language it heard, before the real model transcribes.
+        WhisperModel(id: "base", filename: "ggml-base.bin",
+                     displayName: "Base (language detection)", approxBytes: 147_951_465,
+                     multilingual: true),
         WhisperModel(id: "base.en", filename: "ggml-base.en.bin",
                      displayName: "Base (English only)", approxBytes: 147_964_211,
                      multilingual: false),
     ]
 
     public static var recommended: WhisperModel { known[0] }
+    /// The detector the one-key-for-both-languages design depends on.
+    public static var detector: WhisperModel { model(id: "base")! }
 
     public static var directory: URL {
         Config.supportDirectory.appendingPathComponent("models", isDirectory: true)
@@ -76,52 +83,88 @@ public enum ModelStore {
         return known.first { $0.filename == name }
     }
 
-    /// Streams the model to disk, reporting 0...1 progress.
+    /// Downloads a model to disk, reporting 0...1 progress.
     ///
-    /// Downloads land in a `.partial` file and are moved into place only on
-    /// success, so an interrupted download can never look like an installed model.
+    /// A download task writes straight to a temporary file and reports progress as
+    /// it goes. The previous version iterated the response one byte at a time,
+    /// which for the 574 MB default model meant hundreds of millions of async
+    /// steps on the first run — minutes of CPU before anyone could dictate. The
+    /// file is moved into place only on success, so an interrupted download can
+    /// never look like an installed model.
     public static func download(_ model: WhisperModel,
                                 progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         let destination = url(for: model)
-        let partial = destination.appendingPathExtension("partial")
-        let fm = FileManager.default
-        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
-        try? fm.removeItem(at: partial)
-        fm.createFile(atPath: partial.path, contents: nil)
-
-        guard let handle = try? FileHandle(forWritingTo: partial) else {
-            throw ModelStoreError.downloadFailed("could not open \(partial.lastPathComponent)")
-        }
-        defer { try? handle.close() }
-
-        let (bytes, response) = try await URLSession.shared.bytes(from: model.downloadURL)
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw ModelStoreError.downloadFailed("HTTP \(http.statusCode)")
-        }
-        let expected = response.expectedContentLength > 0
-            ? Double(response.expectedContentLength) : Double(model.approxBytes)
-
-        var buffer = Data()
-        buffer.reserveCapacity(1 << 20)
-        var written = 0.0
-        for try await byte in bytes {
-            buffer.append(byte)
-            if buffer.count >= (1 << 20) {
-                try handle.write(contentsOf: buffer)
-                written += Double(buffer.count)
-                buffer.removeAll(keepingCapacity: true)
-                progress(min(1, written / expected))
-            }
-        }
-        if !buffer.isEmpty {
-            try handle.write(contentsOf: buffer)
-            written += Double(buffer.count)
-        }
-        try handle.close()
-
-        try? fm.removeItem(at: destination)
-        try fm.moveItem(at: partial, to: destination)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let temporary = try await DownloadWithProgress.fetch(model.downloadURL,
+                                                             expected: model.approxBytes,
+                                                             progress: progress)
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.moveItem(at: temporary, to: destination)
         progress(1)
         return destination
+    }
+}
+
+/// One download, with progress, as an async call.
+final class DownloadWithProgress: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    private let expected: Int
+    private let progress: @Sendable (Double) -> Void
+    private var continuation: CheckedContinuation<URL, any Error>?
+    private let lock = NSLock()
+
+    private init(expected: Int, progress: @escaping @Sendable (Double) -> Void) {
+        self.expected = expected
+        self.progress = progress
+    }
+
+    static func fetch(_ url: URL, expected: Int,
+                      progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+        let delegate = DownloadWithProgress(expected: expected, progress: progress)
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                delegate.lock.withLock { delegate.continuation = continuation }
+                session.downloadTask(with: url).resume()
+            }
+        } onCancel: {
+            session.invalidateAndCancel()
+        }
+    }
+
+    private func finish(_ result: Result<URL, any Error>) {
+        let pending = lock.withLock { () -> CheckedContinuation<URL, any Error>? in
+            defer { continuation = nil }
+            return continuation
+        }
+        pending?.resume(with: result)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
+                    totalBytesExpectedToWrite: Int64) {
+        let total = totalBytesExpectedToWrite > 0 ? Double(totalBytesExpectedToWrite) : Double(expected)
+        progress(min(1, Double(totalBytesWritten) / max(total, 1)))
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didFinishDownloadingTo location: URL) {
+        if let http = downloadTask.response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            finish(.failure(ModelStoreError.downloadFailed("HTTP \(http.statusCode)")))
+            return
+        }
+        // The system deletes `location` when this returns, so it is moved first.
+        let kept = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rawi-\(UUID().uuidString).download")
+        do {
+            try FileManager.default.moveItem(at: location, to: kept)
+            finish(.success(kept))
+        } catch {
+            finish(.failure(ModelStoreError.downloadFailed(error.localizedDescription)))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+        if let error { finish(.failure(ModelStoreError.downloadFailed(error.localizedDescription))) }
     }
 }

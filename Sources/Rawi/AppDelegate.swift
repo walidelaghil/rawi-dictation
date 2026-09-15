@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recorder = AudioRecorder()
     private let inserter: TextInserter
     private let pill = PillWindow()
+    private var setupWindow: SetupWindow?
     /// Where launch time goes, logged once.
     private var launchMarks: [String] = []
     private let focusProbe = SystemFocusProbe()
@@ -104,13 +105,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.menuBar.refresh(state: .idle, permissions: Permissions.current())
             self.menuBar.setRecent(self.recentFromHistory())
             Task { @MainActor [weak self] in
-                let granted = await Permissions.requestMicrophone()
                 guard let self else { return }
+                // A first run, or a Mac where dictation cannot work yet, opens setup
+                // instead — which asks for the microphone at its own step, with the
+                // reason on screen, rather than as a bare system prompt at launch.
+                let readiness = await SetupStatus.current(config: self.config)
+                if !self.config.setupCompleted || !readiness.canDictate {
+                    self.log.info("Opening setup (completed: \(self.config.setupCompleted), "
+                                  + "can dictate: \(readiness.canDictate))")
+                    self.showSetup()
+                    return
+                }
+                let granted = await Permissions.requestMicrophone()
                 self.log.info("Microphone \(granted ? "granted" : "not granted")")
                 self.menuBar.refresh(state: self.controller.state,
                                      permissions: Permissions.current())
             }
         }
+    }
+
+    /// First-run setup, also reachable later from the menu bar.
+    private func showSetup() {
+        let window = setupWindow ?? SetupWindow()
+        setupWindow = window
+        window.model.settings.onCapture = mainWindow.settings.onCapture
+        window.model.launchedWithInputMonitoring = Permissions.current().inputMonitoring
+            && monitor is HotkeyMonitor
+        window.model.onFinish = { [weak self] in
+            self?.setupWindow?.close()
+            self?.log.info("Setup finished")
+        }
+        window.model.onRestart = { [weak self] in self?.relaunch() }
+        window.show(appearance: config.appearance.resolved(systemIsDark: Appearance.systemIsDark))
+    }
+
+    /// Starts a fresh copy of Rawi and quits this one — the only way a newly granted
+    /// Input Monitoring reaches the key listener.
+    private func relaunch() {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-n", Bundle.main.bundlePath]
+        try? process.run()
+        NSApp.terminate(nil)
     }
 
     @objc private func showScreen(_ sender: NSMenuItem) {
@@ -279,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onOpenWindow = { [weak self] in self?.mainWindow.show() }
         menuBar.onUndo = { [weak self] in _ = self?.controller.undoTransform() }
         menuBar.onOpenSettings = { [weak self] in self?.mainWindow.show(.settings) }
+        menuBar.onOpenSetup = { [weak self] in self?.showSetup() }
         // Let go of the global hotkeys while one is being recorded, or the key you
         // are trying to assign is swallowed by the key it is already assigned to.
         mainWindow.settings.onCapture = { [weak self] capturing in

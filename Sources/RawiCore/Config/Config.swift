@@ -226,6 +226,10 @@ public struct Config: Codable, Sendable, Equatable {
     public var cleanup: CleanupSettings
     public var output: OutputSettings
     public var history: HistorySettings
+    /// Whether the first-run setup has been finished. A config written before
+    /// setup existed belongs to someone already using Rawi, so it reads as done;
+    /// a config written by a first launch starts as not done.
+    public var setupCompleted: Bool = true
 
     public init(appearance: Appearance = .system,
                 hotkey: String, doubleTapWindowMs: Int, minHoldMs: Int,
@@ -284,6 +288,7 @@ public struct Config: Codable, Sendable, Equatable {
         cleanup = try c.decodeIfPresent(CleanupSettings.self, forKey: .cleanup) ?? d.cleanup
         output = try c.decodeIfPresent(OutputSettings.self, forKey: .output) ?? d.output
         history = try c.decodeIfPresent(HistorySettings.self, forKey: .history) ?? d.history
+        setupCompleted = try c.decodeIfPresent(Bool.self, forKey: .setupCompleted) ?? true
     }
 
     // MARK: - Defaults

@@ -82,7 +82,8 @@ public enum FirstRunSetup {
         if let existing = try? Config.load() {
             return (existing, false)
         }
-        let detected = detect(await liveProbes(env: env))
+        var detected = detect(await liveProbes(env: env))
+        detected.setupCompleted = false
         try? detected.save()
         return (detected, true)
     }
