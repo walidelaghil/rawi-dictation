@@ -202,11 +202,25 @@ public final class SystemEditWatcher: EditWatching {
         return element
     }
 
-    private static func value(of element: AXUIElement) -> String? {
+    nonisolated static func value(of element: AXUIElement) -> String? {
         var ref: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &ref) == .success
-        else { return nil }
-        return ref as? String
+        let direct = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &ref)
+            == .success ? ref as? String : nil
+        if let direct, !direct.isEmpty { return direct }
+        // Web editors (Notion, and contenteditable fields generally) often answer
+        // the value with an empty string and keep the text in their children. They
+        // do answer "the characters in this range", which reads the same text.
+        var countRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXNumberOfCharactersAttribute as CFString,
+                                            &countRef) == .success,
+              let count = countRef as? Int, count > 0 else { return direct }
+        var range = CFRange(location: 0, length: count)
+        guard let rangeValue = AXValueCreate(.cfRange, &range) else { return direct }
+        var textRef: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+                element, kAXStringForRangeParameterizedAttribute as CFString, rangeValue, &textRef)
+                == .success, let text = textRef as? String else { return direct }
+        return text
     }
 
     private static func caret(of element: AXUIElement) -> Int? {

@@ -116,8 +116,12 @@ public final class SystemFocusProbe: FocusProbing, @unchecked Sendable {
         let selection = Self.has(focused, kAXSelectedTextRangeAttribute)
         let verdict = Self.classify(role: role, valueSettable: settable,
                                     hasSelectedRange: selection)
+        // Whether its text can be read back, which learning from corrections needs.
+        // A length only: the text itself is never logged.
+        let text = SystemEditWatcher.value(of: focused)
+        let readable = text.map { "text readable (\($0.count) chars)" } ?? "text not readable"
         note("\(appName): \(role ?? "no role"), value settable \(settable), "
-             + "selection \(selection) → \(verdict.rawValue)")
+             + "selection \(selection), \(readable) → \(verdict.rawValue)")
         return verdict
     }
 
