@@ -69,4 +69,22 @@ struct PolishLiveTests {
         #expect(structured.contains("2. "))
         #expect(structured.contains("3. "))
     }
+
+    @Test("warming at key-press means the polish itself does not read the prompt") func warming() async throws {
+        final class Reports: @unchecked Sendable { var lines: [String] = [] }
+        let reports = Reports()
+        ChatCleanup.timingSink = { reports.lines.append($0) }
+        defer { ChatCleanup.timingSink = nil }
+        // A prompt Ollama has never seen, so the warm-up has real work to do.
+        let fresh = polishSystemPrompt + "\n<!-- \(UUID().uuidString) -->"
+        let provider = ChatCleanup(kind: .ollama, apiKey: nil, model: Self.model,
+                                   prompt: fresh, wrap: wrapTranscript)
+        await provider.warm()
+        _ = try await provider.clean("um send the deck to sara before friday", instruction: "")
+        let last = try #require(reports.lines.last)
+        let promptMs = Int(last.split(separator: "in ").dropFirst().first?
+            .split(separator: "ms").first ?? "") ?? .max
+        print("after warm:", last)
+        #expect(promptMs < 300, "the polish still read its prompt: \(last)")
+    }
 }

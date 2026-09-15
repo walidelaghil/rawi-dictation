@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        ChatCleanup.timingSink = { [log] report in log.info(report) }
         // The pill's × is the cancel key, clicked.
         pill.onCancel = { [weak self] in
             Task { @MainActor in await self?.controller.cancelRequested() }
@@ -332,12 +333,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             controller.polisher = try CleanupProviderFactory.makePolisher(
                 config: config, env: env)
-            if let model = controller.polisher == nil ? nil
-                : (config.cleanup.polishModel.isEmpty ? config.cleanup.models.arabic
-                                                      : config.cleanup.polishModel) {
-                log.info("Cleanup mode: polish — corrections and run-ons via \(model)")
-            } else {
+            if controller.polisher == nil {
                 log.info("Cleanup mode: clean — filler and punctuation only")
+            } else if !config.cleanup.polishModel.isEmpty {
+                log.info("Cleanup mode: polish via \(config.cleanup.polishModel)")
+            } else {
+                log.info("""
+                    Cleanup mode: polish — English via \(config.cleanup.models.latin), \
+                    anything with Arabic via \(config.cleanup.models.arabic)
+                    """)
             }
         } catch {
             log.error("Polish disabled: \(error.localizedDescription)")
@@ -612,7 +616,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func feed(_ outcome: TapOutcome, intent: RecordingIntent = .dictate) {
         // You are about to speak, so the model had better be loaded by the time you
         // stop. Nothing waits on this.
-        if outcome == .beganHold || outcome == .beganDoubleTap { warmEngine(controller.engine) }
+        if outcome == .beganHold || outcome == .beganDoubleTap {
+            warmEngine(controller.engine)
+            // While you speak, the polisher reads its instructions, so the pause after
+            // you stop is only the typing of your words.
+            if intent == .dictate, let polisher = controller.polisher {
+                Task.detached(priority: .utility) { await polisher.warm() }
+            }
+        }
         if outcome == .pendingShortTap { schedulePendingTapTimer() }
         if outcome == .beganDoubleTap || outcome == .beganHold { pendingTapTimer?.invalidate() }
         guard outcome != .ignored else { return }

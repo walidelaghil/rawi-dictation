@@ -431,8 +431,14 @@ public final class DictationController {
         // The two settings contradict each other: one puts text on the clipboard
         // early, the other promises to put your old clipboard back. Restoring wins,
         // because it is the one you had to turn on deliberately.
+        // Only worth doing where the clipboard might be the delivery. With a text
+        // field focused the words are about to be typed, and showing them on the
+        // pill first made the second or two before they appeared look like a
+        // failure — the pill said "done" while the document said nothing. It also
+        // spent your clipboard on a copy nobody needed.
         let earlyPaste = config.output.deliverRawFirst
             && !config.output.restorePreviousClipboard
+            && focusProbe.probe() != .editable
         if earlyPaste {
             _ = inserter.stage(raw)
             // And say so. Staging the text early while the pill still read

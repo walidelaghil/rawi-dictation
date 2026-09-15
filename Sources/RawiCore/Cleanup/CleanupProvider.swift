@@ -6,9 +6,13 @@ public protocol CleanupProvider: AnyObject, Sendable {
     /// changes with every key-press while the provider is built once.
     func clean(_ transcript: String, instruction: String) async throws -> String
     func cancel()
+    /// Gets the model ready while you are still speaking. See `ChatCleanup.warm`.
+    func warm() async
 }
 
 public extension CleanupProvider {
+    func warm() async {}
+
     func clean(_ transcript: String) async throws -> String {
         try await clean(transcript, instruction: "")
     }
@@ -104,28 +108,38 @@ public enum CleanupProviderFactory {
     public static func makePolisher(config: Config, env: DotEnv) throws
         -> (any CleanupProvider)? {
         guard config.cleanup.mode == .polish else { return nil }
-        let model = config.cleanup.polishModel.isEmpty
-            ? config.cleanup.models.arabic
-            : config.cleanup.polishModel
-        switch config.cleanup.provider {
+        let kind = config.cleanup.provider
+        let key: String?
+        switch kind {
         case .off:
             return nil
         case .ollama:
-            return ChatCleanup(kind: .ollama, apiKey: nil, model: model,
-                               prompt: polishSystemPrompt, wrap: wrapTranscript)
+            key = nil
         case .openai:
-            guard let key = env["OPENAI_API_KEY"], !key.isEmpty else {
+            guard let k = env["OPENAI_API_KEY"], !k.isEmpty else {
                 throw CleanupError.missingAPIKey("OPENAI_API_KEY")
             }
-            return ChatCleanup(kind: .openai, apiKey: key, model: model,
-                               prompt: polishSystemPrompt, wrap: wrapTranscript)
+            key = k
         case .anthropic:
-            guard let key = env["ANTHROPIC_API_KEY"], !key.isEmpty else {
+            guard let k = env["ANTHROPIC_API_KEY"], !k.isEmpty else {
                 throw CleanupError.missingAPIKey("ANTHROPIC_API_KEY")
             }
-            return ChatCleanup(kind: .anthropic, apiKey: key, model: model,
-                               prompt: polishSystemPrompt, wrap: wrapTranscript)
+            key = k
         }
+        func provider(_ model: String) -> any CleanupProvider {
+            ChatCleanup(kind: kind, apiKey: key, model: model,
+                        prompt: polishSystemPrompt, wrap: wrapTranscript)
+        }
+        // A pinned model is a decision someone made; use it for everything.
+        if !config.cleanup.polishModel.isEmpty {
+            return provider(config.cleanup.polishModel)
+        }
+        let models = config.cleanup.models
+        guard models.latin != models.arabic, !models.latin.isEmpty else {
+            return provider(models.arabic)
+        }
+        return ScriptRoutedProvider(latin: provider(models.latin),
+                                    arabic: provider(models.arabic))
     }
 
     /// Default model per script for a provider, used by first-run detection.

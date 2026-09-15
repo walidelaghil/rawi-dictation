@@ -7,7 +7,7 @@ public enum PillLabel {
         case .recording(.pushToTalk, _): "Listening"
         case .recording(.handsFree, _): "Hands-free"
         case .transcribing: "Transcribing…"
-        case .cleaning: "Cleaning up…"
+        case .cleaning: "Writing…"
         case .inserting: "Inserting…"
         case .transforming: "Rewriting…"
         case .notice(let message): message

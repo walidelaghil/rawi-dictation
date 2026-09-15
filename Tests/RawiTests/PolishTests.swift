@@ -83,3 +83,37 @@ import Testing
         #expect(PolishGuard.check(raw: raw, polished: polished) == .accept)
     }
 }
+
+@Suite("Choosing the polish model") struct PolishRoutingTests {
+    @Test("English goes to the fast model, anything with Arabic to the one that keeps it") func routes() async throws {
+        let latin = FakeCleanup(), arabic = FakeCleanup()
+        latin.result = .success("latin")
+        arabic.result = .success("arabic")
+        let router = ScriptRoutedProvider(latin: latin, arabic: arabic)
+        #expect(try await router.clean("Send it to Sara.", instruction: "") == "latin")
+        #expect(try await router.clean("الاجتماع يوم الثلاثاء", instruction: "") == "arabic")
+        // One Arabic word in an English sentence: the small model would translate it.
+        #expect(try await router.clean("Send the تقرير to Sara before Friday.", instruction: "") == "arabic")
+    }
+
+    @Test("cancelling reaches both models") func cancelsBoth() {
+        let latin = FakeCleanup(), arabic = FakeCleanup()
+        ScriptRoutedProvider(latin: latin, arabic: arabic).cancel()
+        #expect(latin.cancelCount == 1 && arabic.cancelCount == 1)
+    }
+
+    @Test("with two local models, polish routes; a pinned model is used for everything") func factory() throws {
+        var config = Config.default
+        config.cleanup.provider = .ollama
+        config.cleanup.mode = .polish
+        config.cleanup.models = CleanupModels(latin: "qwen2.5:1.5b", arabic: "qwen2.5:3b")
+        let routed = try CleanupProviderFactory.makePolisher(config: config, env: DotEnv(contents: ""))
+        #expect(routed is ScriptRoutedProvider)
+        config.cleanup.polishModel = "qwen2.5:3b"
+        let pinned = try CleanupProviderFactory.makePolisher(config: config, env: DotEnv(contents: ""))
+        #expect(pinned is ChatCleanup)
+        config.cleanup.mode = .clean
+        let none = try CleanupProviderFactory.makePolisher(config: config, env: DotEnv(contents: ""))
+        #expect(none == nil)
+    }
+}

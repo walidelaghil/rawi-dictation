@@ -154,6 +154,21 @@ import Foundation
         #expect(g.ctl.state == .idle)
     }
 
+    @Test("with a text field, the words are not announced before they are typed") func noEarlyNoticeIntoAField() async {
+        let g = make()                        // deliverRawFirst is on by default
+        g.clean.delay = .milliseconds(200)
+        let focus = FakeFocus(); focus.result = .editable
+        g.ctl.focusProbe = focus
+        var states: [DictationState] = []
+        g.ctl.onStateChange = { states.append($0) }
+        await g.ctl.handle(.beganHold)
+        await g.ctl.handle(.endedHold)
+        #expect(g.ins.staged.isEmpty)         // your clipboard was not spent on a copy
+        #expect(!states.contains { if case .notice = $0 { true } else { false } })
+        #expect(states.contains(.cleaning))   // the pill says it is still writing
+        #expect(g.ins.inserted == ["Cleaned transcript."])
+    }
+
     @Test("with no text field, nothing is pasted and the pill says Copied") func noField() async {
         var config = Config.default
         config.output.deliverRawFirst = false

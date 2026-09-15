@@ -75,6 +75,9 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
                         continuation.resume(throwing: CleanupError.badResponse("HTTP \(status)"))
                         return
                     }
+                    if self.kind == .ollama, let report = Self.ollamaTimings(data, model: self.model) {
+                        Self.timingSink?(report)
+                    }
                     do {
                         let text = try Self.parse(kind: self.kind, data)
                             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -89,6 +92,29 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
         } onCancel: {
             self.cancel()
         }
+    }
+
+    /// Has a local model read its instructions before there is anything to clean.
+    ///
+    /// Measured: the first polish after the model had not seen this prompt spent
+    /// 1.4 seconds reading 462 tokens of instruction before typing a word, and
+    /// 27ms on every call after, because Ollama keeps what it has read. The key
+    /// press is the free moment to pay that: transcription does not touch the GPU
+    /// until the key comes up. One output token, same system prompt.
+    public func warm() async {
+        guard kind == .ollama,
+              var payload = try? JSONSerialization.jsonObject(with: Self.requestBody(
+                  kind: kind, model: model, prompt: prompt, user: wrap("ok"))) as? [String: Any]
+        else { return }
+        var options = payload["options"] as? [String: Any] ?? [:]
+        options["num_predict"] = 1
+        payload["options"] = options
+        var request = URLRequest(url: Self.endpoint(kind: kind))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        _ = try? await session.data(for: request)
     }
 
     public func cancel() {
@@ -108,6 +134,24 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
         case .ollama: 90
         case .openai, .anthropic, .off: 20
         }
+    }
+
+    /// Where Ollama's own timing breakdown goes. Set by the app to its log.
+    ///
+    /// The wall-clock "cleanup" figure could not tell a slow model from a busy GPU
+    /// from a model being loaded back in, and those three have opposite fixes.
+    /// Ollama reports each of them separately on every response.
+    nonisolated(unsafe) public static var timingSink: (@Sendable (String) -> Void)?
+
+    static func ollamaTimings(_ data: Data, model: String) -> String? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let total = root["total_duration"] as? Double else { return nil }
+        func ms(_ key: String) -> Int { Int(((root[key] as? Double) ?? 0) / 1e6) }
+        let promptTokens = root["prompt_eval_count"] as? Int ?? 0
+        let outputTokens = root["eval_count"] as? Int ?? 0
+        return "Ollama \(model): total \(Int(total / 1e6))ms — load \(ms("load_duration"))ms, "
+            + "prompt \(promptTokens) tokens in \(ms("prompt_eval_duration"))ms, "
+            + "output \(outputTokens) tokens in \(ms("eval_duration"))ms"
     }
 
     // MARK: - Wire format

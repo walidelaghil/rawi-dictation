@@ -10,7 +10,7 @@ import Testing
         #expect(PillLabel.text(for: .recording(mode: .pushToTalk, startedAt: t0)) == "Listening")
         #expect(PillLabel.text(for: .recording(mode: .handsFree, startedAt: t0)) == "Hands-free")
         #expect(PillLabel.text(for: .transcribing) == "Transcribing…")
-        #expect(PillLabel.text(for: .cleaning) == "Cleaning up…")
+        #expect(PillLabel.text(for: .cleaning) == "Writing…")
         #expect(PillLabel.text(for: .inserting) == "Inserting…")
         #expect(PillLabel.text(for: .error("no mic")) == "no mic")
     }
