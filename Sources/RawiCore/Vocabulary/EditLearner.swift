@@ -38,6 +38,7 @@ public enum EditLearner {
                                    isOrdinaryWord: (String) -> Bool) -> [Correction] {
         let typed = words(inserted)
         let now = words(current)
+        let startsSentence = sentenceStarts(current)
         guard !typed.isEmpty, !now.isEmpty else { return [] }
 
         let matched = alignment(typed.map { $0.lowercased() }, now.map { $0.lowercased() })
@@ -49,8 +50,9 @@ public enum EditLearner {
         }
 
         var found: [Correction] = []
-        func consider(_ heard: String, _ fixed: String) {
+        func consider(_ heard: String, _ fixed: String, at index: Int) {
             guard let correction = judge(heard: heard, fixed: fixed,
+                                         startsSentence: startsSentence.contains(index),
                                          isOrdinaryWord: isOrdinaryWord),
                   !found.contains(where: { $0.fixed == correction.fixed }) else { return }
             found.append(correction)
@@ -64,14 +66,16 @@ public enum EditLearner {
             let nowGap = Array(now[(left.1 + 1)..<right.1])
             // One for one, or a short run replaced word for word.
             guard typedGap.count == nowGap.count, (1...2).contains(typedGap.count) else { continue }
-            for (heard, fixed) in zip(typedGap, nowGap) { consider(heard, fixed) }
+            for (offset, (heard, fixed)) in zip(typedGap, nowGap).enumerated() {
+                consider(heard, fixed, at: left.1 + 1 + offset)
+            }
         }
         // Aligned words whose case you changed: "salla" → "Salla".
-        for (i, j) in matched where typed[i] != now[j] { consider(typed[i], now[j]) }
+        for (i, j) in matched where typed[i] != now[j] { consider(typed[i], now[j], at: j) }
         return found
     }
 
-    static func judge(heard: String, fixed: String,
+    static func judge(heard: String, fixed: String, startsSentence: Bool = false,
                       isOrdinaryWord: (String) -> Bool) -> Correction? {
         guard heard != fixed, fixed.count >= 3, fixed.contains(where: \.isLetter) else { return nil }
         let heardLower = heard.lowercased(), fixedLower = fixed.lowercased()
@@ -83,8 +87,10 @@ public enum EditLearner {
             guard !fixedIsOrdinary, fixed.first?.isUppercase == true else { return nil }
             return Correction(heard: heard, fixed: fixed, aliasable: false)
         }
-        // Wording, not spelling.
-        if fixedIsOrdinary && fixed == fixedLower { return nil }
+        // Wording, not spelling. A capital only makes an ordinary word a name where
+        // a sentence could not have put it there: "Slack" mid-sentence is the
+        // product, "Raw" at the start is just the word raw.
+        if fixedIsOrdinary && (fixed == fixedLower || startsSentence) { return nil }
         // Close enough to be the same word spelled differently.
         let longest = max(heardLower.count, fixedLower.count)
         let allowance = max(2, longest / 2)
@@ -92,6 +98,26 @@ public enum EditLearner {
               heardLower.first == fixedLower.first
                 || TermCorrector.editDistance(heardLower, fixedLower) <= 1 else { return nil }
         return Correction(heard: heard, fixed: fixed, aliasable: !isOrdinaryWord(heardLower))
+    }
+
+    /// Indices, in `words(text)`, of the words that begin a sentence.
+    static func sentenceStarts(_ text: String) -> Set<Int> {
+        var starts: Set<Int> = [0]
+        var index = 0, inWord = false, sawEnd = false
+        for character in text {
+            let isWordCharacter = character.isLetter || character.isNumber
+                || character == "'" || character == "’"
+            if isWordCharacter {
+                if !inWord {
+                    if sawEnd { starts.insert(index) }
+                    inWord = true; sawEnd = false
+                }
+            } else {
+                if inWord { index += 1; inWord = false }
+                if ".!?\n۔؟".contains(character) { sawEnd = true }
+            }
+        }
+        return starts
     }
 
     static func words(_ text: String) -> [String] {

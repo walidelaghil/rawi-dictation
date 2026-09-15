@@ -79,3 +79,33 @@ import Testing
         #expect(settings.encrypted)
     }
 }
+
+@Suite("The history key file") struct HistoryKeyFileTests {
+    func keyURL() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("rawi-key-\(UUID().uuidString)")
+            .appendingPathComponent("Keys").appendingPathComponent("history.key")
+    }
+
+    @Test("the key is created private, and the same key comes back") func privateAndStable() throws {
+        let url = keyURL()
+        let first = try FileKeyHistoryCipher(url: url)
+        let sealed = try first.seal(Data("hello".utf8))
+        let again = try FileKeyHistoryCipher(url: url)
+        #expect(String(decoding: try again.open(sealed), as: UTF8.self) == "hello")
+        let mode = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
+        #expect(mode == 0o600)
+        #expect(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+    }
+
+    @Test("an existing key is carried over, so older sealed history still opens") func migrates() throws {
+        let legacy = SymmetricKey(size: .bits256)
+        let sealed = try InMemoryHistoryCipher(key: legacy).seal(Data("from the keychain era".utf8))
+        let url = keyURL()
+        var asked = 0
+        let cipher = try FileKeyHistoryCipher(url: url, migrate: { asked += 1; return legacy })
+        #expect(String(decoding: try cipher.open(sealed), as: UTF8.self) == "from the keychain era")
+        // Only the first time: with a key file present, nothing else is asked.
+        _ = try FileKeyHistoryCipher(url: url, migrate: { asked += 1; return nil })
+        #expect(asked == 1)
+    }
+}

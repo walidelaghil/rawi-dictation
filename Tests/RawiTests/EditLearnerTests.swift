@@ -64,3 +64,26 @@ import Testing
         #expect(found.isEmpty || found.allSatisfy { $0.fixed != "and" })
     }
 }
+
+@Suite("Learning from what you fix, the cases real use found") struct EditLearnerRealCases {
+    func learn(_ inserted: String, _ current: String) -> [Correction] {
+        EditLearner.corrections(inserted: inserted, current: current,
+                                isOrdinaryWord: SpellCheck.isOrdinaryEnglish)
+    }
+
+    @Test("an ordinary word capitalised at the start of a sentence is not a name") func rawAtStart() {
+        #expect(learn("Rawal is the app I am building.", "Raw is the app I am building.").isEmpty)
+    }
+
+    @Test("an ordinary word capitalised mid-sentence can be a product") func slackMidSentence() {
+        #expect(learn("Post it in slak before lunch.", "Post it in Slack before lunch.").map(\.fixed) == ["Slack"])
+    }
+
+    @Test("the finished word is learned") func rawi() {
+        #expect(learn("Rawal is the app I am building.", "Rawi is the app I am building.").map(\.fixed) == ["Rawi"])
+    }
+
+    @Test("sentence starts are found after any sentence end") func starts() {
+        #expect(EditLearner.sentenceStarts("One two. Three four! five\nsix") == [0, 2, 4, 5])
+    }
+}

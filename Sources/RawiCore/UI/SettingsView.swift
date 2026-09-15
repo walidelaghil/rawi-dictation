@@ -399,7 +399,7 @@ public struct SettingsView: View {
                     .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
                     .fixedSize(horizontal: false, vertical: true)
                 Label(model.config.history.encrypted
-                      ? "Encrypted on this Mac. The key is in your login keychain and never leaves it."
+                      ? "Encrypted on this Mac, with a key only your account can read, kept out of backups and search."
                       : "Stored as plain text. Set history.encrypted to true in config.json to seal it.",
                       systemImage: model.config.history.encrypted ? "lock.fill" : "lock.open")
                     .font(.system(size: TypeScale.small))

@@ -14,23 +14,59 @@ public enum HistoryCipherError: Error, Equatable {
     case malformed
 }
 
-/// AES-GCM with a key that lives in your login keychain and never on disk beside
-/// the file.
+/// AES-GCM with a key kept in a private file, apart from the history it seals.
 ///
-/// What this protects against, stated plainly: someone who has the history file
-/// but not your unlocked login session — a backup copied somewhere, a sync
-/// folder, a file sent by mistake, another user account on the Mac. It does not
-/// protect against software already running as you, which can ask the keychain
-/// for the key the same way Rawi does. FileVault protects the disk as a whole;
-/// this protects the file once it leaves the disk.
-public final class KeychainHistoryCipher: HistoryCipher, @unchecked Sendable {
-    static let service = "com.welaghil.rawi.history"
-    static let account = "history-key-v1"
-
+/// Why a file and not the login keychain. The keychain was tried first and is the
+/// stronger place, but on a Mac without an Apple developer signature macOS ties
+/// keychain access to the exact build, so every rebuild or update of Rawi made the
+/// system ask for permission at launch — measured as 7 to 24 seconds of a stalled
+/// launch waiting on that dialog. The keychain that avoids this needs a developer
+/// team entitlement (it answers -34018 without one). Once Rawi is signed with one,
+/// that is where the key belongs.
+///
+/// What the file protects against, stated plainly: the history being read on its
+/// own — by search, by a sync or upload of that file, by a copy sent somewhere by
+/// mistake, by another account on this Mac. The key file is readable only by your
+/// account, excluded from Time Machine and from Spotlight. It does not protect
+/// against someone who has your whole home folder, or software running as you.
+public final class FileKeyHistoryCipher: HistoryCipher, @unchecked Sendable {
     private let key: SymmetricKey
 
-    public init() throws {
-        key = try Self.loadOrCreateKey()
+    public static var defaultURL: URL {
+        Config.supportDirectory.appendingPathComponent("Keys", isDirectory: true)
+            .appendingPathComponent("history.key")
+    }
+
+    /// `migrate` supplies an existing key the first time, so history sealed under
+    /// it stays readable. It is asked only when no key file exists yet.
+    public init(url: URL = FileKeyHistoryCipher.defaultURL,
+                migrate: () -> SymmetricKey? = { nil }) throws {
+        let fm = FileManager.default
+        if let data = try? Data(contentsOf: url), data.count == 32 {
+            key = SymmetricKey(data: data)
+            return
+        }
+        let chosen = migrate() ?? SymmetricKey(size: .bits256)
+        let directory = url.deletingLastPathComponent()
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true,
+                               attributes: [.posixPermissions: 0o700])
+        // Spotlight never indexes the folder the key lives in.
+        fm.createFile(atPath: directory.appendingPathComponent(".metadata_never_index").path,
+                      contents: nil)
+        let bytes = chosen.withUnsafeBytes { Data($0) }
+        guard fm.createFile(atPath: url.path, contents: bytes,
+                            attributes: [.posixPermissions: 0o600]) else {
+            throw HistoryCipherError.malformed
+        }
+        var excluded = URLResourceValues()
+        excluded.isExcludedFromBackup = true
+        var mutableURL = url
+        try? mutableURL.setResourceValues(excluded)
+        var excludedDirectory = URLResourceValues()
+        excludedDirectory.isExcludedFromBackup = true
+        var mutableDirectory = directory
+        try? mutableDirectory.setResourceValues(excludedDirectory)
+        key = chosen
     }
 
     public func seal(_ plaintext: Data) throws -> Data {
@@ -43,34 +79,27 @@ public final class KeychainHistoryCipher: HistoryCipher, @unchecked Sendable {
     public func open(_ sealed: Data) throws -> Data {
         try AES.GCM.open(AES.GCM.SealedBox(combined: sealed), using: key)
     }
+}
 
-    private static func loadOrCreateKey() throws -> SymmetricKey {
-        let query: [String: Any] = [
+/// The key an earlier build kept in the login keychain, read once so the history
+/// it sealed can still be opened, then removed from the keychain.
+public enum LegacyKeychainHistoryKey {
+    static let service = "com.welaghil.rawi.history"
+    static let account = "history-key-v1"
+
+    public static func takeIfPresent() -> SymmetricKey? {
+        let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
         ]
+        var query = base
+        query[kSecReturnData as String] = true
         var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecSuccess, let data = result as? Data, data.count == 32 {
-            return SymmetricKey(data: data)
-        }
-        guard status == errSecItemNotFound else { throw HistoryCipherError.keychain(status) }
-
-        let key = SymmetricKey(size: .bits256)
-        let add: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecAttrLabel as String: "Rawi history key",
-            // Never leaves this Mac: not in iCloud Keychain, not in a migrated backup.
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            kSecValueData as String: key.withUnsafeBytes { Data($0) },
-        ]
-        let added = SecItemAdd(add as CFDictionary, nil)
-        guard added == errSecSuccess else { throw HistoryCipherError.keychain(added) }
-        return key
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data, data.count == 32 else { return nil }
+        SecItemDelete(base as CFDictionary)
+        return SymmetricKey(data: data)
     }
 }
 

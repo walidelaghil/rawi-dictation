@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recorder = AudioRecorder()
     private let inserter: TextInserter
     private let pill = PillWindow()
+    /// Where launch time goes, logged once.
+    private var launchMarks: [String] = []
     private let focusProbe = SystemFocusProbe()
     private var history: HistoryStore!
     private var vocabulary: VocabularyStore!
@@ -69,8 +71,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                          findAction: #selector(findInHistory))
         log.info("Rawi starting")
 
+        let launchStarted = ContinuousClock.now
         Task { @MainActor in
+            self.launchMarks.append("task \(launchStarted.duration(to: .now).milliseconds)ms")
             let (loaded, created) = await FirstRunSetup.loadOrCreate()
+            self.launchMarks.append("config \(launchStarted.duration(to: .now).milliseconds)ms")
             self.config = loaded
             if created {
                 self.log.info("""
@@ -170,12 +175,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Sealed by default. If the keychain will not hand over a key, history still
         // works, unsealed, and the log says so rather than losing every dictation.
         var cipher: (any HistoryCipher)?
+        let keyStarted = ContinuousClock.now
         if config.history.encrypted {
-            do { cipher = try KeychainHistoryCipher() }
+            do { cipher = try FileKeyHistoryCipher(migrate: LegacyKeychainHistoryKey.takeIfPresent) }
             catch { log.error("History encryption unavailable (\(error)); writing it unsealed") }
         }
+        launchMarks.append("key \(keyStarted.duration(to: .now).milliseconds)ms")
+        let historyStarted = ContinuousClock.now
         history = HistoryStore(limit: config.history.limit,
                                retentionDays: config.history.retentionDays, cipher: cipher)
+        launchMarks.append("history \(historyStarted.duration(to: .now).milliseconds)ms")
+        log.info("Launch: \(launchMarks.joined(separator: ", "))")
         log.info("History: \(history.count) entries, \(cipher == nil ? "plain" : "encrypted"), "
                  + (config.history.retentionDays == 0 ? "kept until the limit"
                     : "kept \(config.history.retentionDays) days"))

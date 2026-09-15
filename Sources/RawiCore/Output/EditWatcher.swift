@@ -34,6 +34,8 @@ public final class SystemEditWatcher: EditWatching {
         let after: String
         let start: Int                  // UTF-16 offset where the dictation began
         var learned: Set<String> = []
+        /// Corrections seen on the previous look, not yet confirmed.
+        var seen: Set<String> = []
     }
 
     private var current: Watch?
@@ -41,7 +43,12 @@ public final class SystemEditWatcher: EditWatching {
 
     /// When to look. People fix a word as soon as they read it, or not at all; three
     /// looks inside a minute catch that without watching a field indefinitely.
-    static let checks: [TimeInterval] = [5, 15, 45]
+    ///
+    /// A correction is learned only when two looks in a row agree. The first one
+    /// that learned anything for real caught you halfway through retyping "Rawal"
+    /// as "Rawi" and taught the dictionary "Raw". The last look, taken when you
+    /// start the next dictation, needs no second: you are not editing then.
+    static let checks: [TimeInterval] = [4, 10, 20, 45, 60]
     /// How long the target app takes to act on the synthetic ⌘V.
     static let settle: TimeInterval = 0.5
     static let anchorLength = 40
@@ -55,12 +62,12 @@ public final class SystemEditWatcher: EditWatching {
             onNote?("no focused field to watch"); return
         }
         schedule(Self.settle) { [weak self] in
-            self?.anchor(element, inserted: inserted, app: appName)
+            self?.anchor(element, inserted: inserted, app: appName, attempt: 1)
         }
     }
 
     public func flush() {
-        if current != nil { check() }
+        if current != nil { check(final: true) }
         stop()
     }
 
@@ -78,9 +85,19 @@ public final class SystemEditWatcher: EditWatching {
     }
 
     /// Finds where the paste landed and remembers the text around it.
-    private func anchor(_ element: AXUIElement, inserted: String, app: String?) {
+    /// Tries a few times: a busy app can take well over the settle time to act on
+    /// the paste, and giving up on the first empty read lost real corrections.
+    static let anchorAttempts = 4
+
+    private func anchor(_ element: AXUIElement, inserted: String, app: String?, attempt: Int) {
+        func retry(_ reason: String) {
+            guard attempt < Self.anchorAttempts else { onNote?(reason); return }
+            schedule(Double(attempt) * 0.6) { [weak self] in
+                self?.anchor(element, inserted: inserted, app: app, attempt: attempt + 1)
+            }
+        }
         guard let value = Self.value(of: element) else {
-            onNote?("the field would not share its text"); return
+            retry("the field would not share its text"); return
         }
         let text = value as NSString
         var start = NSNotFound
@@ -97,7 +114,7 @@ public final class SystemEditWatcher: EditWatching {
             start = found.location
         }
         guard start != NSNotFound else {
-            onNote?("could not find the dictation in the field (\(text.length) characters)"); return
+            retry("could not find the dictation in the field (\(text.length) characters)"); return
         }
         let end = start + inserted.utf16.count
         let beforeStart = max(0, start - Self.anchorLength)
@@ -113,7 +130,7 @@ public final class SystemEditWatcher: EditWatching {
         schedule(Self.checks.last! - Self.settle + 0.1) { [weak self] in self?.stop() }
     }
 
-    private func check() {
+    private func check(final: Bool = false) {
         guard var watch = current else { return }
         guard let value = Self.value(of: watch.element) else {
             onNote?("the field is gone"); return
@@ -123,10 +140,16 @@ public final class SystemEditWatcher: EditWatching {
         }
         let found = EditLearner.corrections(inserted: watch.inserted, current: region,
                                             isOrdinaryWord: isOrdinaryWord)
-        for correction in found where !watch.learned.contains(correction.fixed.lowercased()) {
-            watch.learned.insert(correction.fixed.lowercased())
+        let keys = Set(found.map { "\($0.heard.lowercased())→\($0.fixed)" })
+        for correction in found {
+            let key = "\(correction.heard.lowercased())→\(correction.fixed)"
+            guard !watch.learned.contains(key), final || watch.seen.contains(key) else { continue }
+            watch.learned.insert(key)
             onCorrection?(correction, watch.app)
         }
+        // Only what this look saw counts toward the next: a half-typed word that has
+        // since moved on is forgotten.
+        watch.seen = keys
         current = watch
     }
 
