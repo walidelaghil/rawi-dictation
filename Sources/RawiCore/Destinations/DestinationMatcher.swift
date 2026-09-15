@@ -7,11 +7,17 @@ public enum DestinationMatcher {
     /// rule, and among URL patterns the longer one wins. That last part is the
     /// entire reason a Slack DM can be treated differently from a Slack channel —
     /// `…/client/*/D*` is longer than `…/client/*`.
-    public static func match(bundleID: String?, url: String?,
+    public static func match(bundleID: String?, url: String?, field: FieldContext? = nil,
                              rules: [DestinationRule]) -> DestinationRule? {
         rules
             .filter { $0.enabled }
             .filter { rule in
+                // A field rule needs a field to have been read and to fit. Without
+                // Accessibility there is never a field, so these rules simply do not
+                // fire and the page-level rule underneath still does.
+                if let pattern = rule.fieldPattern, !pattern.isEmpty {
+                    guard let field, field.matches(pattern) else { return false }
+                }
                 if !rule.bundleIDs.isEmpty {
                     guard let bundleID, rule.bundleIDs.contains(bundleID) else { return false }
                 }

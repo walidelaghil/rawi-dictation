@@ -273,7 +273,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return nil }
             // Only ask a browser for its URL. Anything else pays nothing.
             let url = BrowserContext.activeURL(bundleID: bundleID)
-            let rule = DestinationMatcher.match(bundleID: bundleID, url: url,
+            // Read at key-press, while the cursor is still in the field you mean.
+            let field = FieldContext.focused()
+            let rule = DestinationMatcher.match(bundleID: bundleID, url: url, field: field,
                                                 rules: self.destinations.rules)
             // Log the signals, not just the outcome: "no rule matched" is
             // indistinguishable from "the URL could not be read" otherwise, and
@@ -281,7 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let host = url.flatMap { URL(string: $0)?.host } ?? "—"
             self.log.info("""
                 Destination: \(rule?.name ?? "none") \
-                [app \(bundleID ?? "unknown"), page \(host)\
+                [app \(bundleID ?? "unknown"), page \(host), field \(field?.name ?? "—")\
                 \(url == nil && BrowserContext.scriptable[bundleID ?? ""] != nil
                    ? ", url unreadable: \(BrowserContext.lastError ?? "no window")" : "")]
                 """)
@@ -566,7 +568,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // Asked after a pause, so whoever sent it can put an app in front.
                     try? await Task.sleep(for: .seconds(2))
                     let verdict = self.focusProbe.probe()
-                    self.log.info("Focus probe: \(self.focusProbe.lastSeen) [\(verdict.rawValue)]")
+                    let field = FieldContext.focused()
+                    self.log.info("Focus probe: \(self.focusProbe.lastSeen) [\(verdict.rawValue)] field labels: \(field?.labels ?? [])")
                 case .benchmark:
                     let path = ProcessInfo.processInfo.environment["RAWI_BENCH_WAV"]
                         ?? Config.recordingsDirectory

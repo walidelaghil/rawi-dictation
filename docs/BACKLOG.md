@@ -49,9 +49,10 @@ carries no execution risk.
 
 ## Smaller deferrals
 
-- **Field-level destination awareness** — knowing you are in Jira's description
-  box rather than its title. Needs Accessibility; impossible on this Mac. Page-level
-  (app + browser URL) is the ceiling and is in v2 scope.
+- ~~**Field-level destination awareness**~~ — shipped (2026-09-15). A rule can name
+  a field by its label, placeholder or identifier; Jira's summary and description
+  and an email subject ship as built-ins, and "Detect field" fills a new rule from
+  the field you click into.
 - ~~**Auto-paste**~~ — shipped once Accessibility was granted (2026-09-15). Rawi
   pastes only when a text field has focus, and copies with a ⌘V hint otherwise.
 - ~~**Learn from corrections**~~ — shipped (2026-09-15). After a paste, Rawi reads
