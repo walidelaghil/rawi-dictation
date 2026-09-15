@@ -187,3 +187,66 @@ import SwiftUI
             .representation(using: .png, properties: [:])!.write(to: out)
     }
 }
+
+@MainActor
+@Suite("Setup flow renders") struct SetupFlowRenderTests {
+    func status(mic: Bool = true, ax: Bool = true, im: Bool = false, whisper: Bool = true, model: Bool = true,
+                detector: Bool = true, ollama: Bool = true, missing: [String] = []) -> SetupStatus {
+        SetupStatus(microphone: mic, accessibility: ax, inputMonitoring: im, whisperInstalled: whisper,
+                    transcriptionModel: model, detectorModel: detector, ollamaReachable: ollama, ollamaMissing: missing)
+    }
+
+    @Test("setup flow renders", .enabled(if: ProcessInfo.processInfo.environment["RAWI_SETUP_FLOW"] != nil))
+    func render() throws {
+        let dir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["RAWI_SETUP_FLOW"]!, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let fresh = status(mic: false, ax: false, whisper: false, model: false, detector: false, ollama: false,
+                           missing: ["qwen2.5:1.5b", "qwen2.5:3b", "gemma3:4b"])
+        let shots: [(String, SetupStep, (SetupViewModel) -> Void)] = [
+            ("01-welcome", .welcome, { $0.status = fresh }),
+            ("02-microphone", .microphone, { $0.status = fresh }),
+            ("03-microphone-done", .microphone, { m in var s = fresh; s.microphone = true; m.status = s }),
+            ("04-paste", .paste, { m in var s = fresh; s.microphone = true; m.status = s }),
+            ("05-models-missing", .models, { m in var s = fresh; s.microphone = true; s.accessibility = true; m.status = s }),
+            ("06-models-downloading", .models, { m in
+                var s = fresh; s.microphone = true; s.accessibility = true; s.whisperInstalled = true; m.status = s
+                m.progress = [ModelStore.recommended.id: 0.42] }),
+            ("07-polish-no-ollama", .polish, { m in
+                m.status = self.status(ollama: false, missing: ["qwen2.5:1.5b", "qwen2.5:3b", "gemma3:4b"]) }),
+            ("08-polish-pulling", .polish, { m in
+                m.settings.config.cleanup.provider = .ollama
+                m.settings.config.cleanup.transformModel = "gemma3:4b"
+                m.status = self.status(missing: ["qwen2.5:3b", "gemma3:4b"])
+                m.progress = ["qwen2.5:3b": 0.67] }),
+            ("09-key", .hotkey, { m in
+                m.settings.config.hotkey = "option"
+                m.settings.inputMonitoringGranted = true
+                m.launchedWithInputMonitoring = false
+                m.status = self.status(im: true) }),
+            ("10-try-it", .tryIt, { m in
+                m.settings.config.hotkey = "option"
+                m.settings.inputMonitoringGranted = true
+                m.status = self.status(im: true)
+                m.tryText = "Okay, this is my first dictation. The meeting moves to Tuesday at four." }),
+        ]
+        for (name, step, configure) in shots {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("flow-\(UUID().uuidString).json")
+            var config = Config.default
+            config.cleanup.provider = .off
+            try? config.save(to: url)
+            let model = SetupViewModel(settings: SettingsViewModel(config: config, url: url, inputMonitoringGranted: false))
+            model.appearance = .dark
+            model.step = step
+            let host = NSHostingView(rootView: SetupView(model: model))
+            host.frame = NSRect(x: 0, y: 0, width: 800, height: 580)
+            host.layoutSubtreeIfNeeded()
+            model.stopPolling()
+            configure(model)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            host.layoutSubtreeIfNeeded()
+            let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+            host.cacheDisplay(in: host.bounds, to: rep)
+            try rep.representation(using: .png, properties: [:])!.write(to: dir.appendingPathComponent("\(name).png"))
+        }
+    }
+}

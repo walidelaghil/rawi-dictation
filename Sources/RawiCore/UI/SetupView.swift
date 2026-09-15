@@ -1,3 +1,4 @@
+import AVFoundation
 import AppKit
 import SwiftUI
 
@@ -95,7 +96,17 @@ public final class SetupViewModel: ObservableObject {
 
     // MARK: Actions
 
+    /// Whether the microphone was refused once. macOS then never shows its prompt
+    /// again, so the only way forward is System Settings.
+    public var microphoneRefused: Bool {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .denied
+    }
+
     public func allowMicrophone() {
+        if microphoneRefused {
+            Permissions.openSettings(for: .microphone)
+            return
+        }
         Task {
             _ = await Permissions.requestMicrophone()
             await refresh()
@@ -366,8 +377,11 @@ public struct SetupView: View {
             heading("Let Rawi hear you.",
                     "Rawi listens only while you hold your key, and the recording is deleted once it is "
                   + "transcribed.")
-            item("Microphone", "Required to dictate.", done: model.status?.microphone ?? false,
-                 required: true) { primary("Allow", model.allowMicrophone) }
+            item("Microphone",
+                 model.microphoneRefused ? "Turned off earlier. Turn Rawi on in System Settings, and this updates."
+                                         : "Required to dictate.",
+                 done: model.status?.microphone ?? false,
+                 required: true) { primary(model.microphoneRefused ? "Open Settings" : "Allow", model.allowMicrophone) }
         }
     }
 
