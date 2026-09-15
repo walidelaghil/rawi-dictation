@@ -114,6 +114,9 @@ public final class VocabularyStore: @unchecked Sendable {
         load()
     }
 
+    /// Re-reads the file, for a change made while Rawi was running.
+    public func reloadFromDisk() { lock.withLock { load() } }
+
     public var terms: [DictionaryTerm] { lock.withLock { payload.terms } }
     public var blocked: [String] { lock.withLock { payload.blocked } }
     public var snippets: [Snippet] { lock.withLock { payload.snippets } }

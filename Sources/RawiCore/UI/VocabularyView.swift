@@ -24,6 +24,35 @@ public final class VocabularyViewModel: ObservableObject {
         snippets = store.snippets
     }
 
+    /// What the last refresh found, shown beside the button for a moment.
+    @Published public var refreshResult: String?
+    @Published public var refreshing = false
+
+    /// Reads the dictionary again and re-runs learning over your history now,
+    /// rather than waiting for the next dictation to do it.
+    public func refresh() {
+        refreshing = true
+        store.reloadFromDisk()
+        let before = Set(store.terms.map { $0.term.lowercased() })
+        let learned = TermLearner.learn(from: history.all(), known: store.terms,
+                                        blocked: store.blocked)
+        let change = store.syncLearned(learned)
+        reload()
+        let added = terms.filter { !before.contains($0.term.lowercased()) }.count
+        refreshResult = switch (added, change.dropped.count) {
+        case (0, 0): "Up to date"
+        case (let a, 0): "\(a) new"
+        case (0, let d): "\(d) removed"
+        case (let a, let d): "\(a) new, \(d) removed"
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(450))
+            refreshing = false
+            try? await Task.sleep(for: .seconds(2.5))
+            refreshResult = nil
+        }
+    }
+
     public var learnedCount: Int { terms.filter(\.addedAutomatically).count }
 
     public func addTerm() {
@@ -50,18 +79,18 @@ public struct DictionaryScreen: View {
         VStack(alignment: .leading, spacing: 16) {
             ScreenHeader(title: "Dictionary", appearance: model.appearance,
                          showInfo: $model.showInfo,
-                         info: "Rawi learns the names and jargon you actually use, from your "
-                             + "own history. A word has to recur over several days before it "
-                             + "counts, and anything close to an ordinary English word is "
-                             + "refused: enforcing the wrong spelling is worse than enforcing "
-                             + "none. Terms are applied as a hint to whisper, as a glossary for "
-                             + "the cleanup model, and as a direct correction in code. Only the "
-                             + "third always works.")
+                         info: "Rawi learns the names and jargon you use without being asked. "
+                             + "When you fix a word it typed — Sala to Salla — it learns the "
+                             + "spelling you chose and uses it next time. It also notices names "
+                             + "whisper spells differently from day to day. Ordinary English "
+                             + "words are never learned: enforcing the wrong spelling is worse "
+                             + "than enforcing none.",
+                         trailing: AnyView(refreshButton))
 
             if model.terms.isEmpty {
                 EmptyHint(title: "Nothing learned yet.",
-                          detail: "Say a name a few times over a few days and it appears here. "
-                                + "You can also add one below.",
+                          detail: "Fix a name Rawi misspells, right after it types it, and the "
+                                + "spelling appears here. You can also add one below.",
                           appearance: model.appearance)
             } else {
                 RowGroup(appearance: model.appearance) {
@@ -112,6 +141,34 @@ public struct DictionaryScreen: View {
         .padding(.horizontal, 24).padding(.vertical, 22)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(c(.surface))
+    }
+}
+
+extension DictionaryScreen {
+    var refreshButton: some View {
+        HStack(spacing: 8) {
+            if let result = model.refreshResult {
+                Text(result)
+                    .font(.system(size: TypeScale.small))
+                    .foregroundStyle(c(.muted))
+                    .transition(.opacity)
+            }
+            Button { model.refresh() } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: TypeScale.body, weight: .medium))
+                    .foregroundStyle(c(.muted))
+                    .rotationEffect(.degrees(model.refreshing ? 360 : 0))
+                    .animation(model.refreshing ? .easeInOut(duration: 0.45) : nil,
+                               value: model.refreshing)
+                    .frame(width: 28, height: 28)
+                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.raised)))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Check your history for new terms now")
+            .accessibilityLabel("Refresh dictionary")
+        }
+        .animation(.easeOut(duration: 0.15), value: model.refreshResult)
     }
 }
 
@@ -197,6 +254,7 @@ struct ScreenHeader: View {
     let appearance: ResolvedAppearance
     @Binding var showInfo: Bool
     let info: String
+    var trailing: AnyView? = nil
     private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
 
     var body: some View {
@@ -208,6 +266,7 @@ struct ScreenHeader: View {
                         .foregroundStyle(c(.faint))
                 }.buttonStyle(.plain).help("About \(title.lowercased())")
                 Spacer()
+                if let trailing { trailing }
             }
             if showInfo {
                 Text(info)

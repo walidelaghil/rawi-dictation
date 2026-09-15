@@ -125,3 +125,29 @@ import Testing
         #expect(watcher.flushes == 1)
     }
 }
+
+@MainActor
+@Suite("Refreshing the dictionary") struct DictionaryRefreshTests {
+    func stores() -> (VocabularyStore, HistoryStore) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        return (VocabularyStore(url: dir.appendingPathComponent("v.json")),
+                HistoryStore(url: dir.appendingPathComponent("h.jsonl")))
+    }
+
+    @Test("nothing to change says so") func upToDate() {
+        let (v, h) = stores()
+        let model = VocabularyViewModel(store: v, history: h)
+        model.refresh()
+        #expect(model.refreshResult == "Up to date")
+    }
+
+    @Test("a learned term with no evidence left is removed, and a correction is kept") func prunes() {
+        let (v, h) = stores()
+        _ = v.syncLearned([LearnedTerm(term: "Kubectl", occurrences: 9, days: 3)])
+        v.learnCorrection(heard: "Sala", fixed: "Salla", app: nil)
+        let model = VocabularyViewModel(store: v, history: h)
+        model.refresh()
+        #expect(model.refreshResult == "1 removed")
+        #expect(model.terms.map(\.term) == ["Salla"])
+    }
+}
