@@ -28,7 +28,7 @@
   "whispercpp": {
     "binary": "whisper-cli",
     "language": "auto",
-    "model": "~/Library/Application Support/Rawi/models/ggml-large-v3-turbo-q5_0.bin",
+    "model": "~/Library/Application Support/Rawi/models/ggml-large-v3-turbo-q8_0.bin",
     "threads": 8
   }
 }

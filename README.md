@@ -689,3 +689,16 @@ a protocol so it is swappable and testable with fakes. Design notes are in
   are deleted as soon as the text is inserted. They are kept only when
   transcription fails, so you do not lose a dictation to a crash — the log tells
   you where.
+
+---
+
+## 13. Licence
+
+GPL-3.0. See [`LICENSE`](LICENSE).
+
+Rawi is free software: you may use it, study it, change it, and pass it on. If
+you distribute a modified version, that version has to carry the same freedoms —
+source included. That is the whole of the obligation, and it is the reason for
+the choice: anyone may build on this, and nobody may close it.
+
+Copyright © 2026 Walid Elaghil.
