@@ -75,12 +75,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in await self?.controller.cancelRequested() }
         }
         // Chosen on the pill, applied to the recording already running: the engine
-        // is not asked for the language until the key comes up.
+        // is not asked for the language until the key comes up. Safe here because
+        // the controller is only reached when the closure runs, not now — it does
+        // not exist yet. Its own callback is wired where it is built.
         pill.onLanguage = { [weak self] choice in
             MainActor.assumeIsolated { self?.controller.choose(choice) }
-        }
-        controller.onLanguageChange = { [weak self] choice in
-            MainActor.assumeIsolated { self?.pill.language = choice }
         }
         // Without this, an accessory app's own windows have no ⌘A, ⌘C or ⌘V:
         // AppKit resolves those through the main menu, which an LSUIElement app
@@ -298,6 +297,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log.info("Cleanup routed by script — latin: \(config.cleanup.models.latin), "
                      + "arabic: \(config.cleanup.models.arabic)")
             _ = routed
+        }
+        // Wired here rather than beside the pill's other callbacks: this one reads
+        // `controller` immediately, and up there it is still nil.
+        defer {
+            controller.onLanguageChange = { [weak self] choice in
+                MainActor.assumeIsolated { self?.pill.language = choice }
+            }
         }
         controller = DictationController(config: config, recorder: recorder, engine: engine,
                                          cleanup: cleanup, inserter: inserter, log: log)

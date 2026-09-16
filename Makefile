@@ -50,9 +50,26 @@ install: bundle
 	mkdir -p $(INSTALL_DIR)
 	rm -rf $(INSTALLED)
 	cp -R $(APP) $(INSTALL_DIR)/
+	@# A build that traps on launch installs perfectly and then does nothing, and
+	@# the app it replaced is already gone. That shipped once: a line wired to the
+	@# controller before the controller existed, past a green test suite, because
+	@# nothing between `swift test` and a human opening the app ever started it.
+	@echo ""
+	@echo "Checking it starts..."
+	@open $(INSTALLED)
+	@sleep 6
+	@if pgrep -x Rawi > /dev/null; then \
+		echo "Running."; \
+	else \
+		echo ""; \
+		echo "FAILED TO START. The last lines it managed to log:"; \
+		tail -5 $(HOME)/Library/Logs/Rawi/rawi.log 2>/dev/null || true; \
+		echo ""; \
+		echo "Run '.build/debug/Rawi' after 'swift build' for the trap message."; \
+		exit 1; \
+	fi
 	@echo ""
 	@echo "Installed to $(INSTALLED)"
-	@echo "Launch it with:  open $(INSTALLED)"
 	@echo "Check setup with: $(INSTALLED)/Contents/MacOS/Rawi --doctor"
 	@echo "Then grant Input Monitoring and Accessibility -- see README section 2."
 
