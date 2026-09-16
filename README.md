@@ -352,6 +352,19 @@ afterwards. **This is inherently racy** and off by default for that reason:
 pasteboard, and a slow app can end up pasting nothing. Raise the delay if you hit
 this, or leave the feature off.
 
+It applies only to a dictation that was **typed into a field**. With nothing
+editable focused, the clipboard is not a copy of your words — it is the only
+place they are — so putting the old contents back would throw the dictation away.
+Testing the setting is easy to get wrong for exactly this reason: dictate once
+with nothing focused and your marker is gone, replaced by the transcript, before
+the dictation you meant to test even starts.
+
+It also costs you the early paste. Staging the raw transcript the moment it
+exists and restoring your old clipboard afterwards are the same slot, and
+restoring wins, because it is the one you turned on deliberately. Transforms
+ignore the setting: leaving the rewrite on the clipboard is what a transform is
+for.
+
 ---
 
 ## 6. Choosing a cleanup provider
