@@ -50,4 +50,19 @@ import Foundation
     @Test("script travels with the entry so the menu can set it in the right face") func script() {
         #expect(RecentDictation(text: "مرحبا", script: .arabic).script == .arabic)
     }
+
+    @Test("a rewrite is badged as one, not as a language you spoke") func transformBadge() {
+        // Transforms were filtered out of the list entirely, so a rewrite you had
+        // just watched land in your document was missing from the one place that
+        // shows what Rawi has been doing — and from the only way to copy it back.
+        let spoken = RecentDictation(text: "Ship it on Monday.", script: .latin)
+        let rewritten = RecentDictation(text: "Ship Monday.", script: .latin,
+                                        isTransform: true)
+        #expect(spoken.badge == "EN")
+        #expect(rewritten.badge == "TR")
+        #expect(RecentDictation(text: "مرحبا", script: .arabic).badge == "AR")
+        // Arabic that came out of a transform is still a transform.
+        #expect(RecentDictation(text: "مرحبا", script: .arabic,
+                                isTransform: true).badge == "TR")
+    }
 }

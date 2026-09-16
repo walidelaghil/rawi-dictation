@@ -457,12 +457,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// Transform rows are left out. Recent is for re-copying something you said,
     /// and a transform's row holds the clipboard text it started from.
+    /// The last few things Rawi produced, for the menu panel.
+    ///
+    /// Transforms belong here. They used to be filtered out, so a rewrite you had
+    /// just watched appear in your document was absent from the one list that
+    /// claims to show what Rawi has been doing — and, because the row is also the
+    /// way to copy something back, there was no way to retrieve it either.
     private func recentFromHistory(limit: Int = 6) -> [RecentDictation] {
         history.all()
             .lazy
-            .filter { $0.kind == .dictation }
+            .filter { $0.kind == .dictation || $0.kind == .transform }
             .prefix(limit)
-            .map { RecentDictation(text: $0.cleaned, script: $0.script, at: $0.at) }
+            .map { RecentDictation(text: $0.cleaned, script: $0.script, at: $0.at,
+                                   isTransform: $0.kind == .transform) }
     }
 
     /// The model that writes the voice profile on Insights: the transform model,

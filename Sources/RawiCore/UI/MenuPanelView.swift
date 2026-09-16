@@ -235,9 +235,10 @@ public struct MenuPanelView: View {
         let justCopied = copiedRow == index
         return Button { copy(item, row: index) } label: {
             HStack(spacing: 10) {
-                Text(item.script == .arabic ? "AR" : "EN")
+                Text(item.badge)
                     .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
-                    .foregroundStyle(item.script == .arabic ? c(.lapis) : c(.faint))
+                    .foregroundStyle(item.isTransform ? c(.verdigris)
+                                     : (item.script == .arabic ? c(.lapis) : c(.faint)))
                     .frame(width: 22, alignment: .leading)
                 Text(item.oneLine)
                     .font(.system(size: TypeScale.body))

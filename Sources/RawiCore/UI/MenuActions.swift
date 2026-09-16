@@ -39,13 +39,22 @@ public struct RecentDictation: Identifiable, Sendable, Equatable {
     public let text: String
     public let script: Script
     public let at: Date
+    /// A rewrite rather than something you said. Marked because the list is the
+    /// one place both appear, and "EN" against text you never spoke is a lie.
+    public let isTransform: Bool
 
-    public init(id: UUID = UUID(), text: String, script: Script, at: Date = Date()) {
+    public init(id: UUID = UUID(), text: String, script: Script, at: Date = Date(),
+                isTransform: Bool = false) {
         self.id = id
         self.text = text
         self.script = script
         self.at = at
+        self.isTransform = isTransform
     }
+
+    /// What sits in the badge column: the script for a dictation, and for a
+    /// transform the fact that it is one.
+    public var badge: String { isTransform ? "TR" : (script == .arabic ? "AR" : "EN") }
 
     public var timestamp: String {
         let f = DateFormatter()

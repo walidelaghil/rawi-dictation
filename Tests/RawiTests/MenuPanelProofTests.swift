@@ -24,6 +24,8 @@ import SwiftUI
                 RecentDictation(text: "هذا اختبار للغة العربية", script: .arabic),
                 RecentDictation(text: "They are testing the model they are working on",
                                 script: .latin),
+                RecentDictation(text: "Ship Monday. Deck by Friday.", script: .latin,
+                                isTransform: true),
             ]
             let view = NSHostingView(rootView: MenuPanelView(model: model))
             view.frame = NSRect(origin: .zero, size: view.fittingSize)
