@@ -1,4 +1,5 @@
 import AppKit
+import EventKit
 import Foundation
 
 public enum CommandError: Error, LocalizedError, Equatable {
@@ -56,8 +57,7 @@ public struct SystemCommandPerformer: CommandPerforming {
             return "Copied"
 
         case .reminder(let list):
-            try await Reminders.add(title: text, list: list)
-            return "Reminder added"
+            return try await Reminders.add(title: text, list: list)
 
         case .notionPage(let databaseID):
             guard let token = env["NOTION_TOKEN"], !token.isEmpty else {
@@ -69,40 +69,58 @@ public struct SystemCommandPerformer: CommandPerforming {
     }
 }
 
-/// Adds a reminder through the Reminders app.
+/// Adds a reminder through EventKit.
 ///
-/// AppleScript rather than EventKit on purpose: EventKit's permission is a hard
-/// dialog at launch even when no command ever uses it, while Automation is asked
-/// for the first time a reminder is actually added, and the user's own Mac already
-/// knows how to answer it.
+/// AppleScript was tried first and refused: "Not authorized to send Apple events to
+/// Reminders." Automation permission is granted per app *pair*, is asked for in a
+/// dialog that macOS will not always show again, and once declined leaves no way
+/// back from inside Rawi. EventKit asks for Reminders directly, in a prompt that
+/// names what it is for, and reports refusal as something this code can explain.
 enum Reminders {
-    static func add(title: String, list: String) async throws {
+    @discardableResult
+    static func add(title: String, list: String) async throws -> String {
         guard !title.isEmpty else { throw CommandError.failed("Nothing to remind you about") }
-        let target = list.isEmpty ? "" : " of list \"\(escape(list))\""
-        let source = """
-        tell application "Reminders"
-            make new reminder\(target.isEmpty ? "" : target) with properties {name:"\(escape(title))"}
-        end tell
-        """
-        try await run(source)
-    }
-
-    static func escape(_ text: String) -> String {
-        text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-    }
-
-    static func run(_ source: String) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                var error: NSDictionary?
-                NSAppleScript(source: source)?.executeAndReturnError(&error)
-                if let message = error?[NSAppleScript.errorMessage] as? String {
-                    continuation.resume(throwing: CommandError.failed(message))
-                } else {
-                    continuation.resume()
-                }
+        let store = EKEventStore()
+        let granted: Bool
+        if #available(macOS 14.0, *) {
+            granted = (try? await store.requestFullAccessToReminders()) ?? false
+        } else {
+            granted = await withCheckedContinuation { continuation in
+                store.requestAccess(to: .reminder) { ok, _ in continuation.resume(returning: ok) }
             }
         }
+        guard granted else {
+            throw CommandError.failed("Rawi is not allowed to add reminders. Turn it on in "
+                                      + "System Settings, Privacy & Security, Reminders.")
+        }
+        let parsed = SpokenDate.parse(title)
+        let reminder = EKReminder(eventStore: store)
+        reminder.title = parsed.title
+        if let due = parsed.due {
+            var calendar = Calendar.current
+            calendar.timeZone = .current
+            reminder.dueDateComponents = calendar.dateComponents(
+                parsed.hasTime ? [.year, .month, .day, .hour, .minute] : [.year, .month, .day],
+                from: due)
+            // A due date without an alarm never says anything. Reminders only nags
+            // you if something is set to.
+            reminder.addAlarm(EKAlarm(absoluteDate: due))
+        }
+        let named = list.trimmingCharacters(in: .whitespaces)
+        if !named.isEmpty,
+           let match = store.calendars(for: .reminder).first(where: {
+               $0.title.compare(named, options: .caseInsensitive) == .orderedSame
+           }) {
+            reminder.calendar = match
+        } else if let fallback = store.defaultCalendarForNewReminders() {
+            reminder.calendar = fallback
+        } else {
+            throw CommandError.failed("No Reminders list to add to")
+        }
+        do { try store.save(reminder, commit: true) }
+        catch { throw CommandError.failed(error.localizedDescription) }
+        return parsed.due.map { "Reminder set \(SpokenDate.describe($0, hasTime: parsed.hasTime))" }
+            ?? "Reminder added"
     }
 }
 

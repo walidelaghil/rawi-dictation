@@ -664,6 +664,9 @@ public final class DictationController {
     /// Runs what you said as a command, or says why it could not.
     public var commandRunner: CommandRunner?
 
+    /// The command path, as if you had spoken it. Used by the verification trigger.
+    public func runSpokenCommand(_ spoken: String) async { await runCommand(spoken: spoken) }
+
     private func runCommand(spoken: String) async {
         guard let commandRunner else {
             state = .error("Commands are not set up")

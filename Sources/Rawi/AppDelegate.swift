@@ -609,6 +609,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try? await Task.sleep(for: .seconds(2))
                     let edited = SystemEditWatcher.simulateCorrection(from: "Kanjee", to: "Kandji")
                     self.log.info("Edit self-test: correction \(edited)")
+                case .commandSelfTest:
+                    // Runs a command the way the key would, without speaking: proves the
+                    // action itself works, including the permission it needs.
+                    // Sent again while a question is up, it answers it.
+                    if await self.controller.runPendingCommand() { return }
+                    // Through a file: the trigger is a separate process, so its
+                    // environment never reaches this one.
+                    let spokenFile = Config.supportDirectory.appendingPathComponent("command-test.txt")
+                    let phrase = (try? String(contentsOf: spokenFile, encoding: .utf8))?
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        ?? "remind me to check that Rawi can add reminders"
+                    await self.controller.runSpokenCommand(phrase)
                 case .focus:
                     // Asked after a pause, so whoever sent it can put an app in front.
                     try? await Task.sleep(for: .seconds(2))

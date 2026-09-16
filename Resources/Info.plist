@@ -28,6 +28,8 @@
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>Rawi records your voice while you hold the dictation hotkey, so it can transcribe it to text.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Rawi adds a reminder when you say a command that asks for one. It never reads your existing reminders.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Rawi pastes transcribed text into the app you are using.</string>
 </dict>

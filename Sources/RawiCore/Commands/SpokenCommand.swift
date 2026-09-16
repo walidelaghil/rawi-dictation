@@ -34,11 +34,17 @@ public enum CommandAction: Codable, Sendable, Equatable {
     /// What it will do, in one line, for the list and the confirmation.
     public func describe(text: String) -> String {
         switch self {
-        case .openLink(let template): "Open \(SpokenCommand.fill(template, with: text, encoded: true))"
-        case .openApp(let name): "Open \(name)"
-        case .copy(let template): "Copy “\(SpokenCommand.fill(template, with: text))”"
-        case .reminder(let list): "Add “\(text)” to your \(list.isEmpty ? "Reminders" : list) list"
-        case .notionPage: "Add “\(text)” to Notion"
+        case .openLink(let template):
+            return "Open \(SpokenCommand.fill(template, with: text, encoded: true))"
+        case .openApp(let name): return "Open \(name)"
+        case .copy(let template): return "Copy “\(SpokenCommand.fill(template, with: text))”"
+        case .reminder(let list):
+            // The confirmation says what will actually be created, including the day
+            // and time taken out of your words.
+            let parsed = SpokenDate.parse(text)
+            let due = parsed.due.map { ", " + SpokenDate.describe($0, hasTime: parsed.hasTime) } ?? ""
+            return "Add “\(parsed.title)” to your \(list.isEmpty ? "Reminders" : list) list\(due)"
+        case .notionPage: return "Add “\(text)” to Notion"
         }
     }
 
