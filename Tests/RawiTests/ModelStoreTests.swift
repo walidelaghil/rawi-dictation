@@ -6,7 +6,7 @@ import Foundation
     @Test("the recommended model is multilingual") func recommended() {
         // English-only was the v1 bug: it did not degrade on Arabic, it failed.
         #expect(ModelStore.recommended.multilingual)
-        #expect(ModelStore.recommended.id == "large-v3-turbo-q5_0")
+        #expect(ModelStore.recommended.id == "large-v3-turbo-q8_0")
     }
 
     @Test("every known model has a plausible download url") func urls() {

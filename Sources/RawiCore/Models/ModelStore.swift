@@ -33,8 +33,21 @@ public enum ModelStoreError: Error, LocalizedError {
 /// did not degrade on Arabic — it failed outright.
 public enum ModelStore {
     public static let known: [WhisperModel] = [
+        // q8_0 rather than the smaller q5_0, which was the default until it was
+        // measured against it. Turbo carries the *full* large-v3 encoder — only its
+        // decoder is pruned — so one encode of the fixed 30-second window is
+        // essentially the whole cost of a dictation, and it is the same cost
+        // whether you spoke for three seconds or twenty. Interleaved on an M4,
+        // five runs each: q5_0 2409 ms median, q8_0 2133 ms. Metal has no fast
+        // kernel for q5_0's packing and does for q8_0's, so the *less* compressed
+        // model is the quicker one, and it is the more faithful one too. Eleven of
+        // twelve recorded sentences came back identical; the twelfth differed by a
+        // comma. 287 MB more on disk buys 11% and slightly better spelling.
+        WhisperModel(id: "large-v3-turbo-q8_0", filename: "ggml-large-v3-turbo-q8_0.bin",
+                     displayName: "Large v3 Turbo", approxBytes: 874_188_075, multilingual: true),
         WhisperModel(id: "large-v3-turbo-q5_0", filename: "ggml-large-v3-turbo-q5_0.bin",
-                     displayName: "Large v3 Turbo", approxBytes: 574_041_195, multilingual: true),
+                     displayName: "Large v3 Turbo (smaller, slower)",
+                     approxBytes: 574_041_195, multilingual: true),
         WhisperModel(id: "small", filename: "ggml-small.bin",
                      displayName: "Small (fast, all languages)",
                      approxBytes: 488_000_000, multilingual: true),

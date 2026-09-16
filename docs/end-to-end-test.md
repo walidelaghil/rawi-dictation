@@ -107,3 +107,57 @@ Nothing here can be driven from a terminal — each needs a voice, a key, or an 
 - The level meter while speaking — attack and decay, and the peak marker.
 - Learning from a correction inside Slack and inside Notion.
 - A destination rule against a real Jira or Google Docs page.
+
+---
+
+# Speed, measured — 15 September 2026
+
+Transcription is the whole cost of a dictation. Cleanup is a few hundred
+milliseconds when it runs at all, delivery is single digits, and the encode is
+the rest. It is also a *fixed* cost: whisper always encodes a 30-second window,
+so three seconds of speech costs what twenty does. Turbo carries the full
+large-v3 encoder — only its decoder is pruned — so that window is expensive.
+
+## What was shipped
+
+**q8_0 instead of q5_0.** Metal has no fast kernel for q5_0's packing and does
+have one for q8_0's, so the less compressed model is the quicker one — and the
+more faithful one. Interleaved, five runs each on an M4:
+
+| model | encode, median | transcripts |
+|---|---|---|
+| `large-v3-turbo-q5_0` | 2409 ms | — |
+| `large-v3-turbo-q8_0` | **2133 ms** | 11 of 12 identical, 1 differing by a comma |
+
+11% faster, slightly better spelling, 287 MB more on disk.
+
+## What was tested and rejected
+
+| Idea | Result |
+|---|---|
+| `audio_ctx` scaled to the clip | 3–14× faster encode, but duplicates the closing sentence — and not above a threshold, *erratically*: 2 s of slack was clean, 4 s and 6 s were not, 8 s was clean again. Also turned "4 servers" back into "four servers". Cannot be made safe. |
+| Flash attention off | Slower, interleaved. The apparent win was noise. |
+| Threads 4 / 6 / 8 | No difference. The encode is GPU-bound. |
+| Unloading the polish models | No difference. They are not starving it. |
+| Capping the detector to 4 s of audio | ~120 ms on a 15 s dictation, nothing on a short one, and it would decide a code-switched dictation on its opening words. Not worth it. |
+
+Two things were checked and found already right: the separate base-model detector
+saves about three seconds (turbo asked to detect for itself costs 6.8 s against
+3.4 s when told the answer), and both polish models have their prompts warmed at
+key-press, so the first polish costs 48–259 ms rather than 1.4 s.
+
+## The lever not pulled
+
+whisper.cpp can run the encoder on the Neural Engine through Core ML, which is
+the one thing that attacks the fixed cost — typically about 3×. It needs
+whisper.cpp built from source with `WHISPER_COREML=1` and the prebuilt encoder
+(1.1 GB), against 7.5 GB free on this Mac. Worth doing deliberately, not as a
+side effect of a speed question.
+
+## Read the machine before believing the numbers
+
+Every measurement above was taken while this Mac was throttling. `kernel_task`
+sat at 23–47% — macOS shedding heat — with `Shortcuts` burning three and a half
+hours of CPU, and `linkd`, `Storage` and `contactsd` indexing behind it. Load
+average reached 100. The same clip through the same build measured 1516 ms on a
+quiet machine and 2921 ms four requests later.

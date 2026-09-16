@@ -310,7 +310,7 @@ public struct Config: Codable, Sendable, Equatable {
         // Multilingual, always. The v1 English-only model did not degrade on
         // Arabic — it failed outright.
         model: Config.supportDirectory
-            .appendingPathComponent("models/ggml-large-v3-turbo-q5_0.bin").path,
+            .appendingPathComponent("models/ggml-large-v3-turbo-q8_0.bin").path,
         language: "auto",
         threads: 8)
 
