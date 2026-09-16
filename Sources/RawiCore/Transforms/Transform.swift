@@ -38,6 +38,59 @@ public final class TransformStore: @unchecked Sendable {
         lock.withLock { stored.append(Transform(name: n, instruction: i)); save() }
     }
 
+    /// Rewrites one, built-in or not.
+    ///
+    /// A built-in's instruction is a starting point, not a decision: "make it
+    /// shorter" means something different to everyone, and the one thing you
+    /// cannot do with wording that does not suit you is argue with it. Editing
+    /// one marks it as yours, so it stops pretending to be the shipped default
+    /// and can be deleted like anything else you wrote.
+    @discardableResult
+    public func update(_ id: UUID, name: String, instruction: String) -> Bool {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let i = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty, !i.isEmpty else { return false }
+        return lock.withLock {
+            guard let index = stored.firstIndex(where: { $0.id == id }) else { return false }
+            let changed = stored[index].name != n || stored[index].instruction != i
+            stored[index].name = n
+            stored[index].instruction = i
+            if changed { stored[index].isBuiltIn = false }
+            save()
+            return true
+        }
+    }
+
+    /// Puts a built-in back the way it shipped, by name. Nothing else can undo an
+    /// edit to one, and being unable to get back to a working instruction is a
+    /// worse trap than not being able to edit it in the first place.
+    @discardableResult
+    public func restoreDefault(_ id: UUID) -> Bool {
+        lock.withLock {
+            guard let index = stored.firstIndex(where: { $0.id == id }),
+                  let original = Self.defaults.first(where: {
+                      $0.name.compare(stored[index].name,
+                                      options: .caseInsensitive) == .orderedSame
+                  })
+            else { return false }
+            stored[index].name = original.name
+            stored[index].instruction = original.instruction
+            stored[index].isBuiltIn = true
+            save()
+            return true
+        }
+    }
+
+    /// Whether this row came from a shipped transform, however it reads now.
+    public func hasDefault(_ id: UUID) -> Bool {
+        lock.withLock {
+            guard let row = stored.first(where: { $0.id == id }) else { return false }
+            return Self.defaults.contains {
+                $0.name.compare(row.name, options: .caseInsensitive) == .orderedSame
+            }
+        }
+    }
+
     /// Built-ins can't be deleted — removing one leaves no way back.
     public func remove(_ id: UUID) {
         lock.withLock {

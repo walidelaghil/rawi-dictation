@@ -599,6 +599,13 @@ Five ship built in, and the **Transforms** screen adds your own:
 | "translate to Arabic" | Natural Modern Standard Arabic, product names left in Latin |
 | "reply in my tone" | Drafts a reply matching the thread's register |
 
+The wording of any of them is yours to change: the pencil on a row opens its
+name and its instruction. "Make it shorter" means something different to
+everyone, and the one thing you cannot do with wording that does not suit you is
+argue with it. Editing a built-in marks it as yours — it has stopped being the
+shipped default — and **Reset** puts the original back, so an edit is never a
+one-way door.
+
 Anything that doesn't name a transform is used **as you said it** — "rewrite this
 as three bullets for a standup" works without being defined first. The screen
 shows live which of the two is happening.

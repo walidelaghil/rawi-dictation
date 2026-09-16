@@ -123,3 +123,68 @@ import Foundation
         #expect(m.tryResult == "ok")
     }
 }
+
+@Suite("Editing a transform") struct TransformEditingTests {
+    func store() -> TransformStore {
+        TransformStore(url: URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("rawi-te-\(UUID().uuidString).json"))
+    }
+
+    @Test("a built-in can be reworded, and stops claiming to be shipped") func editsBuiltIn() {
+        let s = store()
+        let shorter = s.transforms.first { $0.name == "Make it shorter" }!
+        #expect(shorter.isBuiltIn)
+        s.update(shorter.id, name: "Make it shorter",
+                 instruction: "Cut it to three sentences. Keep every number.")
+        let after = s.transforms.first { $0.id == shorter.id }!
+        #expect(after.instruction == "Cut it to three sentences. Keep every number.")
+        // Marked as yours: it is no longer the wording that shipped, and saying so
+        // is what makes it deletable like anything else you wrote.
+        #expect(!after.isBuiltIn)
+    }
+
+    @Test("renaming changes what you say to reach it") func rename() {
+        let s = store()
+        let polish = s.transforms.first { $0.name == "Polish" }!
+        s.update(polish.id, name: "tidy this up", instruction: polish.instruction)
+        #expect(s.match(spoken: "tidy this up")?.id == polish.id)
+        #expect(s.match(spoken: "polish") == nil)
+    }
+
+    @Test("an edited built-in can be put back") func restore() {
+        let s = store()
+        let original = s.transforms.first { $0.name == "Make it shorter" }!
+        s.update(original.id, name: "Make it shorter", instruction: "Something else entirely.")
+        #expect(s.hasDefault(original.id))
+        s.restoreDefault(original.id)
+        let back = s.transforms.first { $0.id == original.id }!
+        #expect(back.instruction == original.instruction)
+        #expect(back.isBuiltIn)
+    }
+
+    @Test("one you wrote has nothing to go back to") func yoursHasNoDefault() {
+        let s = store()
+        s.add(name: "make it rhyme", instruction: "Rewrite it as a limerick.")
+        let mine = s.transforms.first { $0.name == "make it rhyme" }!
+        #expect(!s.hasDefault(mine.id))
+        #expect(!s.restoreDefault(mine.id))
+    }
+
+    @Test("an empty name or instruction is refused") func rejectsEmpty() {
+        let s = store()
+        let polish = s.transforms.first { $0.name == "Polish" }!
+        #expect(!s.update(polish.id, name: "  ", instruction: "x"))
+        #expect(!s.update(polish.id, name: "x", instruction: "   "))
+        #expect(s.transforms.first { $0.id == polish.id }?.name == "Polish")
+    }
+
+    @Test("an edit survives a reload") func persists() {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("rawi-te-\(UUID().uuidString).json")
+        let first = TransformStore(url: url)
+        let polish = first.transforms.first { $0.name == "Polish" }!
+        first.update(polish.id, name: "Polish", instruction: "Keep it blunt.")
+        #expect(TransformStore(url: url).transforms.first { $0.name == "Polish" }?
+            .instruction == "Keep it blunt.")
+    }
+}

@@ -50,6 +50,46 @@ public final class TransformsViewModel: ObservableObject {
         reload()
     }
 
+    // MARK: - Editing
+
+    /// Which row is open for editing, and the text being typed into it. Held here
+    /// rather than in the row so opening a second one closes the first: two rows
+    /// half-edited is a way to lose work.
+    @Published public var editingID: UUID?
+    @Published public var editName: String = ""
+    @Published public var editInstruction: String = ""
+
+    public func beginEditing(_ transform: Transform) {
+        editingID = transform.id
+        editName = transform.name
+        editInstruction = transform.instruction
+    }
+
+    public func cancelEditing() { editingID = nil }
+
+    public var canSaveEdit: Bool {
+        !editName.trimmingCharacters(in: .whitespaces).isEmpty
+            && !editInstruction.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    public func saveEdit() {
+        guard let id = editingID, canSaveEdit else { return }
+        store.update(id, name: editName, instruction: editInstruction)
+        editingID = nil
+        reload()
+    }
+
+    /// Only offered where there is something to go back to.
+    public func canRestore(_ transform: Transform) -> Bool {
+        !transform.isBuiltIn && store.hasDefault(transform.id)
+    }
+
+    public func restore(_ transform: Transform) {
+        store.restoreDefault(transform.id)
+        if editingID == transform.id { editingID = nil }
+        reload()
+    }
+
     /// What the spoken phrase resolves to, shown live so the matching rule is
     /// visible rather than folklore.
     public var matched: Transform? { store.match(spoken: trySpoken) }
@@ -180,6 +220,40 @@ public struct TransformsView: View {
         }
     }
 
+    /// The row, open. Name and instruction both editable, because what you say to
+    /// reach a transform is as much a preference as what it then does.
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            TextField("What you will say", text: $model.editName)
+                .textFieldStyle(.plain)
+                .font(.system(size: TypeScale.body))
+                .foregroundStyle(c(.bone))
+                .padding(.horizontal, 9).padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink)))
+            TextEditor(text: $model.editInstruction)
+                .font(.system(size: TypeScale.body))
+                .foregroundStyle(c(.bone))
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 66)
+                .padding(.horizontal, 5).padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink)))
+            HStack(spacing: 8) {
+                Button("Save", action: model.saveEdit)
+                    .buttonStyle(.plain)
+                    .font(.system(size: TypeScale.small, weight: .semibold))
+                    .foregroundStyle(model.canSaveEdit ? c(.ink) : c(.faint))
+                    .padding(.horizontal, 11).padding(.vertical, 5)
+                    .background(Capsule().fill(model.canSaveEdit ? c(.saffron) : c(.raised)))
+                    .disabled(!model.canSaveEdit)
+                Button("Cancel", action: model.cancelEditing)
+                    .buttonStyle(.plain)
+                    .font(.system(size: TypeScale.small))
+                    .foregroundStyle(c(.muted))
+            }
+        }
+        .frame(maxWidth: 620, alignment: .leading)
+    }
+
     // MARK: - List
 
     private var list: some View {
@@ -199,6 +273,17 @@ public struct TransformsView: View {
                                 .background(Capsule().fill(c(.verdigris).opacity(0.14)))
                         }
                         Spacer(minLength: 8)
+                        if model.canRestore(transform) {
+                            Button { model.restore(transform) } label: {
+                                Text("Reset")
+                                    .font(.system(size: TypeScale.micro, weight: .medium))
+                                    .foregroundStyle(c(.faint))
+                            }.buttonStyle(.plain).help("Put the shipped wording back")
+                        }
+                        Button { model.beginEditing(transform) } label: {
+                            Image(systemName: "pencil").font(.system(size: TypeScale.micro))
+                                .foregroundStyle(c(.faint))
+                        }.buttonStyle(.plain).help("Edit this transform")
                         if !transform.isBuiltIn {
                             Button { model.remove(transform) } label: {
                                 Image(systemName: "xmark").font(.system(size: TypeScale.micro))
@@ -206,12 +291,16 @@ public struct TransformsView: View {
                             }.buttonStyle(.plain).help("Delete")
                         }
                     }
-                    Text(transform.instruction)
-                        .font(.system(size: TypeScale.body))
-                        .foregroundStyle(c(.muted))
-                        .lineSpacing(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 620, alignment: .leading)
+                    if model.editingID == transform.id {
+                        editor
+                    } else {
+                        Text(transform.instruction)
+                            .font(.system(size: TypeScale.body))
+                            .foregroundStyle(c(.muted))
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: 620, alignment: .leading)
+                    }
                 }
               }
             }
