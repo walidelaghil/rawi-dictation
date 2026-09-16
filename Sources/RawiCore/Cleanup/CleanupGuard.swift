@@ -33,6 +33,15 @@ public enum CleanupGuard {
     }
 
     public static func check(raw: String, cleaned: String) -> Verdict {
+        // The same rule the polish guard keeps: a rewrite may tidy a spoken list
+        // but may not flatten it into prose, because the stage that lays the list
+        // out runs after this one and cannot tell that one was ever spoken.
+        let candidate = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        if SpokenLists.makesAList(raw), !candidate.contains("\n"),
+           !SpokenLists.makesAList(candidate) {
+            return .reject(reason: "the rewrite dropped the list you spoke")
+        }
+
         let cleanedTrimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedTrimmed.isEmpty else {
             return .reject(reason: "cleanup returned nothing")

@@ -29,6 +29,19 @@ public final class ScriptRoutedProvider: CleanupProvider, @unchecked Sendable {
         return try await provider.clean(transcript, instruction: instruction)
     }
 
+    /// Always the bigger model, whatever the script.
+    ///
+    /// Measured on the transcript that exposed this: asked to clean a dictation
+    /// that enumerates something, qwen2.5:1.5b moved the ordinals to the ends of
+    /// their clauses and dropped a phrase, so the list that came out was a list of
+    /// the wrong things. qwen2.5:3b kept "first", "second" and "third" exactly
+    /// where they were spoken. The small model is chosen for being twice as fast,
+    /// and on a dictation with a shape to lose that is the wrong trade.
+    public func cleanKeepingShape(_ transcript: String,
+                                  instruction: String) async throws -> String {
+        try await arabic.clean(transcript, instruction: instruction)
+    }
+
     /// Both, because which one this dictation needs is not known until it is heard.
     public func warm() async {
         async let english: Void = latin.warm()

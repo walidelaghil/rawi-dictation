@@ -35,10 +35,27 @@ public final class RoutedCleanup: CleanupProvider, @unchecked Sendable {
     }
 
     public func clean(_ transcript: String, instruction: String = "") async throws -> String {
+        try await run(transcript, instruction: instruction, model: model(for: transcript))
+    }
+
+    /// Always the bigger of the two, whatever the script.
+    ///
+    /// Measured on the transcript that exposed this: asked to clean a dictation
+    /// that enumerates something, qwen2.5:1.5b moved the ordinals to the ends of
+    /// their clauses and dropped a phrase, so the list that came out was a list of
+    /// the wrong things. qwen2.5:3b left "first", "second" and "third" exactly
+    /// where they were spoken. The small model is chosen for being about twice as
+    /// fast, and on a dictation with a shape to lose that is the wrong trade.
+    public func cleanKeepingShape(_ transcript: String,
+                                  instruction: String) async throws -> String {
+        try await run(transcript, instruction: instruction, model: models.arabic)
+    }
+
+    private func run(_ transcript: String, instruction: String,
+                     model name: String) async throws -> String {
         guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return transcript
         }
-        let name = model(for: transcript)
         let provider: any CleanupProvider = lock.withLock {
             if let existing = built[name] { lastUsed = existing; return existing }
             let fresh = makeProvider(name)

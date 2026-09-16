@@ -5,6 +5,9 @@ public protocol CleanupProvider: AnyObject, Sendable {
     /// per-call argument rather than provider state because the destination
     /// changes with every key-press while the provider is built once.
     func clean(_ transcript: String, instruction: String) async throws -> String
+    /// The same job, on the strongest model available, for a dictation whose
+    /// *shape* has to survive and not only its words.
+    func cleanKeepingShape(_ transcript: String, instruction: String) async throws -> String
     func cancel()
     /// Gets the model ready while you are still speaking. See `ChatCleanup.warm`.
     func warm() async
@@ -12,6 +15,11 @@ public protocol CleanupProvider: AnyObject, Sendable {
 
 public extension CleanupProvider {
     func warm() async {}
+
+    /// A provider with one model has no stronger one to offer.
+    func cleanKeepingShape(_ transcript: String, instruction: String) async throws -> String {
+        try await clean(transcript, instruction: instruction)
+    }
 
     func clean(_ transcript: String) async throws -> String {
         try await clean(transcript, instruction: "")

@@ -509,7 +509,26 @@ public final class DictationController {
         // Polishing is cleanup's stronger sibling, not a second round trip: when it
         // runs it does the cleaner's job as well, so the text meets exactly one
         // model either way and the stage costs what it always cost.
-        let polisher = config.cleanup.mode == .polish ? self.polisher : nil
+        // A dictation that enumerates something is structure, and the rewriter is
+        // the one stage that can destroy it. Measured on qwen2.5:1.5b, the model
+        // English routes to: asked to polish "we need to test the bullet feature.
+        // First, we need X. Second, we need Y." it moved every ordinal to the end
+        // of its clause and dropped a phrase, and what came out was a list of the
+        // wrong things. The guard cannot catch that — the result is still a list,
+        // just not the one that was spoken.
+        //
+        // So a spoken list goes to the cleaner instead. It is the weaker rewrite
+        // and that is the point: its prompt is written to preserve every clause,
+        // and `CleanupGuard` demands most of the words survive, where the polish
+        // guard deliberately allows a rewrite to lose them. Filler inside an item
+        // survives where polish would have removed it. That is the trade, and it
+        // is not close: a tidy list of the wrong things is worse than an untidy
+        // list of the right ones.
+        let spokenList = config.output.formatSpokenLists && SpokenLists.makesAList(raw)
+        if spokenList, config.cleanup.mode == .polish {
+            log.info("A list was spoken; cleaning rather than rewriting, to keep its shape")
+        }
+        let polisher = config.cleanup.mode == .polish && !spokenList ? self.polisher : nil
         let worthCleaning = polisher != nil ? PolishNeeded.check(raw)
                                             : CleanupNeeded.check(raw)
         if !worthCleaning {
@@ -532,7 +551,11 @@ public final class DictationController {
                     log.warn("Polish rejected (\(reason)); inserting raw transcript")
                 }
             } else {
-                let candidate = try await cleanup.clean(raw, instruction: instruction)
+                // A spoken list goes to the bigger model even in English, because
+                // the small one rearranges the very words that mark it.
+                let candidate = spokenList
+                    ? try await cleanup.cleanKeepingShape(raw, instruction: instruction)
+                    : try await cleanup.clean(raw, instruction: instruction)
                 switch CleanupGuard.check(raw: raw, cleaned: candidate) {
                 case .accept:
                     text = candidate

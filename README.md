@@ -318,7 +318,7 @@ An *invalid* value is reported rather than silently ignored.
 | `output.restorePreviousClipboard` | `false` | Restore your previous clipboard after pasting |
 | `output.restoreDelayMs` | `300` | How long to wait before restoring |
 | `output.deliverRawFirst` | `true` | Put the raw transcript on the clipboard the moment it exists, then upgrade it once cleanup finishes, so you never wait to be able to paste |
-| `output.formatSpokenLists` | `true` | "first…, second…, third…" becomes a numbered list |
+| `output.formatSpokenLists` | `true` | "first…, second…, third…" becomes a numbered list. A dictation that does this is also cleaned by the bigger model rather than rewritten by the fast one — see below |
 | `history.enabled` | `true` | Keep a local record of dictations |
 | `history.encrypted` | `true` | AES-GCM on disk, under a key file only your account can read |
 | `history.retentionDays` | `90` | `0` keeps until the cap |
@@ -398,6 +398,26 @@ ollama pull qwen2.5:1.5b
 ```
 
 then set `"cleanup": { "provider": "ollama", "model": "qwen2.5:1.5b" }`.
+
+### A spoken list is structure, so the model is not trusted with it
+
+"First…, second…, third…" becomes a numbered list, and your lead-in keeps its
+place above it with a colon. That part is code, not a model: it happens on every
+machine, every time.
+
+What is not code is the rewriting that runs first, and that stage nearly took the
+feature with it. Measured on qwen2.5:1.5b, the model English normally routes to:
+asked to polish *"we need to test the bullet feature. First, we need X. Second,
+we need Y."* it moved every ordinal to the end of its clause and dropped a
+phrase. What came out was still a list — a tidy list of the wrong things, which
+no guard downstream could see was wrong.
+
+So a dictation that enumerates something takes a different path. It is *cleaned*
+rather than rewritten, using the prompt that preserves every clause, and it goes
+to the bigger model whatever language it is in, because the small one is chosen
+for speed and speed is the wrong trade here. It costs about two seconds more, on
+the dictations where getting the shape wrong would cost you the point you were
+making.
 
 ### Saying which language it is, when detection gets it wrong
 
