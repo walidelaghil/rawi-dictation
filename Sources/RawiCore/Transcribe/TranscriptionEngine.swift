@@ -6,10 +6,15 @@ public protocol TranscriptionEngine: AnyObject, Sendable {
     /// one, so it belongs in the protocol rather than in one implementation.
     func transcribe(wav: URL, prompt: String) async throws -> String
     func cancel()
+    /// Transcribe as this language from now on, rather than detecting it.
+    func use(language: DictationLanguage)
 }
 
 public extension TranscriptionEngine {
     func transcribe(wav: URL) async throws -> String { try await transcribe(wav: wav, prompt: "") }
+    /// An engine that is always told its language by configuration has nothing to
+    /// do here, and should not have to say so.
+    func use(language: DictationLanguage) {}
 }
 
 public enum TranscriptionError: Error, LocalizedError, Equatable {

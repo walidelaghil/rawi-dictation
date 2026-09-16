@@ -62,6 +62,25 @@ public final class DictationController {
 
     /// The last few dictations, newest first. In memory only — Phase 3 replaces
     /// this with the persisted, searchable history.
+    /// The language you told it to use, or `.auto` to let the detector decide.
+    ///
+    /// Sticky for the session and never written to disk: a forced language that
+    /// survived a relaunch would be a setting nobody remembers turning on, and
+    /// the failure it causes — Arabic transcribed as English words — looks like
+    /// the app breaking rather than like a choice.
+    public private(set) var language: DictationLanguage = .auto
+
+    /// Called when the language changes, so the pill can redraw.
+    public var onLanguageChange: ((DictationLanguage) -> Void)?
+
+    public func choose(_ language: DictationLanguage) {
+        guard language != self.language else { return }
+        self.language = language
+        transcriber.use(language: language)
+        log.info("Language set to \(language.badge.lowercased() == "auto" ? "detect" : language.badge)")
+        onLanguageChange?(language)
+    }
+
     public private(set) var recent: [RecentDictation] = []
     private let recentLimit = 5
 
@@ -176,6 +195,10 @@ public final class DictationController {
         guard state == .idle else { return }
         self.config = config
         self.transcriber = engine
+        // A new engine starts out detecting, which would silently undo a choice
+        // you made — and the engine is rebuilt whenever the config changes or the
+        // resident server hands over to the command line.
+        engine.use(language: language)
         self.cleanup = cleanup
     }
 

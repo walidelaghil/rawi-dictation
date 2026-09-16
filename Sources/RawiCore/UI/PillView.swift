@@ -72,6 +72,10 @@ public final class PillModel: ObservableObject {
     @Published public var pasteHint: Bool = false
     @Published public var motion: MarkMotion = .rest
     @Published public var labels: HotkeyLabels = .placeholder
+    /// The language this dictation will be transcribed as.
+    @Published public var language: DictationLanguage = .auto
+    /// Picking one from the pill. Not published: it never changes what is drawn.
+    public var onLanguage: ((DictationLanguage) -> Void)?
     /// What the × does. Not published: it never changes what is drawn.
     public var onCancel: (() -> Void)?
     /// Says yes to a command waiting for confirmation.
@@ -104,6 +108,22 @@ public struct PillView: View {
 
     public var body: some View {
         HStack(spacing: 10) {
+            // Left of everything, because it is about the recording that is
+            // happening rather than about the text that came out of it.
+            if isRecording, model.armed {
+                languagePicker
+            } else if isRecording, model.language != .auto {
+                // Not hovering, but not detecting either. A forced language that
+                // showed only on hover would be a mode you could get stuck in
+                // without ever seeing it.
+                Text(model.language.badge)
+                    .font(.system(size: TypeScale.micro, weight: .semibold))
+                    .foregroundStyle(RawiColors.pill(.ink))
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(Capsule().fill(RawiColors.pill(.saffron)))
+                    .transition(.opacity)
+                    .accessibilityLabel(model.language.spokenName)
+            }
             mark
             Text(PillLabel.text(for: model.state))
                 .font(.system(size: TypeScale.body, weight: .medium))
@@ -187,6 +207,44 @@ public struct PillView: View {
         .scaleEffect(model.armed ? 1.03 : 1.0)
         .animation(.easeOut(duration: 0.16), value: model.armed)
         .animation(.easeOut(duration: 0.16), value: model.state)
+        .animation(.easeOut(duration: 0.16), value: model.language)
+    }
+
+    /// Three choices, the width of two characters each. Offered while you are
+    /// still speaking, because that is when you can see it has gone wrong — the
+    /// pill says English over Arabic speech long before the words arrive.
+    private var languagePicker: some View {
+        HStack(spacing: 2) {
+            languageChoice(.english) {
+                Text("En").font(.system(size: TypeScale.micro, weight: .semibold))
+            }
+            languageChoice(.arabic) {
+                Text("Ar").font(.system(size: TypeScale.micro, weight: .semibold))
+            }
+            languageChoice(.auto) {
+                Image(systemName: "globe").font(.system(size: TypeScale.micro, weight: .semibold))
+            }
+        }
+        .padding(2)
+        .background(Capsule().fill(RawiColors.pill(.raised)))
+        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
+    }
+
+    private func languageChoice(
+        _ choice: DictationLanguage, @ViewBuilder label: () -> some View
+    ) -> some View {
+        let chosen = model.language == choice
+        return Button { model.onLanguage?(choice) } label: {
+            label()
+                .foregroundStyle(RawiColors.pill(chosen ? .ink : .muted))
+                .frame(width: 22, height: 17)
+                .background(Capsule().fill(chosen ? RawiColors.pill(.saffron) : .clear))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(choice.spokenName)
+        .accessibilityLabel(choice.spokenName)
+        .accessibilityAddTraits(chosen ? [.isSelected] : [])
     }
 
     private var cancelButton: some View {

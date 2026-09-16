@@ -43,6 +43,9 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
     private let port: Int
     private let detector: LanguageDetector?
     private let requestedLanguage: String
+    /// Set from the pill when detection got it wrong. Behind the lock because the
+    /// click and the transcription are on different threads.
+    private var chosenLanguage: DictationLanguage = .auto
     private let log: any Logging
 
     private let lock = NSLock()
@@ -183,8 +186,10 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
 
         // One encode, not two. The detector costs about a tenth of a second and
         // lets the real model be told the answer instead of working it out.
-        var language = requestedLanguage
-        if requestedLanguage == "auto", let detector {
+        // What you chose beats what the configuration says, and skips the
+        // detector entirely — there is nothing to detect once you have said so.
+        var language = lock.withLock { chosenLanguage.whisperCode } ?? requestedLanguage
+        if language == "auto", let detector {
             if let detection = await detector.detect(wav: wav),
                detection.probability >= LanguageDetector.confidenceFloor {
                 language = detection.language
@@ -238,6 +243,10 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw TranscriptionError.emptyResult }
         return trimmed
+    }
+
+    public func use(language: DictationLanguage) {
+        lock.withLock { chosenLanguage = language }
     }
 
     public func cancel() {

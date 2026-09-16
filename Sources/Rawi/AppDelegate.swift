@@ -74,6 +74,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pill.onCancel = { [weak self] in
             Task { @MainActor in await self?.controller.cancelRequested() }
         }
+        // Chosen on the pill, applied to the recording already running: the engine
+        // is not asked for the language until the key comes up.
+        pill.onLanguage = { [weak self] choice in
+            MainActor.assumeIsolated { self?.controller.choose(choice) }
+        }
+        controller.onLanguageChange = { [weak self] choice in
+            MainActor.assumeIsolated { self?.pill.language = choice }
+        }
         // Without this, an accessory app's own windows have no ⌘A, ⌘C or ⌘V:
         // AppKit resolves those through the main menu, which an LSUIElement app
         // does not get by default.

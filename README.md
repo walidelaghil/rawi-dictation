@@ -399,6 +399,26 @@ ollama pull qwen2.5:1.5b
 
 then set `"cleanup": { "provider": "ollama", "model": "qwen2.5:1.5b" }`.
 
+### Saying which language it is, when detection gets it wrong
+
+Detection is right nearly always, and when it is wrong it is wrong expensively:
+Arabic heard as English does not come back accented, it comes back as unrelated
+English words, and nothing downstream can recover it.
+
+So you can say it yourself. Hover the pill while it is listening and a picker
+appears on its left — **En**, **Ar**, and a globe for detect — and the choice
+applies to the recording already running, because the engine is not asked for a
+language until the key comes up. Picking a language also skips the detector pass
+entirely, which is a little faster.
+
+The choice sticks until you change it, and it survives the engine being rebuilt
+underneath it. It is never written to disk: a forced language that came back
+after a restart would be a setting nobody remembers turning on, and its failure
+looks like the app being broken rather than like a choice you made. For the same
+reason, a forced language stays visible on the pill as a small **En** or **Ar**
+badge even when you are not hovering — the globe shows nothing, because detecting
+is the normal state.
+
 ### One hotkey, two languages
 
 Rawi runs a single multilingual model with `-l auto`, so the language is detected

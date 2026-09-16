@@ -63,6 +63,18 @@ public final class PillWindow {
     }
 
     /// Called when the × is clicked.
+    /// Which language the picker shows as chosen.
+    public var language: DictationLanguage {
+        get { model.language }
+        set { model.language = newValue }
+    }
+
+    /// Picking one from the pill.
+    public var onLanguage: ((DictationLanguage) -> Void)? {
+        get { model.onLanguage }
+        set { model.onLanguage = newValue }
+    }
+
     public var onCancel: (() -> Void)? {
         get { model.onCancel }
         set { model.onCancel = newValue }

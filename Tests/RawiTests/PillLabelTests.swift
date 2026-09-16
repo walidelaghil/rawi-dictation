@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import Testing
 @testable import RawiCore
 
@@ -41,5 +43,50 @@ import Testing
         #expect(PillLabel.elapsed(.seconds(7)) == "0:07")
         #expect(PillLabel.elapsed(.seconds(75)) == "1:15")
         #expect(PillLabel.elapsed(.seconds(600)) == "10:00")
+    }
+}
+
+@Suite("Language picker proof") @MainActor struct LanguagePickerProofTests {
+    @Test("picker proof",
+          .enabled(if: ProcessInfo.processInfo.environment["RAWI_PROOF_LANG"] != nil))
+    func proof() throws {
+        let out = URL(fileURLWithPath: ProcessInfo.processInfo.environment["RAWI_PROOF_LANG"]!)
+        let labels = HotkeyLabels(dictate: "⌥", transform: "⌥⌘Space",
+                                  cancel: "⌥esc", command: "⌃⌥C")
+        // Every state the pill can be in while a language is chosen: hovered, so
+        // the picker is open; and not hovered, where only a forced choice shows.
+        let cases: [(DictationLanguage, Bool)] = [
+            (.auto, true), (.arabic, true), (.english, true),
+            (.arabic, false), (.auto, false),
+        ]
+        var shots: [NSBitmapImageRep] = []
+        for (language, armed) in cases {
+            let model = PillModel()
+            model.state = .recording(mode: .pushToTalk, startedAt: .now)
+            model.level = 0.03
+            model.peak = 0.06
+            model.elapsed = .seconds(4)
+            model.labels = labels
+            model.language = language
+            model.armed = armed
+            let host = NSHostingView(rootView: PillView(model: model).padding(16))
+            host.frame = NSRect(x: 0, y: 0, width: 560, height: 78)
+            host.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.12))
+            host.layoutSubtreeIfNeeded()
+            let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+            host.cacheDisplay(in: host.bounds, to: rep)
+            shots.append(rep)
+        }
+        let sheet = NSImage(size: NSSize(width: 560, height: 78 * CGFloat(shots.count)))
+        sheet.lockFocus()
+        for (index, rep) in shots.enumerated() {
+            rep.draw(in: NSRect(x: 0, y: CGFloat(shots.count - 1 - index) * 78,
+                                width: 560, height: 78))
+        }
+        sheet.unlockFocus()
+        let png = NSBitmapImageRep(data: sheet.tiffRepresentation!)!
+            .representation(using: .png, properties: [:])!
+        try png.write(to: out)
     }
 }

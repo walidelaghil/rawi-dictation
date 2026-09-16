@@ -67,6 +67,9 @@ final class FakeEngine: TranscriptionEngine, @unchecked Sendable {
         return try result.get()
     }
     func cancel() { cancelCount += 1 }
+    /// Every language it was told to use, in order.
+    var toldLanguages: [DictationLanguage] = []
+    func use(language: DictationLanguage) { toldLanguages.append(language) }
 }
 
 final class FakeCleanup: CleanupProvider, @unchecked Sendable {

@@ -25,6 +25,9 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
     private let binary: String
     private let model: String
     private let language: String
+    /// Set from the pill when detection got it wrong. Behind the lock because the
+    /// click and the transcription are on different threads.
+    private var chosenLanguage: DictationLanguage = .auto
     private let threads: Int
 
     private let lock = NSLock()
@@ -45,7 +48,9 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
     public func transcribe(wav: URL, prompt: String = "") async throws -> String {
         // Ask the cheap model which language this is, so the expensive one is told
         // rather than made to work it out with a whole extra encoder pass.
-        var language = self.language
+        // What you chose beats what the configuration says, and skips the
+        // detector entirely — there is nothing to detect once you have said so.
+        var language = lock.withLock { chosenLanguage.whisperCode } ?? self.language
         if language == "auto", let detector,
            let detection = await detector.detect(wav: wav),
            detection.probability >= LanguageDetector.confidenceFloor {
@@ -135,6 +140,10 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
         let text = Self.cleanTranscript(String(decoding: outData, as: UTF8.self))
         guard !text.isEmpty else { throw TranscriptionError.emptyResult }
         return text
+    }
+
+    public func use(language: DictationLanguage) {
+        lock.withLock { chosenLanguage = language }
     }
 
     public func cancel() {
