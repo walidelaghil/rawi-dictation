@@ -16,6 +16,13 @@ network calls at all unless you explicitly configure a hosted provider.
   punctuation, and match casing to dictation style.
 - Leaves the transcript on your clipboard so you can paste it again.
 - Tiny floating pill while recording, showing the mode and a live level meter.
+- **Says "first…, second…, third…"** and gets a numbered list, the way you meant it.
+- **Learns the spellings you correct** — fix a name in your document and Rawi
+  spells it your way next time, without being told.
+- **Shapes text to where it lands**: a Jira summary, a Slack message and a Google
+  Doc want different writing, and a rule per destination gives them it.
+- **Commands** — say *"remind me to…"* and it becomes a reminder, after showing
+  you exactly what it is about to do.
 - Menu bar toggle, launch at login, and a plain JSON settings file.
 
 ---
@@ -31,12 +38,25 @@ degrade on Arabic, they fail outright:
 
 ```bash
 mkdir -p ~/Library/Application\ Support/Rawi/models
-curl -L -o ~/Library/Application\ Support/Rawi/models/ggml-large-v3-turbo-q5_0.bin \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+curl -L -o ~/Library/Application\ Support/Rawi/models/ggml-large-v3-turbo-q8_0.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin
 ```
 
-~547 MB, ~2 s per dictation on an M-series Mac. `make doctor` will tell you if the
+~834 MB, ~1.6 s per dictation on an M4. `make doctor` will tell you if the
 configured model is English-only.
+
+The q8_0 rather than the smaller q5_0 for a reason worth knowing: Metal has no
+fast kernel for q5_0's packing and does have one for q8_0's, so the *less*
+compressed model is the quicker one, and the more faithful one. Measured
+interleaved, five runs each: q5_0 2409 ms, q8_0 2133 ms. 287 MB buys 11%.
+
+Turbo carries the full large-v3 encoder — only its decoder is pruned — and
+whisper always encodes a 30-second window, so a dictation costs the same whether
+you spoke for three seconds or twenty. That fixed cost is nearly all of the wait.
+
+On first launch Rawi walks you through the rest: microphone, auto-paste, the
+model download, polish, and your key. Skip any step and it stays on a checklist
+in the sidebar rather than failing quietly later.
 
 Build and install the app:
 
@@ -260,8 +280,8 @@ and a clash between two of them is reported rather than silently losing one.
 The screen writes `~/.config/rawi/config.json` and nothing else, so a hand edit
 and a click do exactly the same thing. The file is created on first launch and
 re-read whenever it changes — no restart either way. A few things have no
-control on the screen and live only in the file: the cleanup prompt, the history
-cap, and the excluded apps.
+control on the screen and live only in the file: the cleanup prompt and the
+excluded apps.
 
 Any key you leave out falls back to its default, so a three-line config is fine.
 An *invalid* value is reported rather than silently ignored.
@@ -272,23 +292,38 @@ An *invalid* value is reported rather than silently ignored.
 | `hotkeyBackend` | `"auto"` | `auto`, `eventTap` (needs Input Monitoring, supports bare `fn`), `carbon` (no permission, needs a combo) |
 | `fallbackHotkey` | `"ctrl+option+space"` | Used when the Carbon backend is active and `hotkey` is a bare modifier |
 | `cancelHotkey` | `"ctrl+option+escape"` | Cancel key in Carbon mode. Consumed, unlike Esc in event-tap mode |
-| `transformHotkey` | `"ctrl+option+space"` | Hold to rewrite the clipboard by voice — see §9. Always permission-free |
+| `transformHotkey` | `"ctrl+option+t"` | Hold to rewrite the clipboard by voice — see §9. Always permission-free |
+| `commandHotkey` | `"ctrl+option+c"` | Hold to speak a command — see §9d. Always permission-free |
+| `appearance` | `"system"` | `system`, `light`, or `dark` |
 | `maxPushToTalkSeconds` | `120` | Safety stop if a Carbon key-release event is missed |
 | `doubleTapWindowMs` | `350` | How long after the first press a second tap still counts as a double-tap |
 | `minHoldMs` | `250` | Holds shorter than this are treated as taps, not speech |
 | `maxSessionSeconds` | `300` | Hands-free auto-stop. 5 minutes |
 | `engine` | `"whispercpp"` | `whispercpp` (local, offline), `groq`, or `openai` |
 | `whispercpp.binary` | `"whisper-cli"` | Name on `PATH`, or an absolute path |
-| `whispercpp.model` | `…/models/ggml-small.en.bin` | Path to a `ggml-*.bin` model |
-| `whispercpp.language` | `"en"` | Or `"auto"` to detect |
-| `whispercpp.threads` | `8` | CPU threads |
+| `whispercpp.model` | `…/models/ggml-large-v3-turbo-q8_0.bin` | Path to a `ggml-*.bin` model. Must be multilingual |
+| `whispercpp.language` | `"auto"` | Or a code like `"en"` to skip detection |
+| `whispercpp.threads` | `8` | CPU threads. The encode is GPU-bound, so this changes little |
+| `whispercpp.useServer` | `true` | Keep the model resident in `whisper-server`. Off means loading it per dictation |
+| `whispercpp.serverPort` | `8711` | The detector uses this port plus one |
+| `whispercpp.detectModel` | `…/models/ggml-base.bin` | The small model that decides which language you spoke, so the big one is told rather than working it out. Worth about three seconds |
 | `api.groqModel` | `"whisper-large-v3-turbo"` | Model for `engine: groq` |
 | `api.openaiModel` | `"whisper-1"` | Model for `engine: openai` |
 | `cleanup.provider` | detected | `openai`, `anthropic`, `ollama`, or `off` |
-| `cleanup.model` | per provider | e.g. `gpt-4o-mini`, `qwen2.5:3b` |
+| `cleanup.mode` | `"polish"` | `clean` removes filler and fixes punctuation; `polish` also applies the corrections you spoke and turns run-on speech into sentences |
+| `cleanup.models.latin` | `"qwen2.5:1.5b"` | Used for English. Small on purpose — see §6 |
+| `cleanup.models.arabic` | `"qwen2.5:3b"` | Used as soon as any Arabic appears |
+| `cleanup.transformModel` | `""` | Model for Transforms. Empty means the routed pair above |
 | `cleanup.prompt` | see below | The cleanup instruction. Edit freely |
 | `output.restorePreviousClipboard` | `false` | Restore your previous clipboard after pasting |
 | `output.restoreDelayMs` | `300` | How long to wait before restoring |
+| `output.deliverRawFirst` | `true` | Put the raw transcript on the clipboard the moment it exists, then upgrade it once cleanup finishes, so you never wait to be able to paste |
+| `output.formatSpokenLists` | `true` | "first…, second…, third…" becomes a numbered list |
+| `history.enabled` | `true` | Keep a local record of dictations |
+| `history.encrypted` | `true` | AES-GCM on disk, under a key file only your account can read |
+| `history.retentionDays` | `90` | `0` keeps until the cap |
+| `history.limit` | `500` | Oldest rows drop past this |
+| `history.excludedBundleIDs` | password managers, Messages | Substring match on the frontmost app's bundle ID. Never recorded |
 
 API keys never go in this file. They live in `~/.config/rawi/.env` — see
 [`.env.example`](.env.example).
@@ -408,7 +443,9 @@ the model treating your dictation as instructions addressed to it.
 The permission-gated paths — the event tap, the synthetic ⌘V, and the pill's focus
 behaviour — cannot be meaningfully tested without live TCC grants and a real
 microphone, so they are verified by hand rather than with fabricated coverage.
-Everything else is covered by `swift test` (111 tests).
+Everything else is covered by `swift test` (766 tests), and
+[`docs/end-to-end-test.md`](docs/end-to-end-test.md) records a full pass against
+an installed build, including what that pass found and fixed.
 
 Work through these once after granting permissions:
 
@@ -426,6 +463,20 @@ Work through these once after granting permissions:
 - [ ] **Launch at Login** on → the icon returns after a reboot
 - [ ] Turn Wi-Fi off with `engine: whispercpp` and `cleanup.provider: ollama` or
       `off` → dictation still works
+
+And once more for the parts that only exist when you use them:
+
+- [ ] Hold the transform key over some selected text, say *"make it shorter"* →
+      the clipboard is rewritten; **Undo** in the menu puts the original back
+- [ ] Say *"first this, second that, third the other"* → a numbered list
+- [ ] Dictate Arabic → it stays Arabic, and the paragraph breaks land at
+      بالمناسبة rather than mid-thought
+- [ ] Correct a name Rawi got wrong, in your document, and leave it alone for a
+      minute → the next dictation spells it your way, and Dictionary says why
+- [ ] Hold the command key and say *"remind me to … tomorrow at 9"* → the pill
+      names the action and the time before anything is created
+- [ ] Add a destination rule for a page you use, dictate into it → the writing
+      matches the rule rather than your default style
 
 ---
 
@@ -530,6 +581,59 @@ yours to set.
 Transform rows are excluded from the spoken-word figures. That text was on your
 clipboard, not in your voice.
 
+## 9b. Your dictionary, and what it learns
+
+Names are what dictation gets wrong, and they are the words you least want to
+fix by hand. Add a term in **Dictionary** and its spelling is applied in code,
+after the model has had its say — `TermCorrector` cannot decline the way a model
+can, and measured, `qwen2.5:1.5b` declines every time.
+
+Rawi also fills the dictionary itself. After it pastes, it reads that stretch of
+your document back a few times over the next minute, and a word you changed is a
+word it got wrong. Two agreeing looks are required before anything is learned, so
+catching you mid-edit — "Rawal" on the way to "Rawi" — teaches it nothing.
+
+Ordinary English is never learned: macOS's own dictionary is the fence, and it
+usefully keeps the words *you* have taught it separate, so a name you type often
+is still a name.
+
+**Snippets** are the deliberate half: say "my email" and get the address. They
+expand after cleanup, so no model can mangle a URL.
+
+## 9c. Destinations
+
+The same sentence should not be written the same way everywhere. A rule matches
+an app, a page, or a field, and adds one instruction to cleanup for that
+destination — "one short paragraph, no greeting, no sign-off" for Slack, "a
+one-line summary then short list items" for a Jira ticket.
+
+Field rules are the precise ones: Jira's *Summary* and *Description* take
+different writing, and **Detect field** fills a new rule from whatever you click
+into, so you never have to guess what a field calls itself. The most specific
+rule wins — field over page over app.
+
+## 9d. Commands — say a phrase, Rawi does the thing
+
+Some dictation is not text. Say *"remind me to send the deck on Thursday at 2"*
+and it becomes a reminder, due Thursday at two, with an alarm.
+
+Matching is a hand-written phrase list, matched on the prefix, locally. No model
+infers your intent, because a model that is 95% right about whether to *act* is
+not good enough.
+
+Then it asks. The pill shows the action and its arguments in words — `Add "send
+the deck" to your Reminders list, on 25 Sep at 2 pm?` — with a **Run** button, and
+forgets the whole thing after twelve seconds if you ignore it.
+
+Five ship. *ask Claude* and *remind me to* are on; *capture idea* (Notion), *new
+ticket* (Jira) and *deep work* need an account of yours and stay off until you
+fill them in. Reminders asks macOS for permission the first time and never again.
+
+Times are read out of what you said: "tomorrow at 9", "next Tuesday at 4pm",
+"tonight", "in 20 minutes", "in half an hour". A date only counts at the start or
+end of the phrase, so *"read the Monday standup notes before the review"* keeps
+its Monday in the title rather than becoming a Monday reminder.
+
 ## 10. History
 
 Every dictation is kept locally: the cleaned text, what whisper actually heard,
@@ -542,10 +646,13 @@ cleanup removed still finds the dictation.
 
 Privacy is a default rather than a setting to find:
 
+- **encrypted on disk** with AES-GCM, under a key file only your account can read
+- kept 90 days, then pruned along with any audio still attached
 - capped at 500 entries
 - password managers and private-message clients are never recorded
 - **Clear all** deletes the file outright
-- audio is never stored; the WAV goes as soon as the text is produced
+- audio is never stored; the WAV goes as soon as the text is produced, and any
+  recording no history row points at is swept up at the next launch
 
 The file is `~/Library/Application Support/Rawi/history.jsonl` — one JSON object
 per line, so `grep` and `tail` work on it directly. To disable it entirely, set
@@ -554,7 +661,7 @@ per line, so `grep` and `tail` work on it directly. To disable it entirely, set
 ## 11. Development
 
 ```bash
-make test        # 393 tests, plus live suites that skip themselves
+make test        # 766 tests, plus live suites that skip themselves
 make run         # run from build/ with verbose logging to stderr
 make bundle      # build the .app without installing
 make doctor      # print permission and provider status
