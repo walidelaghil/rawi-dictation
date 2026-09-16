@@ -60,6 +60,43 @@ import Foundation
                      peakLevel: 0.3, guardRejected: false)
     }
 
+    @Test("audio no row points at is swept up, and the rest is left alone")
+    func sweepsOrphans() throws {
+        let url = tmp(); defer { try? FileManager.default.removeItem(at: url) }
+        let manager = FileManager.default
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("rawi-sweep-\(UUID().uuidString)")
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: directory) }
+
+        func wav(_ name: String, ageSeconds: Double) throws -> URL {
+            let file = directory.appendingPathComponent(name)
+            try Data("RIFF".utf8).write(to: file)
+            try manager.setAttributes(
+                [.modificationDate: Date().addingTimeInterval(-ageSeconds)],
+                ofItemAtPath: file.path)
+            return file
+        }
+
+        let kept = try wav("kept.wav", ageSeconds: 99_999)
+        let orphan = try wav("orphan.wav", ageSeconds: 99_999)
+        let inFlight = try wav("in-flight.wav", ageSeconds: 5)
+        let notAudio = try wav("notes.txt", ageSeconds: 99_999)
+
+        let store = HistoryStore(url: url)
+        store.append(HistoryEntry(at: Date(), cleaned: "a failure to retry",
+                                  raw: "a failure to retry",
+                                  script: .latin, appName: "Slack", bundleID: "x",
+                                  durationSeconds: 1, peakLevel: 0.3,
+                                  guardRejected: false, audioPath: kept.path))
+
+        #expect(store.sweepOrphanedAudio(in: directory) == 1)
+        #expect(manager.fileExists(atPath: kept.path))         // a row still needs it
+        #expect(!manager.fileExists(atPath: orphan.path))      // nothing could reach it
+        #expect(manager.fileExists(atPath: inFlight.path))     // still being spoken into
+        #expect(manager.fileExists(atPath: notAudio.path))     // not ours to delete
+    }
+
     @Test("appends survive a reload") func persists() {
         let url = tmp(); defer { try? FileManager.default.removeItem(at: url) }
         let a = HistoryStore(url: url); a.append(entry("one")); a.append(entry("two"))

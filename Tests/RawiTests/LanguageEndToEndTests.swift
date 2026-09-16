@@ -18,17 +18,7 @@ import Foundation
     }
 
     func say(_ text: String, voice: String?) throws -> URL {
-        let url = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("rawi-e2e-\(UUID().uuidString).wav")
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/say")
-        var args = ["-o", url.path, "--data-format=LEI16@16000"]
-        if let voice { args += ["-v", voice] }
-        args.append(text)
-        p.arguments = args
-        try p.run()
-        p.waitUntilExit()
-        return url
+        try SpokenAudio.wav(text, voice: voice, prefix: "rawi-e2e")
     }
 
     @Test("one configuration transcribes English",

@@ -190,7 +190,11 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
             }
         }
 
-        let body = try multipart(wav: wav, language: language, prompt: prompt)
+        let hint = DecoderHint.filtered(prompt, forLanguage: language)
+        if hint.isEmpty, !prompt.isEmpty {
+            log.info("Dictionary hint held back — it is not written in the language being spoken")
+        }
+        let body = try multipart(wav: wav, language: language, prompt: hint)
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 120
@@ -256,6 +260,12 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
         field("language", language)
         field("response_format", "json")
         field("temperature", "0")
+        // The server wraps its output at a column, and by default it will wrap
+        // mid-word: one Arabic dictation came back as "بشكل م / متاز", which the
+        // newline-collapsing in `Transcript` then turned into two words with a
+        // space between them. This makes it break at words instead, so joining
+        // the lines puts the sentence back exactly.
+        field("split_on_word", "true")
         if !prompt.isEmpty { field("prompt", prompt) }
         body.append(Data("--\(Self.boundary)--\r\n".utf8))
         return body

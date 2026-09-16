@@ -45,9 +45,31 @@ public enum SpokenParagraphs {
         return paragraphs.count > 1 ? paragraphs : [text]
     }
 
+    /// Words that ride in front of an opener without changing it. People do not
+    /// start a new subject on the exact words in the list above — they say "and
+    /// by the way", "oh, one more thing", "so separately".
+    static let leadIns = ["and", "so", "oh", "ok", "okay", "but", "well", "now",
+                          "also", "anyway", "أه", "طيب", "يعني", "و"]
+
+    /// Adverbs that intensify an opener without being part of it: "on a completely
+    /// different note" is the same announcement as "on a different note".
+    static let intensifiers = ["completely", "totally", "entirely", "wholly",
+                               "slightly", "somewhat", "very", "quite", "rather"]
+
     static func opensATopic(_ sentence: String) -> Bool {
-        let lower = sentence.lowercased()
+        var lower = sentence.lowercased()
             .trimmingCharacters(in: CharacterSet(charactersIn: " \"'“”«»"))
+        for lead in leadIns.sorted(by: { $0.count > $1.count }) where lower.hasPrefix(lead) {
+            let rest = lower.dropFirst(lead.count)
+            // Only when the lead-in is a word of its own: "sofa" does not begin
+            // with "so" the way "so separately" does.
+            guard let next = rest.first, !next.isLetter else { continue }
+            lower = rest.trimmingCharacters(in: CharacterSet(charactersIn: " ,،-—"))
+            break
+        }
+        for intensifier in intensifiers {
+            lower = lower.replacingOccurrences(of: " \(intensifier) ", with: " ")
+        }
         return openers.contains { lower.hasPrefix($0) }
     }
 

@@ -40,6 +40,30 @@ import Testing
             """)
     }
 
+    @Test("the words people put in front of the marker do not hide it")
+    func leadInsAndIntensifiers() {
+        // Found end to end: "on a completely different note" said nothing to the
+        // matcher, while "on a different note" broke the paragraph. Nobody speaks
+        // the list verbatim.
+        let intensified = "The migration finished last night and every service came "
+                        + "back clean. On a completely different note, the middle "
+                        + "pricing tier is confusing people."
+        #expect(SpokenParagraphs.split(intensified).count == 2)
+
+        let leadIn = "The migration finished last night and every service came back "
+                   + "clean. Oh, one more thing, the middle tier is confusing people."
+        #expect(SpokenParagraphs.split(leadIn).count == 2)
+
+        #expect(SpokenParagraphs.opensATopic("And by the way, the deck is ready"))
+        #expect(SpokenParagraphs.opensATopic("So separately, we owe them a number"))
+    }
+
+    @Test("a lead-in only counts as its own word") func leadInIsAWord() {
+        // "sofa" starts with "so" and announces nothing.
+        #expect(!SpokenParagraphs.opensATopic("Sofa separately is two words"))
+        #expect(!SpokenParagraphs.opensATopic("Andes by the way is a mountain range"))
+    }
+
     @Test("the marker mid-sentence is just a word") func midSentence() {
         let prose = "We priced it separately from the hardware and it still works out."
         #expect(SpokenStructure.format(prose) == prose)

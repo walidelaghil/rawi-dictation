@@ -264,6 +264,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log.info("History: \(history.count) entries, \(cipher == nil ? "plain" : "encrypted"), "
                  + (config.history.retentionDays == 0 ? "kept until the limit"
                     : "kept \(config.history.retentionDays) days"))
+        // Off the launch path: nothing waits on it, and a directory with hundreds
+        // of stale files takes long enough to read that it would show.
+        let historyForSweep = history
+        let sweepLog = log
+        Task.detached(priority: .background) {
+            guard let historyForSweep else { return }
+            let removed = historyForSweep.sweepOrphanedAudio(in: Config.recordingsDirectory)
+            if removed > 0 { sweepLog.info("Deleted \(removed) recordings nothing pointed at") }
+        }
         vocabulary = VocabularyStore()
         let profileCipher = cipher
         destinations = DestinationStore()

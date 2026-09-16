@@ -387,8 +387,18 @@ public struct Config: Codable, Sendable, Equatable {
             .appendingPathComponent("Library/Application Support/Rawi", isDirectory: true)
     }
 
+    /// Where a dictation's audio is written while it is being transcribed.
+    ///
+    /// Redirectable through `RAWI_RECORDINGS_DIR` so a test suite writes its
+    /// silence somewhere disposable. Without it the tests wrote into the real
+    /// folder — a run left about twenty one-second files there, none of them
+    /// reachable from history, and hundreds had piled up.
     public static var recordingsDirectory: URL {
-        supportDirectory.appendingPathComponent("recordings", isDirectory: true)
+        if let override = ProcessInfo.processInfo.environment["RAWI_RECORDINGS_DIR"],
+           !override.isEmpty {
+            return URL(fileURLWithPath: expand(override), isDirectory: true)
+        }
+        return supportDirectory.appendingPathComponent("recordings", isDirectory: true)
     }
 
     // MARK: - Persistence

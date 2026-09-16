@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import Foundation
 import RawiCore
 
@@ -10,11 +11,27 @@ enum Doctor {
         print("Rawi doctor\n")
 
         print("Permissions")
+        // Read from a shell, the two grants below are the shell's, not Rawi's.
+        // macOS credits a binary a terminal started to that terminal, so
+        // `AXIsProcessTrusted()` answers for whoever ran `make doctor` — and this
+        // check, the one the README sends people to, reported both missing on a
+        // Mac where the running app had both, then recommended a Karabiner
+        // workaround nobody needed. Say so rather than print a confident no.
+        let borrowed = launchedFromTerminal && !(status.inputMonitoring && status.accessibility)
+        if borrowed {
+            print("  Run from a terminal, so Input Monitoring and Accessibility below")
+            print("  are this terminal's answer, not Rawi's — macOS credits them to")
+            print("  whoever started the process.")
+            print(appIsRunning
+                ? "  Rawi is running. Its own answer is in the menu bar panel."
+                : "  Open Rawi and look at the menu bar panel for its own answer.")
+            print("")
+        }
         line("Microphone", status.microphone,
              fix: "System Settings → Privacy & Security → Microphone")
-        line("Input Monitoring", status.inputMonitoring,
+        line("Input Monitoring", status.inputMonitoring, unknown: borrowed,
              fix: "System Settings → Privacy & Security → Input Monitoring (add with +)")
-        line("Accessibility", status.accessibility,
+        line("Accessibility", status.accessibility, unknown: borrowed,
              fix: "System Settings → Privacy & Security → Accessibility (add with +)")
 
         print("\nConfiguration")
@@ -33,15 +50,22 @@ enum Doctor {
             inputMonitoringGranted: status.inputMonitoring)
         print("  appearance        \(config.appearance.rawValue)")
         print("  hotkey            \(config.hotkey)")
-        print("  hotkey backend    \(backend.rawValue)"
-              + (backend == .carbon ? "  (no permissions needed)" : ""))
-        if backend == .carbon {
-            let effective = HotkeyConfig.isCarbonCompatible(config.hotkey)
-                ? config.hotkey : config.fallbackHotkey
-            print("  → press           \(effective)")
-            print("  → cancel with     \(config.cancelHotkey)")
-            if effective != config.hotkey {
-                print("     (“\(config.hotkey)” needs Input Monitoring, so the fallback is used)")
+        if borrowed {
+            // Which backend runs, and therefore which key actually works, follows
+            // from a grant this process cannot read. Printing the fallback here
+            // told people to press a key they had not been using for days.
+            print("  hotkey backend    depends on Input Monitoring, which this check cannot see")
+        } else {
+            print("  hotkey backend    \(backend.rawValue)"
+                  + (backend == .carbon ? "  (no permissions needed)" : ""))
+            if backend == .carbon {
+                let effective = HotkeyConfig.isCarbonCompatible(config.hotkey)
+                    ? config.hotkey : config.fallbackHotkey
+                print("  → press           \(effective)")
+                print("  → cancel with     \(config.cancelHotkey)")
+                if effective != config.hotkey {
+                    print("     (“\(config.hotkey)” needs Input Monitoring, so the fallback is used)")
+                }
             }
         }
         print("  engine            \(config.engine.rawValue)")
@@ -85,7 +109,9 @@ enum Doctor {
         }
 
         print("")
-        if status.allGranted {
+        if borrowed {
+            print("Nothing below is judged on the two grants this terminal cannot see.")
+        } else if status.allGranted {
             print("All permissions granted.")
         } else if !status.microphone {
             print("Microphone is required and not granted — nothing can be recorded.")
@@ -110,12 +136,26 @@ enum Doctor {
         }
     }
 
-    private static func line(_ name: String, _ ok: Bool,
+    /// launchd is the parent of an app the user opened; a shell is the parent of
+    /// one they ran by path.
+    static var launchedFromTerminal: Bool { getppid() != 1 }
+
+    static var appIsRunning: Bool {
+        let mine = ProcessInfo.processInfo.processIdentifier
+        return NSWorkspace.shared.runningApplications.contains {
+            $0.bundleIdentifier == "com.welaghil.rawi" && $0.processIdentifier != mine
+        }
+    }
+
+    /// `unknown` is for a check this process is not in a position to make: it
+    /// prints a question rather than a verdict, and offers no fix for a problem
+    /// that may not exist.
+    private static func line(_ name: String, _ ok: Bool, unknown: Bool = false,
                              detail: String? = nil, fix: String) {
-        let mark = ok ? "OK  " : "MISS"
+        let mark = unknown ? " ?  " : (ok ? "OK  " : "MISS")
         let padded = name.padding(toLength: 17, withPad: " ", startingAt: 0)
         print("  [\(mark)] \(padded) \(detail ?? "")")
-        if !ok { print("           ↳ \(fix)") }
+        if !ok, !unknown { print("           ↳ \(fix)") }
     }
 
 }

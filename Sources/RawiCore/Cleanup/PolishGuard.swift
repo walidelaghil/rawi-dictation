@@ -41,7 +41,19 @@ public enum PolishGuard {
     /// this many characters of difference, the ratio does not get a vote.
     static let lengthSlack = 40
     /// Stems this long identify a word across its inflections without colliding.
+    /// Latin only — see `stem(_:)` for why Arabic cannot use a prefix.
     static let stemLength = 4
+    /// A dictated sentence with at least this many words of its own is substantial
+    /// enough that losing it is a failure rather than an applied correction.
+    /// Below it sits the false start a rewrite is *supposed* to delete: "no wait,
+    /// scratch that" is three words and none of them survive on purpose.
+    static let sentenceFloor = 5
+    /// How much of such a sentence has to reach the rewrite. Deliberately low:
+    /// this is a net for a sentence that is *gone*, not a rule about how much a
+    /// rewrite may tighten. A retraction the speaker dictated at length ("forget
+    /// what I said about the offsite dates") still leaves a word or two behind,
+    /// and applying it is the feature working.
+    static let minSentenceSurvival = 0.2
 
     public static func check(raw: String, polished: String) -> Verdict {
         let trimmed = polished.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -76,10 +88,74 @@ public enum PolishGuard {
             return .reject(reason: "\(Int(share * 100))% of the rewrite is words that "
                                  + "were not dictated (\(invented.prefix(3).joined(separator: ", ")))")
         }
+
+        // A rewrite applies the corrections you spoke; it does not drop a sentence
+        // you meant. The ratios above cannot see that: losing the second of two
+        // sentences still leaves more than half the characters, which the floor is
+        // happy with. Measured — qwen2.5:3b deleted a whole Arabic sentence, put an
+        // invented word where it had been, and passed every check above.
+        let writtenStems = Set(written.map(stem))
+        for sentence in SpokenParagraphs.sentencesOf(raw) {
+            let own = significantWords(sentence).filter { !connectives.contains($0) }
+            guard own.count >= sentenceFloor else { continue }
+            let survived = own.filter { writtenStems.contains(stem($0)) }.count
+            if Double(survived) / Double(own.count) < minSentenceSurvival {
+                return .reject(reason: "a sentence you dictated is missing from the rewrite")
+            }
+        }
         return .accept
     }
 
-    static func stem(_ word: String) -> String { String(word.prefix(stemLength)) }
+    /// What identifies a word across the endings it can take.
+    ///
+    /// English inflects at the end, so its first four characters are the word and
+    /// the rest is grammar. Arabic does the opposite: it attaches the article and
+    /// the prepositions to the *front*, so four characters can be all grammar and
+    /// no word — "بالمناسبة" (by the way) and "بالمتحزبين" (a word nobody said)
+    /// share every one of them. That collision is how a model once deleted a
+    /// dictated sentence and had the invented word replacing it counted as
+    /// something the speaker had said. Arabic is therefore compared whole, after
+    /// the prefixes and the spellings that vary freely are normalised away.
+    static func stem(_ word: String) -> String {
+        isArabic(word) ? arabicStem(word) : String(word.prefix(stemLength))
+    }
+
+    static func isArabic(_ word: String) -> Bool {
+        word.unicodeScalars.contains { (0x0600...0x06FF).contains($0.value) }
+    }
+
+    /// Diacritics dropped, the letters that are written both ways folded together,
+    /// and the proclitics peeled off — but only while a real word is left, so
+    /// short words are never shaved down into each other.
+    static func arabicStem(_ word: String) -> String {
+        var out = ""
+        for scalar in word.unicodeScalars {
+            switch scalar.value {
+            case 0x064B...0x0652, 0x0640, 0x0670: continue   // harakat, tatweel
+            case 0x0622, 0x0623, 0x0625, 0x0671: out.append("ا")
+            case 0x0649: out.append("ي")
+            case 0x0629: out.append("ه")
+            case 0x0624: out.append("و")
+            case 0x0626: out.append("ي")
+            default: out.unicodeScalars.append(scalar)
+            }
+        }
+        // Longest first: "وبال" before "بال" before "و".
+        let proclitics = ["وبال", "فبال", "وال", "فال", "كال", "بال", "لل", "ال",
+                          "و", "ف", "ب", "ك", "ل", "س"]
+        var changed = true
+        while changed {
+            changed = false
+            for clitic in proclitics where out.hasPrefix(clitic) {
+                let rest = String(out.dropFirst(clitic.count))
+                guard rest.count >= 3 else { continue }
+                out = rest
+                changed = true
+                break
+            }
+        }
+        return out
+    }
 
     /// Words long enough to carry meaning. Short ones are grammar, and grammar is
     /// exactly what a rewrite is allowed to change.

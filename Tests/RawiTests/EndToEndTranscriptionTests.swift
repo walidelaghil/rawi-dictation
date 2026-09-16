@@ -53,12 +53,7 @@ import Foundation
     }
 
     private func runSay(text: String, to url: URL) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
-        process.arguments = ["-o", url.path, "--data-format=LEI16@16000", text]
-        try process.run()
-        process.waitUntilExit()
-        #expect(process.terminationStatus == 0)
+        try SpokenAudio.speak(text, to: url)
     }
 
     /// Finds the `data` chunk rather than assuming a 44-byte header, because

@@ -100,6 +100,34 @@ public final class HistoryStore: @unchecked Sendable {
         entries.removeLast(count)
     }
 
+    /// Deletes recordings no history row points at.
+    ///
+    /// Audio is removed as each dictation finishes, but not every dictation
+    /// finishes: a crash, a run that deliberately does not record, a test suite
+    /// pointed at the wrong directory. What is left cannot be reached from
+    /// anywhere in the app, so retention never sees it and "clear all" never
+    /// touches it — it is a pile of your speech that nothing can delete. Found
+    /// end to end with 596 files, 38 MB, most of them silence.
+    ///
+    /// `graceSeconds` keeps the recording being spoken into right now, which has
+    /// no row yet because it has not finished.
+    @discardableResult
+    public func sweepOrphanedAudio(in directory: URL, graceSeconds: Double = 3_600,
+                                   now: Date = Date()) -> Int {
+        let manager = FileManager.default
+        guard let names = try? manager.contentsOfDirectory(atPath: directory.path) else { return 0 }
+        let kept = Set(lock.withLock { entries.compactMap(\.audioPath) })
+        var removed = 0
+        for name in names where name.hasSuffix(".wav") {
+            let path = directory.appendingPathComponent(name).path
+            guard !kept.contains(path) else { continue }
+            let modified = (try? manager.attributesOfItem(atPath: path)[.modificationDate]) as? Date
+            guard let modified, now.timeIntervalSince(modified) > graceSeconds else { continue }
+            if (try? manager.removeItem(atPath: path)) != nil { removed += 1 }
+        }
+        return removed
+    }
+
     /// A failed dictation keeps its recording so it can be retried. When its row
     /// goes, the recording goes with it — otherwise the audio outlives the record
     /// that was the only way to find it.

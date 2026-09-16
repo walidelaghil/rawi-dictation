@@ -1,6 +1,19 @@
 import Foundation
 @testable import RawiCore
 
+/// Points the controller's recordings at a directory that can be thrown away.
+///
+/// The fake writes a real file, because a recorder that leaves none is not a
+/// recorder that captured nothing — and the controller picks the path. Left
+/// alone that path is the one the person using Rawi plays their dictations back
+/// from, and a test run dropped a second of silence into it every time.
+let recordingsRedirected: Bool = {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("rawi-tests-\(ProcessInfo.processInfo.processIdentifier)")
+    setenv("RAWI_RECORDINGS_DIR", directory.path, 1)
+    return true
+}()
+
 final class FakeRecorder: AudioRecording, @unchecked Sendable {
     var isRecording = false
     var level = 0.0
@@ -10,6 +23,10 @@ final class FakeRecorder: AudioRecording, @unchecked Sendable {
     var startError: (any Error)?
     /// Overrides what `stop()` returns, for tests about the audio itself.
     var stopResult: RecordingResult?
+
+    /// Before the controller asks for a path, not after: it picks the file and
+    /// only then hands it over.
+    init() { _ = recordingsRedirected }
 
     func start(to url: URL) throws {
         if let startError { throw startError }

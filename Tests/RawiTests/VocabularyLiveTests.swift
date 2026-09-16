@@ -13,13 +13,7 @@ import Foundation
     }
 
     func say(_ text: String) throws -> URL {
-        let url = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("rawi-vocab-\(UUID().uuidString).wav")
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/say")
-        p.arguments = ["-o", url.path, "--data-format=LEI16@16000", text]
-        try p.run(); p.waitUntilExit()
-        return url
+        try SpokenAudio.wav(text, prefix: "rawi-vocab")
     }
 
     @Test("a dictionary term whisper mishears comes out spelled correctly",

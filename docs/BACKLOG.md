@@ -5,10 +5,20 @@ and consciously left out, not forgotten.
 
 ---
 
-## Commands — speech to action
+## ~~Commands — speech to action~~ — shipped (2026-09-15)
 
-**Status:** designed, deferred out of v2. Hidden — no menu item, no nav entry, no
-config key.
+**Status:** built, against the reasoning below. Five commands, a Commands screen
+of its own, `⌃⌥C`, deterministic prefix matching, and a confirmation pill with a
+Run button that expires after twelve seconds. Two are on by default (*ask
+Claude*, *remind me to*); the three that need an account of yours ship switched
+off. The argument that held it back is kept below, because it is still the
+argument for keeping the feature small.
+
+**What changed the decision.** The risk was never the matching, it was the
+execution — so execution asks first, in words that name the action and its
+arguments, and nothing runs until you say so. That, plus keeping the phrase list
+hand-authored and local, is what the entry below asked for as the condition of
+building it.
 
 **What it is.** Spoken phrases that trigger an action instead of producing text:
 *"run my standup"*, *"log this as a bet"*, *"open a doc about our marketing

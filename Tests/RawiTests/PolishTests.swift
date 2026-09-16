@@ -82,6 +82,47 @@ import Testing
         let polished = "We will ship on Monday, and then we will test on Tuesday."
         #expect(PolishGuard.check(raw: raw, polished: polished) == .accept)
     }
+
+    @Test("a sentence that vanishes is refused") func refusesDroppedSentence() {
+        // Verbatim from the end-to-end run that found this: qwen2.5:3b kept the
+        // first sentence, deleted the second, and put an invented word where it
+        // had been. Every ratio the guard had was satisfied — more than half the
+        // characters survived, and the invented word shared its first four
+        // characters with a word that had been said.
+        let raw = "المهاجرة انتهت الليلة الماضية وكل الخدمات رجعت تشتغل بشكل ممتاز. "
+                + "بالمناسبة راجعت صفحة الأسعار وأعتقد أن الباقة الوسطى تربك العملاء."
+        let polished = "المهاجرة انتهت الليلة الماضية وكل الخدمات رجعت تشتغل بشكل متاز بالمتحزبين."
+        #expect(PolishGuard.check(raw: raw, polished: polished) != .accept)
+    }
+
+    @Test("an honest Arabic rewrite still passes") func acceptsArabic() {
+        let raw = "راجعت صفحة الأسعار وأعتقد أن الباقة الوسطى تربك العملاء بصراحة."
+        let polished = "راجعت صفحة الأسعار، وأعتقد أن الباقة الوسطى تربك العملاء."
+        #expect(PolishGuard.check(raw: raw, polished: polished) == .accept)
+    }
+
+    @Test("Arabic words are told apart by the word, not by four characters of grammar")
+    func arabicStemsDoNotCollide() {
+        // "by the way" and a word nobody said share "بالم".
+        #expect(PolishGuard.stem("بالمناسبة") != PolishGuard.stem("بالمتحزبين"))
+        // The article and the conjunction are grammar, and do not make a new word.
+        #expect(PolishGuard.stem("الخدمات") == PolishGuard.stem("خدمات"))
+        #expect(PolishGuard.stem("والعملاء") == PolishGuard.stem("العملاء"))
+        // A dropped letter is a different word, not an inflection of one.
+        #expect(PolishGuard.stem("ممتاز") != PolishGuard.stem("متاز"))
+    }
+
+    @Test("a false start is still allowed to disappear") func keepsApplyingCorrections() {
+        // The sentence check must not catch this: the middle sentence is a false
+        // start, and deleting it is the whole point of polishing.
+        let raw = "The pricing review moved to Tuesday because half the leadership "
+                + "team is travelling on Monday. No wait, scratch that, it was "
+                + "Wednesday. Either way the deck has to be finished before the weekend."
+        let polished = "The pricing review moved to Wednesday because half the "
+                     + "leadership team is travelling on Monday. Either way, the deck "
+                     + "has to be finished before the weekend."
+        #expect(PolishGuard.check(raw: raw, polished: polished) == .accept)
+    }
 }
 
 @Suite("Choosing the polish model") struct PolishRoutingTests {
