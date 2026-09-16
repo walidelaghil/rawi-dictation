@@ -542,13 +542,27 @@ public final class DictationController {
             // or obey the dictation instead of cleaning it. Inserting the raw
             // transcript is always better than inserting the model's invention.
             if let polisher {
-                let candidate = try await polisher.clean(raw, instruction: instruction)
+                let candidate = try await polished(raw, instruction: instruction,
+                                                   using: polisher)
                 switch PolishGuard.check(raw: raw, polished: candidate) {
                 case .accept:
                     text = candidate
                 case .reject(let reason):
-                    rejected = true
-                    log.warn("Polish rejected (\(reason)); inserting raw transcript")
+                    // Not straight back to the raw transcript. A refused rewrite
+                    // means the model took liberties, not that you wanted your
+                    // "um"s back — and handing them back is how a guard doing its
+                    // job still reads as the product getting worse. The cleaner has
+                    // no licence to delete, so it is asked instead: filler gone,
+                    // punctuation fixed, every clause where you left it.
+                    log.warn("Polish rejected (\(reason)); cleaning instead")
+                    let second = try await cleanup.cleanKeepingShape(raw, instruction: instruction)
+                    switch CleanupGuard.check(raw: raw, cleaned: second) {
+                    case .accept:
+                        text = second
+                    case .reject(let reason):
+                        rejected = true
+                        log.warn("Cleanup rejected too (\(reason)); inserting raw transcript")
+                    }
                 }
             } else {
                 // A spoken list goes to the bigger model even in English, because
@@ -702,6 +716,32 @@ public final class DictationController {
             let message = (error as? TransformError)?.errorDescription ?? "Transform failed"
             state = .error(message)
         }
+    }
+
+    /// Rewrites the dictation, in pieces when it is long enough that the model
+    /// would start losing sentences out of it. See `PolishChunks`.
+    ///
+    /// Each piece is guarded on its own and falls back to its own words, so one
+    /// piece the model mishandles costs that piece and not the dictation.
+    private func polished(_ raw: String, instruction: String,
+                          using polisher: any CleanupProvider) async throws -> String {
+        let pieces = PolishChunks.split(raw)
+        guard pieces.count > 1 else {
+            return try await polisher.clean(raw, instruction: instruction)
+        }
+        log.info("Rewriting in \(pieces.count) pieces; the model loses sentences out of a long one")
+        var written: [String] = []
+        for piece in pieces {
+            let candidate = try await polisher.clean(piece, instruction: instruction)
+            switch PolishGuard.check(raw: piece, polished: candidate) {
+            case .accept:
+                written.append(candidate)
+            case .reject(let reason):
+                log.warn("A piece was refused (\(reason)); keeping it as spoken")
+                written.append(piece)
+            }
+        }
+        return written.joined(separator: " ")
     }
 
     /// Puts a finished transform where a finished dictation goes.

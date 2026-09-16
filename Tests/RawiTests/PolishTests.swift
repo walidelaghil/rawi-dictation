@@ -106,6 +106,35 @@ import Testing
         #expect(PolishGuard.check(raw: raw, polished: polished) == .accept)
     }
 
+    @Test("half a dictation cannot go missing") func refusesQuietSummary() {
+        // Reported from real use, and the reason the guard now asks the question
+        // both ways round. Half a minute of speech came back as a quarter of it,
+        // and every check passed: nothing was invented, the length ratio cleared
+        // its floor, and no single sentence vanished outright — the rewrite simply
+        // kept less of each one.
+        let raw = "I tried the transform for the below text but it just gave me the same "
+                + "thing. Is this because the instructions are unclear in the app or is "
+                + "there an issue? Also, can you enable users to edit the existing "
+                + "transformation? One final thing. I have tried dictating the entire above "
+                + "message but there was a lot of things that got cut off and adjusted to an "
+                + "extent that I felt it was transformed."
+        let summarised = "I tried the transform but it gave the same thing. Can users edit "
+                       + "the existing transformation? Dictating the message cut things off."
+        #expect(PolishGuard.check(raw: raw, polished: summarised) != .accept)
+    }
+
+    @Test("a long rewrite that keeps your words passes") func longHonestRewrite() {
+        let raw = "um so I tried the transform for the below text but it just gave me the "
+                + "same thing. is this because the instructions are unclear in the app or "
+                + "is there an issue. also can you enable users to edit the existing "
+                + "transformation."
+        let polished = "I tried the transform for the below text, but it just gave me the "
+                     + "same thing. Is this because the instructions are unclear in the app, "
+                     + "or is there an issue? Also, can you enable users to edit the existing "
+                     + "transformation?"
+        #expect(PolishGuard.check(raw: raw, polished: polished) == .accept)
+    }
+
     @Test("a sentence that vanishes is refused") func refusesDroppedSentence() {
         // Verbatim from the end-to-end run that found this: qwen2.5:3b kept the
         // first sentence, deleted the second, and put an invented word where it
@@ -166,13 +195,18 @@ import Testing
         #expect(latin.cancelCount == 1 && arabic.cancelCount == 1)
     }
 
-    @Test("with two local models, polish routes; a pinned model is used for everything") func factory() throws {
+    @Test("polish uses the bigger model, whatever the language") func factory() throws {
         var config = Config.default
         config.cleanup.provider = .ollama
         config.cleanup.mode = .polish
         config.cleanup.models = CleanupModels(latin: "qwen2.5:1.5b", arabic: "qwen2.5:3b")
+        // It used to route by script, sending English to the small model. Measured
+        // across one transcript at four lengths, the small model kept 35%, 35%,
+        // 103% and 56% of the words spoken; the bigger one kept 95% to 99%.
+        // Rewriting is the stage with licence to delete, so it is the stage that
+        // has to be trustworthy.
         let routed = try CleanupProviderFactory.makePolisher(config: config, env: DotEnv(contents: ""))
-        #expect(routed is ScriptRoutedProvider)
+        #expect(routed is ChatCleanup)
         config.cleanup.polishModel = "qwen2.5:3b"
         let pinned = try CleanupProviderFactory.makePolisher(config: config, env: DotEnv(contents: ""))
         #expect(pinned is ChatCleanup)

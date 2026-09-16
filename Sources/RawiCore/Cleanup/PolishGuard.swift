@@ -27,6 +27,30 @@ public enum PolishGuard {
         "very", "just", "only", "more", "most", "well", "each", "both", "over",
     ]
 
+    /// Filler: the words a rewrite is *supposed* to delete, so they are not
+    /// counted when asking how much of the dictation survived.
+    static let filler: Set<String> = [
+        "like", "know", "mean", "sort", "kind", "basically", "actually", "really",
+        "just", "well", "okay", "right", "yeah", "stuff", "things", "thing",
+        "literally", "obviously", "honestly", "anyway", "guess", "think",
+    ]
+
+    /// How many of your words a rewrite may drop: this many outright, plus a
+    /// share of however many you said.
+    ///
+    /// The guard was built to ask only "is anything here that you did not say",
+    /// on the reasoning that a rewrite is *supposed* to lose words. True, but
+    /// unbounded — it let a rewrite keep half a dictation and call it done, which
+    /// is the one thing people notice and the one thing they do not forgive.
+    ///
+    /// A flat percentage cannot express this. Correcting yourself in a ten-word
+    /// sentence drops a third of it and is the feature working; losing a third of
+    /// a hundred-word dictation is losing a paragraph. So the allowance is mostly
+    /// fixed — enough for a few corrections and false starts however long you
+    /// spoke — and grows only slowly after that.
+    static let lostAllowance = 4.0
+    static let lostShare = 0.10
+
     /// How much of the rewrite may be words the dictation does not account for.
     /// Measured on real transcripts: an honest rewrite introduced one unfamiliar
     /// word in twenty. A fifth is far past that and still well short of a sentence
@@ -53,7 +77,7 @@ public enum PolishGuard {
     /// rewrite may tighten. A retraction the speaker dictated at length ("forget
     /// what I said about the offsite dates") still leaves a word or two behind,
     /// and applying it is the feature working.
-    static let minSentenceSurvival = 0.2
+    static let minSentenceSurvival = 0.5
 
     public static func check(raw: String, polished: String) -> Verdict {
         let trimmed = polished.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -87,6 +111,21 @@ public enum PolishGuard {
             return .reject(reason: "the rewrite dropped the list you spoke")
         }
 
+        // Did your words survive. The reverse of the question below, and the one
+        // that matters to whoever is reading their own dictation back.
+        let writtenStems = Set(significantWords(trimmed).map(stem))
+        let spoken = significantWords(raw)
+            .filter { !filler.contains($0) && !connectives.contains($0) }
+        if !spoken.isEmpty {
+            let lost = spoken.filter { !writtenStems.contains(stem($0)) }
+            let allowed = lostAllowance + lostShare * Double(spoken.count)
+            if Double(lost.count) > allowed {
+                let share = Double(lost.count) / Double(spoken.count)
+                return .reject(reason: "\(Int(share * 100))% of what you said is missing "
+                                     + "(\(lost.prefix(3).joined(separator: ", ")))")
+            }
+        }
+
         let spokenStems = Set(significantWords(raw).map(stem))
         let written = significantWords(trimmed)
         guard !written.isEmpty else { return .accept }
@@ -105,9 +144,9 @@ public enum PolishGuard {
         // sentences still leaves more than half the characters, which the floor is
         // happy with. Measured — qwen2.5:3b deleted a whole Arabic sentence, put an
         // invented word where it had been, and passed every check above.
-        let writtenStems = Set(written.map(stem))
         for sentence in SpokenParagraphs.sentencesOf(raw) {
-            let own = significantWords(sentence).filter { !connectives.contains($0) }
+            let own = significantWords(sentence)
+                .filter { !connectives.contains($0) && !filler.contains($0) }
             guard own.count >= sentenceFloor else { continue }
             let survived = own.filter { writtenStems.contains(stem($0)) }.count
             if Double(survived) / Double(own.count) < minSentenceSurvival {

@@ -142,12 +142,24 @@ public enum CleanupProviderFactory {
         if !config.cleanup.polishModel.isEmpty {
             return provider(config.cleanup.polishModel)
         }
+        // Polish goes to the bigger model whatever the language.
+        //
+        // The small one was chosen here on a benchmark of short cases, and it does
+        // not survive contact with a real dictation. Measured on one transcript at
+        // four lengths, share of the spoken words still present afterwards:
+        //
+        //             20 words   40 words   60 words   101 words
+        //   1.5b          35%        35%       103%         56%
+        //   3b            95%        98%        98%         99%
+        //
+        // At 101 words — half a minute of speaking — the small model returned
+        // "The meeting is on Tuesday at four o'clock", which is a worked example
+        // out of its own prompt and nothing the speaker said. Rewriting is the
+        // stage with licence to delete, so it is the stage that must be trusted,
+        // and a model that is erratic cannot be. Cleanup still routes by script:
+        // that job is smaller, and the small model is good at it.
         let models = config.cleanup.models
-        guard models.latin != models.arabic, !models.latin.isEmpty else {
-            return provider(models.arabic)
-        }
-        return ScriptRoutedProvider(latin: provider(models.latin),
-                                    arabic: provider(models.arabic))
+        return provider(models.arabic)
     }
 
     /// Default model per script for a provider, used by first-run detection.
