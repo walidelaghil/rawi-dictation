@@ -83,6 +83,29 @@ import Testing
         #expect(PolishGuard.check(raw: raw, polished: polished) == .accept)
     }
 
+    @Test("a rewrite that renames the list markers is refused") func keepsTheList() {
+        // Verbatim from the run that found this. The list stage runs after polish,
+        // so renaming the ordinals does not produce a worse list — it produces
+        // none, and nothing downstream can tell one was ever spoken.
+        let raw = "Um, so what we need to do is, like, first this, second that, "
+                + "and third the other."
+        let polished = "So what we need to do is, first this, then that, and finally the other."
+        #expect(PolishGuard.check(raw: raw, polished: polished) != .accept)
+    }
+
+    @Test("a rewrite that keeps them is fine") func listSurvives() {
+        let raw = "Um, so what we need to do is, like, first this, second that, "
+                + "and third the other."
+        let polished = "So what we need to do is first this, second that, third the other."
+        #expect(PolishGuard.check(raw: raw, polished: polished) == .accept)
+    }
+
+    @Test("prose with no list is judged as before") func noListNoRule() {
+        let raw = "um the migration finished last night and everything came back clean"
+        let polished = "The migration finished last night and everything came back clean."
+        #expect(PolishGuard.check(raw: raw, polished: polished) == .accept)
+    }
+
     @Test("a sentence that vanishes is refused") func refusesDroppedSentence() {
         // Verbatim from the end-to-end run that found this: qwen2.5:3b kept the
         // first sentence, deleted the second, and put an invented word where it

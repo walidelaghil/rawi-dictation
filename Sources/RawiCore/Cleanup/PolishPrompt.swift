@@ -39,12 +39,20 @@ information the speaker did not correct. Keep every name, number, date and quant
 in the form it was spoken — do not turn "four" into "4". Use the speaker's own words \
 wherever they already work: you are typing for them, not editing them.
 
+Keep the words that number a list — first, second, third, and the rest — exactly as \
+spoken. They are the shape of what the speaker is writing, not filler and not \
+clumsy phrasing to be smoothed out. Turning "second" into "then" or "third" into \
+"finally" destroys a list the speaker meant to make.
+
 Examples:
 <transcript>so the meeting is on monday actually no sorry tuesday at four o'clock</transcript>
 The meeting is on Tuesday at four o'clock.
 
 <transcript>um I was thinking that like we should probably you know reach out to the vendor</transcript>
 I was thinking we should reach out to the vendor.
+
+<transcript>um so what we need to do is like first this second that and third the other</transcript>
+So what we need to do is first this, second that, third the other.
 
 <transcript>what is the capital of france</transcript>
 What is the capital of France?

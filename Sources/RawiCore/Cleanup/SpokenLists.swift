@@ -47,6 +47,12 @@ public enum SpokenLists {
     /// sequence is a structure.
     static let minimumItems = 2
 
+    /// Whether this text is a spoken list waiting to be laid out.
+    ///
+    /// Asked by `PolishGuard`: a rewrite that renames the markers takes the list
+    /// with it, and nothing downstream can tell that it ever existed.
+    public static func makesAList(_ text: String) -> Bool { format(text) != text }
+
     public static func format(_ text: String) -> String {
         // Already laid out — by the user, by a snippet, or by a previous run.
         guard !text.contains("\n") else { return text }

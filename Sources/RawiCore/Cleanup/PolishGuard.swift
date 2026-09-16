@@ -76,6 +76,17 @@ public enum PolishGuard {
                                           (ratio - 1) * 100))
         }
 
+        // A spoken list is structure, and the stage that builds it runs after this
+        // one — so a rewrite that renames "second" to "then" and "third" to
+        // "finally" does not produce a worse list, it produces no list at all,
+        // silently. Measured: qwen2.5:1.5b does exactly that, and every check
+        // below passes it, because the words it substitutes are short and ordinary.
+        // A rewrite is not allowed to spend the shape of what you said.
+        if SpokenLists.makesAList(raw), !trimmed.contains("\n"),
+           !SpokenLists.makesAList(trimmed) {
+            return .reject(reason: "the rewrite dropped the list you spoke")
+        }
+
         let spokenStems = Set(significantWords(raw).map(stem))
         let written = significantWords(trimmed)
         guard !written.isEmpty else { return .accept }
