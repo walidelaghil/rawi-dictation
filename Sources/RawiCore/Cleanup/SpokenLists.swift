@@ -54,7 +54,8 @@ public enum SpokenLists {
         let tokens = tokenize(text)
         // Ordinals first: "first, second, third" is the commoner way to say a list,
         // and a dictation that uses both is counting, not bulleting.
-        if let listed = laidOut(text, cues: cueRun(in: tokens), marker: { "\($0 + 1). " }) {
+        if let listed = laidOut(text, cues: cueRun(in: tokens, in: text),
+                                marker: { "\($0 + 1). " }) {
             return listed
         }
         return laidOut(text, cues: bulletRun(in: tokens), marker: { _ in "- " }) ?? text
@@ -126,16 +127,31 @@ public enum SpokenLists {
         return tokens
     }
 
+    /// Whether the words either side of this gap belong to different clauses.
+    /// Punctuation is the speaker's own pause, and a pause is what separates the
+    /// end of one item from the start of the next.
+    private static func clauseBreak(between left: String.Index, and right: String.Index,
+                                    in text: String) -> Bool {
+        text[left..<right].contains { ",;:.!?،؛۔".contains($0) }
+    }
+
     /// The ordinals that actually count: starting at one and climbing by one.
     ///
     /// Starting at one matters. A dictation that says "second" without ever saying
     /// "first" is talking about something, not enumerating it, and a list that
     /// opens at item 2 is worse than no list at all.
-    private static func cueRun(in tokens: [Token]) -> [Cue] {
+    private static func cueRun(in tokens: [Token], in text: String) -> [Cue] {
         var run: [Cue] = []
         for (index, token) in tokens.enumerated() {
             guard let value = ordinals[token.word] else { continue }
-            if index > 0, determiners.contains(tokens[index - 1].word) { continue }
+            // A determiner only governs the ordinal when it is *attached* to it.
+            // "the first day" is counting a noun; "first this, second that" is a
+            // list whose items happen to end in determiners — and refusing the
+            // second cue there threw away every short-item list anyone dictated.
+            if index > 0, determiners.contains(tokens[index - 1].word),
+               !clauseBreak(between: tokens[index - 1].end, and: token.start, in: text) {
+                continue
+            }
             // The ordinal has to be followed by the item it introduces.
             guard index + 1 < tokens.count else { continue }
 

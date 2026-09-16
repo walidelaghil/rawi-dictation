@@ -157,18 +157,38 @@ private final class SlowRewriter: CleanupProvider, @unchecked Sendable {
             .appendingPathComponent("rawi-ct-\(UUID().uuidString).json"))
     }
 
-    @Test("a transform never types into the document") func neverInserts() async {
+    @Test("a transform lands in a focused field, like a dictation does")
+    func insertsWhenFocused() async {
         let (ctl, inserter, cleanup) = rig(transcript: "make it shorter")
+        let focus = FakeFocus(); focus.result = .editable
+        ctl.focusProbe = focus
+        let clip = FakeClipboard("a long paragraph")
+        ctl.transformRunner = TransformRunner(store: store(), rewriter: FakeRewriter(),
+                                              clipboard: clip)
+        await ctl.handle(.beganHold, intent: .transform)
+        await ctl.handle(.endedHold)
+        #expect(inserter.inserted == ["rewritten"])
+        // And it stays on the clipboard, which is the point of a transform.
+        #expect(clip.text == "rewritten")
+        // The cleanup provider is the *dictation* one: a transform must not run
+        // the transcript through it.
+        #expect(cleanup.received.isEmpty)
+    }
+
+    @Test("with nowhere to type, a transform says it copied") func saysCopied() async {
+        // Reported from real use: the rewrite appeared nowhere and, unlike every
+        // dictation, never said that ⌘V would fetch it.
+        let (ctl, inserter, _) = rig(transcript: "make it shorter")
+        let focus = FakeFocus(); focus.result = .notEditable
+        ctl.focusProbe = focus
         let clip = FakeClipboard("a long paragraph")
         ctl.transformRunner = TransformRunner(store: store(), rewriter: FakeRewriter(),
                                               clipboard: clip)
         await ctl.handle(.beganHold, intent: .transform)
         await ctl.handle(.endedHold)
         #expect(inserter.inserted.isEmpty)
-        // The cleanup provider is the *dictation* one: a transform must not run
-        // the transcript through it.
-        #expect(cleanup.received.isEmpty)
         #expect(clip.text == "rewritten")
+        #expect(ctl.state == .notice("Copied"))
     }
 
     @Test("the spoken words are the instruction, not the material") func spokenIsInstruction() async {
@@ -182,7 +202,7 @@ private final class SlowRewriter: CleanupProvider, @unchecked Sendable {
         #expect(model.received.first?.contains("Modern Standard Arabic") == true)
     }
 
-    @Test("the clipboard as it was reaches history") func historyFirst() async {
+    @Test("a transform records what you had and what you got") func historyFirst() async {
         let (ctl, _, _) = rig(transcript: "polish")
         var recorded: [HistoryEntry] = []
         ctl.onRecord = { recorded.append($0) }
@@ -191,7 +211,11 @@ private final class SlowRewriter: CleanupProvider, @unchecked Sendable {
         await ctl.handle(.beganHold, intent: .transform)
         await ctl.handle(.endedHold)
         #expect(recorded.count == 1)
-        #expect(recorded.first?.cleaned == "the original")
+        // One row, both sides. It used to record the original as the *result* too,
+        // so History showed the text you had before the transform and the rewrite
+        // appeared nowhere — which reads exactly like nothing happened.
+        #expect(recorded.first?.raw == "the original")
+        #expect(recorded.first?.cleaned == "rewritten")
         #expect(recorded.first?.kind == .transform)
     }
 
@@ -230,7 +254,10 @@ private final class SlowRewriter: CleanupProvider, @unchecked Sendable {
     }
 
     @Test("a double-tapped transform key is still a transform") func doubleTapKeepsIntent() async {
-        let (ctl, inserter, _) = rig(transcript: "polish")
+        let (ctl, inserter, cleanup) = rig(transcript: "polish")
+        // Nowhere to type, so this stays about the intent rather than the delivery.
+        let focus = FakeFocus(); focus.result = .notEditable
+        ctl.focusProbe = focus
         let clip = FakeClipboard("text")
         ctl.transformRunner = TransformRunner(store: store(), rewriter: FakeRewriter(),
                                               clipboard: clip)
@@ -238,6 +265,8 @@ private final class SlowRewriter: CleanupProvider, @unchecked Sendable {
         await ctl.handle(.stopHandsFree)
         #expect(clip.text == "rewritten")
         #expect(inserter.inserted.isEmpty)
+        // Still a transform, not a dictation: the cleanup provider never saw it.
+        #expect(cleanup.received.isEmpty)
     }
 }
 

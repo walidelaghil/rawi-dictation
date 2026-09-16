@@ -628,29 +628,26 @@ public final class DictationController {
         }
         state = .transforming
 
-        // The clipboard as it was goes to history before the model is called, so
-        // an unwanted rewrite is always recoverable. The *result* is not recorded:
-        // it is on the clipboard, and one row per transform beats two.
-        runner.onOriginal = { [weak self] original in
-            guard let self else { return }
-            self.onRecord?(HistoryEntry(
-                at: Date(), cleaned: original, raw: original,
-                script: ScriptDetector.detect(original),
-                appName: self.captured.name, bundleID: self.captured.bundleID,
-                durationSeconds: 0, peakLevel: 0, guardRejected: false,
-                kind: .transform))
-        }
-
         do {
             let outcome = try await runner.run(spoken: spoken)
             if cancelled { state = .idle; return }
             log.info("""
                 Transform “\(outcome.transform?.name ?? spoken)”:                 \(outcome.before.count) characters → \(outcome.after.count)
                 """)
+            // One row carrying both sides. It used to record the clipboard as it
+            // was and deliberately not the result, so History showed the text you
+            // had *before* the transform — which reads exactly like the transform
+            // never ran. `raw` keeps the original, so an unwanted rewrite is still
+            // recoverable from the row, and `cleaned` is what you actually got.
+            onRecord?(HistoryEntry(
+                at: Date(), cleaned: outcome.after, raw: outcome.before,
+                script: ScriptDetector.detect(outcome.after),
+                appName: captured.name, bundleID: captured.bundleID,
+                durationSeconds: 0, peakLevel: 0, guardRejected: false,
+                kind: .transform))
             remember(outcome.after)
             onTransform?(outcome)
-            state = .notice(PillLabel.landed(outcome.after))
-            scheduleErrorClear()
+            deliverTransform(outcome.after)
         } catch {
             if cancelled { state = .idle; return }
             // The clipboard still holds the original: the runner writes only on
@@ -659,6 +656,32 @@ public final class DictationController {
             let message = (error as? TransformError)?.errorDescription ?? "Transform failed"
             state = .error(message)
         }
+    }
+
+    /// Puts a finished transform where a finished dictation goes.
+    ///
+    /// The runner leaves its result on the clipboard, and that used to be the end
+    /// of it: the pill showed the new text and nothing else happened. So a rewrite
+    /// of the sentence you had selected appeared nowhere, and — alone among the
+    /// things Rawi produces — never said that ⌘V would fetch it.
+    ///
+    /// The clipboard is not restored afterwards, whatever the setting says:
+    /// leaving the rewrite there is the whole point of a transform, and putting
+    /// the old text back a moment later would undo the feature.
+    private func deliverTransform(_ text: String) {
+        let focus = focusProbe.probe()
+        log.info("Focus: \(focusProbe.lastSeen)")
+        guard focus != .notEditable,
+              inserter.insert(text, restoringClipboard: false) else {
+            log.info("No text field has focus; left \(text.count) characters on the clipboard")
+            awaitingManualPaste = true
+            state = .notice("Copied")
+            scheduleErrorClear()
+            return
+        }
+        log.info("Inserted \(text.count) characters")
+        state = .notice(PillLabel.landed(text))
+        scheduleErrorClear()
     }
 
     /// Runs what you said as a command, or says why it could not.

@@ -531,7 +531,10 @@ whether audio was actually captured.
 ## 9. Transforms — rewriting the clipboard by voice
 
 Copy some text, hold `⌃⌥Space`, say what you want done with it, release. The
-clipboard comes back rewritten; press ⌘V wherever you want it.
+rewrite is typed straight into whatever text field has focus — replacing your
+selection, if you had one — and stays on the clipboard as well. With nothing
+focused to type into, the pill says **Copied** and ⌘V fetches it, exactly as a
+dictation does.
 
 Five ship built in, and the **Transforms** screen adds your own:
 
@@ -549,8 +552,10 @@ shows live which of the two is happening.
 
 Three safety properties, all tested:
 
-- **Your original is written to History before the model runs.** An unwanted
-  rewrite is always recoverable.
+- **History keeps both sides of every transform.** One row: what you had, and
+  what you got. An unwanted rewrite is always recoverable, and the rewrite itself
+  is there to find again — it used to record only the original, which made the
+  Recent list look like the transform had never run.
 - **A failure leaves the clipboard exactly as it was** — never cleared, never
   half-written. Kill Ollama mid-transform and your text is still there.
 - **The cleanup guard does not apply.** It exists to stop the model changing your

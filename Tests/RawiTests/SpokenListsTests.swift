@@ -43,6 +43,15 @@ import Testing
         #expect(SpokenLists.format(mine) == mine)
     }
 
+    @Test("short items that end in a determiner are still a list") func shortItems() {
+        // Reported from real use. Every cue after the first was refused: the item
+        // before it ended in "this" or "that", and the guard against "the first
+        // day" only looked at the word before the ordinal, not at whether that
+        // word was attached to it.
+        let out = SpokenLists.format("First this, second that, third the other.")
+        #expect(out == "1. This\n2. That\n3. The other", "got: \(out)")
+    }
+
     @Test("a list that never says first is not a list") func mustStartAtOne() {
         let text = "We talked about the plan, second guessing every part of it."
         #expect(SpokenLists.format(text) == text)

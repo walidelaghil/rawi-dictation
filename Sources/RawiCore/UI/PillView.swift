@@ -250,14 +250,41 @@ struct LevelMeter: View {
 }
 
 /// Which bars are lit, shared by the pill and the menu panel so both meters agree.
+/// How far along the meter a level sits.
+///
+/// Speech is quiet as a number and enormous as a ratio. Measured across real
+/// dictations on this Mac, peak amplitude ran 0.030 to 0.064 of full scale —
+/// and the old mapping, which scaled amplitude directly, spent that entire
+/// range between five bars and seven out of thirty-four. Silence lit one. The
+/// meter had ballistics, a peak marker and nothing to show with them, because
+/// eighty per cent of its width was reserved for loudness a microphone in a room
+/// never produces.
+///
+/// Ears hear ratios, so the meter shows decibels, and its window is the range
+/// speech actually occupies rather than full scale, which only a clipped
+/// recording reaches.
 enum MeterBars {
-    static func lit(level: Double, bars: Int) -> Int {
-        Int((pow(min(max(level, 0), 1), 0.6) * Double(bars)).rounded(.up))
+    /// Below this, the room rather than the speaker.
+    static let floorDB = -50.0
+    /// At this, the meter is full. Louder is still full, and that is honest:
+    /// beyond here you are shouting at your laptop.
+    static let ceilingDB = -10.0
+
+    /// 0...1 along the meter, from an amplitude in 0...1.
+    static func fraction(level: Double) -> Double {
+        guard level > 0 else { return 0 }
+        let decibels = 20 * log10(min(level, 1))
+        return min(max((decibels - floorDB) / (ceilingDB - floorDB), 0), 1)
     }
 
-    /// The bar the peak marker sits on, or nil when there is no peak above the level.
+    static func lit(level: Double, bars: Int) -> Int {
+        Int((fraction(level: level) * Double(bars)).rounded(.up))
+    }
+
+    /// The bar the peak marker sits on, or nil when the peak is only room noise.
     static func peakIndex(peak: Double, bars: Int) -> Int? {
-        guard peak > 0.02 else { return nil }
-        return min(bars - 1, Int((pow(min(peak, 1), 0.6) * Double(bars)).rounded(.up)) - 1)
+        let along = fraction(level: peak)
+        guard along > 0 else { return nil }
+        return min(bars - 1, max(0, Int((along * Double(bars)).rounded(.up)) - 1))
     }
 }
