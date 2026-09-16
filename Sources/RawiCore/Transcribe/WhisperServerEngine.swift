@@ -116,8 +116,13 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
                 log.warn("Could not start whisper-server (\(error.localizedDescription))")
             }
         }
-        // Loading a 574 MB model takes a moment; nothing else is waiting on it.
-        for _ in 0..<40 {
+        // Loading the model takes a moment, and on a Mac busy with something else
+        // it takes several. Ten seconds was the old ceiling and it was not enough:
+        // a cold 834 MB model, loading beside the detector on a machine mid-reboot,
+        // went over it and cost the whole session its resident model. Nothing waits
+        // on this loop — it returns the instant the server answers — so the ceiling
+        // only decides how bad a day a slow disk can cause.
+        for _ in 0..<120 {
             if await isHealthy() { return true }
             try? await Task.sleep(for: .milliseconds(250))
         }

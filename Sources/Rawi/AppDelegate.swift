@@ -557,28 +557,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the difference between the first dictation of the day taking a second and
     /// taking four.
     private func warmEngine(_ engine: any TranscriptionEngine) {
-        guard let resident = engine as? WhisperServerEngine else { return }
+        if let resident = engine as? WhisperServerEngine { residentEngine = resident }
+        // Deliberately not `engine`: once the command line is standing in, the
+        // controller's engine is no longer the resident one, and reading it there
+        // is how a stand-in became permanent.
+        guard let resident = residentEngine else { return }
         Task.detached(priority: .utility) {
             let ready = await resident.warmAll()
-            await MainActor.run {
-                self.log.info(ready
-                    ? "Transcription model is resident and warm"
-                    : "whisper-server did not answer; falling back to the command line")
-            }
-            if !ready {
-                await MainActor.run {
-                    var fallback = self.config
-                    fallback.whispercpp.useServer = false
-                    let env = DotEnv.load(from: Config.envFile)
-                    if let cli = try? TranscriptionEngineFactory.make(
-                        config: fallback, env: env, log: self.log) {
-                        self.controller.reconfigure(config: self.config, engine: cli,
-                                                    cleanup: self.makeCleanup(env: env))
-                    }
-                }
-            }
+            await MainActor.run { self.useResidentModel(resident, ifReady: ready) }
         }
     }
+
+    /// Switches between the resident model and the command line, both ways.
+    ///
+    /// The command line loads the model from disk on every dictation, which is
+    /// several seconds each time — a fine stand-in for one dictation and a bad way
+    /// to spend a day. It used to be the latter: a single slow health check at
+    /// launch, on a machine busy with something else, swapped the engine out and
+    /// nothing ever swapped it back. Caught in a real log, six seconds a dictation
+    /// for an hour, on a model that answers in fifty milliseconds.
+    @MainActor
+    private func useResidentModel(_ resident: WhisperServerEngine, ifReady ready: Bool) {
+        let onResident = controller.engine is WhisperServerEngine
+        guard ready != onResident else { return }          // already where it should be
+        let env = DotEnv.load(from: Config.envFile)
+        if ready {
+            log.info("whisper-server answered; back on the resident model")
+            controller.reconfigure(config: config, engine: resident,
+                                   cleanup: makeCleanup(env: env))
+            return
+        }
+        var fallback = config
+        fallback.whispercpp.useServer = false
+        guard let cli = try? TranscriptionEngineFactory.make(
+            config: fallback, env: env, log: log) else { return }
+        log.info("whisper-server did not answer; the command line stands in until it does")
+        controller.reconfigure(config: config, engine: cli, cleanup: makeCleanup(env: env))
+    }
+
+    /// Kept whether or not it is the engine in use, so a stand-in can be handed back.
+    private var residentEngine: WhisperServerEngine?
 
     private func makeCleanup(env: DotEnv) -> any CleanupProvider {
         do {
