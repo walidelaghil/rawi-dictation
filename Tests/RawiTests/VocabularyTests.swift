@@ -12,10 +12,10 @@ import Foundation
         let url = tmp(); defer { try? FileManager.default.removeItem(at: url) }
         let s = VocabularyStore(url: url)
         s.addTerm("Salla", note: "heard as Sala")
-        s.addSnippet(trigger: "my email", expansion: "waleed@example.com")
+        s.addSnippet(trigger: "my email", expansion: "rawi@example.com")
         let back = VocabularyStore(url: url)
         #expect(back.terms.map(\.term) == ["Salla"])
-        #expect(back.snippets.first?.expansion == "waleed@example.com")
+        #expect(back.snippets.first?.expansion == "rawi@example.com")
     }
 
     @Test("a duplicate term is rejected regardless of case") func duplicates() {
@@ -93,7 +93,7 @@ import Foundation
     @Test("a snapshot carries everything a dictation needs") func snapshot() {
         let url = tmp(); defer { try? FileManager.default.removeItem(at: url) }
         let s = VocabularyStore(url: url)
-        s.addTerm("Salla"); s.addSnippet(trigger: "sig", expansion: "Best, Waleed")
+        s.addTerm("Salla"); s.addSnippet(trigger: "sig", expansion: "Best, Sam")
         let snap = s.snapshot()
         #expect(snap.whisperPrompt == "Salla")
         #expect(snap.glossary.contains("Salla"))

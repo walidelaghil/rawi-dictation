@@ -113,12 +113,12 @@ import Testing
     }
 
     @Test("the sample sent to the model has private details removed") func redacts() {
-        let entry = HistoryEntry(at: Date(), cleaned: "Send it to waleed@example.com or call +1 403 555 0199 via https://x.co/a",
+        let entry = HistoryEntry(at: Date(), cleaned: "Send it to rawi@example.com or call +1 403 555 0199 via https://x.co/a",
                                  raw: "", script: .latin, appName: "Mail", bundleID: nil,
                                  durationSeconds: 2, peakLevel: 0.1, guardRejected: false)
         let usage = UsageInsights.compute(from: [entry])
         let request = VoiceProfile.request(entries: [entry], voice: VoiceInsights.compute(from: [entry]), usage: usage)
-        #expect(!request.contains("waleed@example.com"))
+        #expect(!request.contains("rawi@example.com"))
         #expect(!request.contains("555"))
         #expect(!request.contains("https://"))
     }

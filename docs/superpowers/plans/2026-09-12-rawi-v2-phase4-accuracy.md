@@ -133,7 +133,7 @@ trigger is not re-expanded, because that is how you get a loop.
 **Files:** `WhisperCppEngine.swift`, `CleanupProvider.swift`, `RoutedCleanup.swift`, `DictationController.swift`.
 
 Layer 1 — `whisper-cli --prompt "<terms>"`, which biases decoding *before* it goes
-wrong. Measured: fixed *Walid→Waleed* and *Kanji→Kandji*.
+wrong. Measured: fixed *Mikhail→Michael* and *Kanji→Kandji*.
 
 Layer 2 — the glossary clause appended to the cleanup prompt, catching what layer 1
 misses. Measured: *Sala→Salla*, which layer 1 did not rescue.

@@ -132,7 +132,7 @@ cleaned text, duration, peak level, and whether the guard fired. Searchable acro
 (Slack DMs, 1Password) by default. Stored as JSONL under Application Support.
 
 **Dictionary** — two layers, because measurement showed one is not enough:
-the decoder hint fixed *Walid→Waleed* and *Kanji→Kandji* but not *Sala→Salla*,
+the decoder hint fixed *Mikhail→Michael* and *Kanji→Kandji* but not *Sala→Salla*,
 which only the cleanup glossary caught. A term is added automatically after the
 same correction is observed twice, and is marked as learned so it can be removed.
 

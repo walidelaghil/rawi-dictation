@@ -98,7 +98,7 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
             "-t", String(threads),
         ]
         // Biases the decoder before it goes wrong. Measured: this alone fixed
-        // Walid→Waleed and Kanji→Kandji. Withheld where it cannot help and has
+        // Mikhail→Michael and Kanji→Kandji. Withheld where it cannot help and has
         // been measured to hurt — see `DecoderHint`.
         let hint = DecoderHint.filtered(prompt, forLanguage: language)
         if !hint.isEmpty { process.arguments? += ["--prompt", hint] }

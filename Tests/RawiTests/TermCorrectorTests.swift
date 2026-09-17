@@ -2,7 +2,7 @@ import Testing
 @testable import RawiCore
 
 @Suite("TermCorrector") struct TermCorrectorTests {
-    let terms = ["Salla", "Kandji", "Waleed", "Grafana", "Argo CD"]
+    let terms = ["Salla", "Kandji", "Michael", "Grafana", "Argo CD"]
 
     // MARK: - The cases this exists for
 
@@ -13,8 +13,8 @@ import Testing
                 == "reviewing the Salla dashboard")
         #expect(TermCorrector.apply("we ship with Kanji today", terms: terms)
                 == "we ship with Kandji today")
-        #expect(TermCorrector.apply("Walid is reviewing it", terms: terms)
-                == "Waleed is reviewing it")
+        #expect(TermCorrector.apply("Mikhail is reviewing it", terms: terms)
+                == "Michael is reviewing it")
     }
 
     @Test("preserves surrounding punctuation and spacing") func punctuation() {
@@ -76,7 +76,7 @@ import Testing
     @Test("edit distance is correct") func distance() {
         #expect(TermCorrector.editDistance("sala", "salla") == 1)
         #expect(TermCorrector.editDistance("kanji", "kandji") == 1)
-        #expect(TermCorrector.editDistance("walid", "waleed") == 2)
+        #expect(TermCorrector.editDistance("mikhail", "michael") == 2)
         // 2, not 3: substitute r→l, then insert l. Close enough that "Sara" is
         // protected by the allowance (1 edit for a 5-character term), not by
         // distance — which is exactly why the allowance is tight.
