@@ -469,9 +469,10 @@ public struct SettingsView: View {
 
     private var cleanupSection: some View {
         section("Cleanup and transforms", "The language model that removes fillers, fixes "
-                                        + "punctuation, and runs transforms. Transforms "
-                                        + "always use the Arabic-capable model, because rewriting "
-                                        + "is harder than cleaning.") {
+                                        + "punctuation, and runs transforms. Rewriting is harder "
+                                        + "than cleaning, so anything that rewrites (polish, and "
+                                        + "every transform) uses the larger model, whatever "
+                                        + "language you spoke.") {
             VStack(alignment: .leading, spacing: 10) {
                 picker(CleanupKind.allCases.map { ($0.rawValue, cleanupName($0)) },
                        selected: model.config.cleanup.provider.rawValue) { raw in
@@ -492,8 +493,14 @@ public struct SettingsView: View {
                         Text("Ollama is not answering on localhost:11434.")
                             .font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                     }
-                    modelRow("English and other Latin", keyPath: \.latin)
-                    modelRow("Arabic and mixed speech", keyPath: \.arabic)
+                    // Named for what they actually govern. They used to read as
+                    // "the English model" and "the Arabic model", which stopped
+                    // being true when polish moved to the larger one: in polish
+                    // mode an English dictation has not gone to the smaller model
+                    // for some time, and a screen that says otherwise is worse
+                    // than one that says nothing.
+                    modelRow("Cleaning English and other Latin", keyPath: \.latin)
+                    modelRow("Cleaning Arabic, and all rewriting", keyPath: \.arabic)
                     transformModelRow
                 case .openai, .anthropic:
                     Text("Transcripts leave your machine with this provider. One model "
