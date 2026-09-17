@@ -56,8 +56,22 @@ public enum TranscriptionEngineFactory {
             let settings = config.whispercpp
             // The detector only earns its place when the language is not already
             // known: `auto` is what costs a second encoder pass.
+            // The resident model detects for nothing, so it is not asked twice.
+            //
+            // The separate detector was measured against `auto` on a loaded Mac
+            // running the q5_0 model, where asking the big model to work the
+            // language out cost a second encoder pass: 6.8s against 3.4s. On
+            // q8_0 that pass is free — measured on the same clip, told 56ms,
+            // detecting itself 47ms — while the detector is a second HTTP call
+            // that transcribes the whole recording with the base model before the
+            // real one starts. On a nine-word dictation that was 300ms of the
+            // 340ms spent transcribing, to save nothing.
+            //
+            // The command line still uses it: there each pass is a process launch
+            // and a model load, so the original measurement still holds there.
             let detectModel = Config.expand(settings.detectModel)
             let detector = settings.language == "auto"
+                && !settings.useServer
                 && FileManager.default.fileExists(atPath: detectModel)
                 ? LanguageDetector(serverBinary: settings.serverBinary, model: detectModel,
                                    threads: max(2, settings.threads / 2),

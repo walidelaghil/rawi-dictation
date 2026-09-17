@@ -52,11 +52,23 @@ import Foundation
         #expect(VocabularyStore(url: url).snippets.isEmpty)
     }
 
-    @Test("the whisper prompt is a comma list of terms") func prompt() {
+    @Test("the whisper prompt is a sentence, not a list of words") func prompt() {
         let url = tmp(); defer { try? FileManager.default.removeItem(at: url) }
         let s = VocabularyStore(url: url)
         s.addTerm("Salla"); s.addTerm("Kandji"); s.addTerm("Argo CD")
-        #expect(s.whisperPrompt() == "Salla, Kandji, Argo CD")
+        // It primes the decoder with text it pretends it just transcribed, so it
+        // has to look like transcription: a capital at the front, a stop at the
+        // end. A bare list taught it to write in lower case with no punctuation.
+        #expect(s.whisperPrompt() == "We use Salla, Kandji and Argo CD.")
+        #expect(s.whisperPrompt().first?.isUppercase == true)
+        #expect(s.whisperPrompt().hasSuffix("."))
+    }
+
+    @Test("one term still reads as a sentence") func promptSingle() {
+        let url = tmp(); defer { try? FileManager.default.removeItem(at: url) }
+        let s = VocabularyStore(url: url)
+        s.addTerm("Salla")
+        #expect(s.whisperPrompt() == "We use Salla.")
     }
 
     @Test("the prompt caps without truncating a term mid-word") func promptCap() {
@@ -64,10 +76,15 @@ import Foundation
         let s = VocabularyStore(url: url)
         for i in 0..<50 { s.addTerm("Term\(i)Longenoughtomatter") }
         let prompt = s.whisperPrompt(maxCharacters: 100)
-        #expect(prompt.count <= 100)
+        // The cap counts the terms; the sentence adds its own few characters.
+        #expect(prompt.count <= 120)
         // Overflowing --prompt degrades transcription silently; a half term is a
         // wrong hint, so every listed term must be whole.
-        for piece in prompt.components(separatedBy: ", ") {
+        let listed = prompt
+            .replacingOccurrences(of: "We use ", with: "")
+            .replacingOccurrences(of: ".", with: "")
+            .replacingOccurrences(of: " and ", with: ", ")
+        for piece in listed.components(separatedBy: ", ") {
             #expect(s.terms.contains { $0.term == piece }, "truncated term: \(piece)")
         }
     }
@@ -95,7 +112,7 @@ import Foundation
         let s = VocabularyStore(url: url)
         s.addTerm("Salla"); s.addSnippet(trigger: "sig", expansion: "Best, Sam")
         let snap = s.snapshot()
-        #expect(snap.whisperPrompt == "Salla")
+        #expect(snap.whisperPrompt == "We use Salla.")
         #expect(snap.glossary.contains("Salla"))
         #expect(snap.snippets.count == 1)
     }

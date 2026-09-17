@@ -277,7 +277,23 @@ public final class VocabularyStore: @unchecked Sendable {
             out.append(term)
             length += addition
         }
-        return out.joined(separator: ", ")
+        guard !out.isEmpty else { return "" }
+        // A sentence, not a list of words.
+        //
+        // `--prompt` primes the decoder with text it pretends it just transcribed,
+        // so it continues in that register — and a bare comma list has no capital
+        // and no full stop. Measured, one dictionary term and a nine-word
+        // sentence: "Rawi" as the hint returned "let me check that and get back to
+        // you", where no hint returned "Let me check that and get back to you."
+        //
+        // That lowercase, unpunctuated line then met `CleanupNeeded`, whose rule
+        // is that unpunctuated output means whisper had a bad time, so a clean
+        // sentence that needed nothing was sent to the rewriter. On this machine
+        // that was another three to nine seconds, on every short dictation, caused
+        // by the dictionary rather than by anything the speaker said.
+        let joined = out.count == 1 ? out[0]
+            : out.dropLast().joined(separator: ", ") + " and " + out[out.count - 1]
+        return "We use \(joined)."
     }
 
     /// Appended to the cleanup prompt. **This is the layer that works.** The
