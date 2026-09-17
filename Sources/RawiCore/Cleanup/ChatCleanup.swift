@@ -19,16 +19,26 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
     private let lock = NSLock()
     private var currentTask: URLSessionDataTask?
 
+    /// How long Ollama should hold this model in memory after a call.
+    ///
+    /// Long for the model every dictation uses, because reloading it is seconds.
+    /// Short for a model only some dictations use: a transform once an hour was
+    /// pinning 4.3 GB for thirty minutes on a 16 GB Mac, and the memory pressure
+    /// that caused cost more than the reload it was avoiding.
+    private let keepAlive: String
+
     public init(kind: CleanupKind, apiKey: String?, model: String,
                 prompt: String,
                 wrap: @escaping @Sendable (String) -> String = wrapTranscript,
-                session: URLSession = .shared) {
+                session: URLSession = .shared,
+                keepAlive: String = "30m") {
         self.kind = kind
         self.apiKey = apiKey
         self.model = model
         self.prompt = prompt
         self.wrap = wrap
         self.session = session
+        self.keepAlive = keepAlive
     }
 
     public func clean(_ transcript: String, instruction: String = "") async throws -> String {
@@ -53,7 +63,8 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
             ? prompt
             : prompt + "\n\nSHAPE FOR THIS DESTINATION: " + instruction
         request.httpBody = try Self.requestBody(kind: kind, model: model,
-                                                prompt: composed, user: wrap(trimmed))
+                                                prompt: composed, user: wrap(trimmed),
+                                                keepAlive: keepAlive)
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -104,7 +115,8 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
     public func warm() async {
         guard kind == .ollama,
               var payload = try? JSONSerialization.jsonObject(with: Self.requestBody(
-                  kind: kind, model: model, prompt: prompt, user: wrap("ok"))) as? [String: Any]
+                  kind: kind, model: model, prompt: prompt, user: wrap("ok"),
+                  keepAlive: keepAlive)) as? [String: Any]
         else { return }
         var options = payload["options"] as? [String: Any] ?? [:]
         options["num_predict"] = 1
@@ -166,7 +178,8 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
     }
 
     static func requestBody(kind: CleanupKind, model: String,
-                            prompt: String, user: String) throws -> Data {
+                            prompt: String, user: String,
+                            keepAlive: String = "30m") throws -> Data {
         // `user` is already delimited, so the model can distinguish content from
         // instructions.
         let payload: [String: Any]
@@ -193,11 +206,13 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
         case .ollama:
             // `keep_alive` holds the model in memory between dictations. Ollama's
             // default unloads after 5 minutes idle, which would make the first
-            // dictation after a quiet spell pay a multi-second reload.
+            // dictation after a quiet spell pay a multi-second reload. Worth it
+            // for the model every dictation meets; not for the others, which is
+            // what `keepAlive` is for.
             payload = [
                 "model": model,
                 "stream": false,
-                "keep_alive": "30m",
+                "keep_alive": keepAlive,
                 "options": ["temperature": 0],
                 "messages": [
                     ["role": "system", "content": prompt],

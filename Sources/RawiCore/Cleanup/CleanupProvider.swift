@@ -89,8 +89,13 @@ public enum CleanupProviderFactory {
         case .off:
             return nil
         case .ollama:
+            // Held briefly, not for half an hour. A transform is occasional and
+            // its model is usually a different, larger one than dictation uses,
+            // so pinning it after one use is how a 16 GB Mac ends up holding
+            // three models and swapping.
             return ChatCleanup(kind: .ollama, apiKey: nil, model: model,
-                               prompt: transformSystemPrompt, wrap: { $0 })
+                               prompt: transformSystemPrompt, wrap: { $0 },
+                               keepAlive: "2m")
         case .openai:
             guard let key = env["OPENAI_API_KEY"], !key.isEmpty else {
                 throw CleanupError.missingAPIKey("OPENAI_API_KEY")
