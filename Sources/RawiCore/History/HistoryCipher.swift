@@ -84,6 +84,9 @@ public final class FileKeyHistoryCipher: HistoryCipher, @unchecked Sendable {
 /// The key an earlier build kept in the login keychain, read once so the history
 /// it sealed can still be opened, then removed from the keychain.
 public enum LegacyKeychainHistoryKey {
+    /// The old identifier on purpose. This names a keychain item an earlier build
+    /// already wrote; renaming the lookup would orphan the very key it exists to
+    /// find, and with it the history that key opens.
     static let service = "com.welaghil.rawi.history"
     static let account = "history-key-v1"
 

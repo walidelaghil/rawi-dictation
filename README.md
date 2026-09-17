@@ -209,7 +209,7 @@ press `⌃⌥Space`, or leave both active.
 If you would rather have the real thing, the request is specific and small: add
 `~/Applications/Rawi.app` to **Accessibility** and **Input Monitoring**. In
 Kandji that is a PPPC (Privacy Preferences Policy Control) profile. Bundle ID is
-`com.welaghil.rawi`. Only Accessibility buys you anything you cannot
+`com.rawi.dictation`. Only Accessibility buys you anything you cannot
 otherwise have — auto-paste.
 
 ---

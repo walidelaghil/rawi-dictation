@@ -143,7 +143,7 @@ enum Doctor {
     static var appIsRunning: Bool {
         let mine = ProcessInfo.processInfo.processIdentifier
         return NSWorkspace.shared.runningApplications.contains {
-            $0.bundleIdentifier == "com.welaghil.rawi" && $0.processIdentifier != mine
+            $0.bundleIdentifier == "com.rawi.dictation" && $0.processIdentifier != mine
         }
     }
 

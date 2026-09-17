@@ -6,7 +6,7 @@ import Foundation
 public final class ConfigWatcher: @unchecked Sendable {
     private let url: URL
     private let onChange: @Sendable () -> Void
-    private let queue = DispatchQueue(label: "com.welaghil.rawi.configwatch")
+    private let queue = DispatchQueue(label: "com.rawi.dictation.configwatch")
     private let debounce: DispatchTimeInterval
 
     private var source: DispatchSourceFileSystemObject?

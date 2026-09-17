@@ -28,7 +28,7 @@ public enum RemoteTrigger {
         case benchmark, focus, editSelfTest, commandSelfTest
     }
 
-    private static let name = "com.welaghil.rawi.trigger"
+    private static let name = "com.rawi.dictation.trigger"
 
     public static func post(_ action: Action) {
         DistributedNotificationCenter.default().postNotificationName(

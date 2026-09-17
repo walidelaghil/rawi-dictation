@@ -18,7 +18,7 @@
 - The event tap is **listen-only** (`CGEventTapOptions.listenOnly`). Never consume a keystroke, under any circumstance.
 - Config lives at `~/.config/rawi/config.json`; secrets at `~/.config/rawi/.env`. Secrets are never logged, never written to config, never included in an error message.
 - Audio is never silently discarded when a downstream stage fails — retain the WAV and log its path.
-- Bundle identifier: `com.welaghil.rawi` (stable — TCC grants bind to it).
+- Bundle identifier: `com.rawi.dictation` (stable — TCC grants bind to it).
 - Every task ends green: `swift build` and `swift test` both succeed before the commit.
 
 ---
@@ -1517,7 +1517,7 @@ git commit -m "feat: menu bar, permission checks, and launch at login"
 
 **`Info.plist` required keys:**
 ```xml
-<key>CFBundleIdentifier</key><string>com.welaghil.rawi</string>
+<key>CFBundleIdentifier</key><string>com.rawi.dictation</string>
 <key>CFBundleName</key><string>Rawi</string>
 <key>CFBundleExecutable</key><string>Rawi</string>
 <key>CFBundlePackageType</key><string>APPL</string>
