@@ -99,11 +99,19 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
         } else if await isHealthy() {
             return true
         }
+        // Resolved rather than left to `/usr/bin/env`: a GUI app does not inherit
+        // Homebrew's directory in PATH, so `env whisper-server` exited 127 the
+        // instant it was spawned. Every health check then failed for thirty
+        // seconds and the user was told whisper.cpp was not installed.
+        guard let executable = ToolBinary.resolve(binary) else {
+            log.warn("\(binary) is not on PATH or in Homebrew's bin; cannot start the server")
+            return false
+        }
         lock.withLock {
             if let server, server.isRunning { return }
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [binary, "-m", model, "--host", "127.0.0.1",
+            process.executableURL = executable
+            process.arguments = ["-m", model, "--host", "127.0.0.1",
                                  "--port", String(port), "-t", String(threads)]
             process.standardOutput = Pipe()
             process.standardError = Pipe()

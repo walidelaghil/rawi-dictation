@@ -49,11 +49,16 @@ public final class LanguageDetector: @unchecked Sendable {
     public func warm() async -> Bool {
         if await isHealthy() { return true }
         WhisperServerEngine.killStrays(onPort: port)
+        // Resolved, not left to `env`: see `WhisperServerEngine.warm()`.
+        guard let executable = ToolBinary.resolve(serverBinary) else {
+            log.warn("\(serverBinary) is not on PATH or in Homebrew's bin; no language detector")
+            return false
+        }
         lock.withLock {
             guard server == nil || server?.isRunning == false else { return }
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [serverBinary, "-m", model, "--host", "127.0.0.1",
+            process.executableURL = executable
+            process.arguments = ["-m", model, "--host", "127.0.0.1",
                                  "--port", String(port), "-t", String(threads)]
             process.standardOutput = Pipe()
             process.standardError = Pipe()

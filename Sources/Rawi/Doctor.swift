@@ -80,6 +80,14 @@ enum Doctor {
         let binary = WhisperCppEngine.resolveBinary(config.whispercpp.binary)
         line("whisper-cli", binary != nil, detail: binary?.path ?? "not found",
              fix: "brew install whisper-cpp")
+        // The one every dictation actually uses when the model is resident, and
+        // the one whose absence used to be reported as "whisper.cpp is not
+        // installed" thirty seconds after the fact.
+        if config.whispercpp.useServer {
+            let server = ToolBinary.resolve(config.whispercpp.serverBinary)
+            line("whisper-server", server != nil, detail: server?.path ?? "not found",
+                 fix: "brew install whisper-cpp")
+        }
         let modelPath = Config.expand(config.whispercpp.model)
         let modelExists = FileManager.default.fileExists(atPath: modelPath)
         let known = ModelStore.model(forPath: config.whispercpp.model)

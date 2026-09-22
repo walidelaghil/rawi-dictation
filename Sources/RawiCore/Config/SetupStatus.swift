@@ -43,8 +43,14 @@ public struct SetupStatus: Sendable, Equatable {
             ?? FileManager.default.fileExists(atPath: Config.expand(config.whispercpp.model))
         let detector = config.whispercpp.language != "auto"
             || FileManager.default.fileExists(atPath: Config.expand(config.whispercpp.detectModel))
-        let whisper = config.engine != .whispercpp
-            || WhisperCppEngine.resolveBinary(config.whispercpp.binary) != nil
+        // Both binaries, not just the command line: with `useServer` on it is
+        // `whisper-server` that every dictation needs, and checking only
+        // `whisper-cli` let setup report a clean install while the pill said
+        // whisper.cpp was not installed.
+        let cli = ToolBinary.resolve(config.whispercpp.binary) != nil
+        let server = !config.whispercpp.useServer
+            || ToolBinary.resolve(config.whispercpp.serverBinary) != nil
+        let whisper = config.engine != .whispercpp || (cli && server)
         var reachable = false
         var missing: [String] = []
         if config.cleanup.provider == .ollama {

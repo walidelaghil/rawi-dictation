@@ -156,22 +156,11 @@ public final class WhisperCppEngine: TranscriptionEngine, @unchecked Sendable {
     // MARK: - Helpers
 
     /// Configured absolute path, then PATH, then the usual Homebrew prefixes.
+    /// Kept as the name the call sites already use; the search itself is shared
+    /// with the server engine and the detector, which spawn the same Homebrew
+    /// tools and were failing to find them.
     public static func resolveBinary(_ configured: String) -> URL? {
-        let fm = FileManager.default
-        if configured.contains("/") {
-            let expanded = Config.expand(configured)
-            return fm.isExecutableFile(atPath: expanded) ? URL(fileURLWithPath: expanded) : nil
-        }
-
-        let pathDirs = (ProcessInfo.processInfo.environment["PATH"] ?? "")
-            .split(separator: ":").map(String.init)
-        for dir in pathDirs + ["/opt/homebrew/bin", "/usr/local/bin"] {
-            let candidate = dir + "/" + configured
-            if fm.isExecutableFile(atPath: candidate) {
-                return URL(fileURLWithPath: candidate)
-            }
-        }
-        return nil
+        ToolBinary.resolve(configured)
     }
 
     /// Strips whisper's non-speech annotations and folds the multi-line output
