@@ -135,3 +135,52 @@ func waitUntil(_ timeout: Duration = .seconds(5),
         #expect(!entry.isRetryable)
     }
 }
+
+@MainActor
+@Suite("Retrying after a retry failed") struct RetryRecoveryTests {
+    /// A real file, because `retry` checks the audio is still on disk before it
+    /// does anything else.
+    private func scratchWav() throws -> String {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("rawi-retry-\(UUID().uuidString).wav")
+        try Data(repeating: 0, count: 64).write(to: url)
+        return url.path
+    }
+
+    @Test("a retry that failed does not block the next one") func recovers() async throws {
+        // The regression: `report` leaves `.error` on the pill, errors are meant
+        // to wait for you rather than clear themselves, and `retry` guarded on
+        // `.idle`. So the first failure silently swallowed every retry after it
+        // until the app was relaunched.
+        let engine = FakeEngine(), inserter = FakeInserter()
+        let ctl = DictationController(config: .default, recorder: FakeRecorder(),
+                                      engine: engine, cleanup: FakeCleanup(),
+                                      inserter: inserter, log: FakeLog())
+        let wav = try scratchWav()
+        defer { try? FileManager.default.removeItem(atPath: wav) }
+
+        engine.result = .failure(TranscriptionError.binaryNotFound("whisper-cli"))
+        await ctl.retry(audioPath: wav, appName: "Test", bundleID: "test", records: false)
+        #expect(engine.callCount == 1)
+        if case .error = ctl.state {} else { Issue.record("expected the failure to show") }
+
+        engine.result = .success("second time lucky")
+        await ctl.retry(audioPath: wav, appName: "Test", bundleID: "test", records: false)
+        #expect(engine.callCount == 2)        // it was reached at all
+    }
+
+    @Test("a retry is still refused while the app is busy") func notReentrant() async throws {
+        // The guard earns its place for the state it was actually for: work in
+        // progress, which a held error is not.
+        let engine = FakeEngine()
+        let ctl = DictationController(config: .default, recorder: FakeRecorder(),
+                                      engine: engine, cleanup: FakeCleanup(),
+                                      inserter: FakeInserter(), log: FakeLog())
+        let wav = try scratchWav()
+        defer { try? FileManager.default.removeItem(atPath: wav) }
+        await ctl.handle(.beganHold)                  // now recording, not idle
+        if case .recording = ctl.state {} else { Issue.record("expected it to be recording") }
+        await ctl.retry(audioPath: wav, appName: "Test", bundleID: "test", records: false)
+        #expect(engine.callCount == 0)
+    }
+}

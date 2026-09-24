@@ -850,6 +850,13 @@ public final class DictationController {
     /// time. Everything downstream is the ordinary path.
     public func retry(audioPath: String, appName: String?, bundleID: String?,
                       records: Bool = true) async {
+        // Asking again dismisses whatever the last attempt left on the pill, the
+        // same way pressing the key does — see `startRecording`. Without it, one
+        // failed retry left `.error` standing, errors do not clear themselves,
+        // and every later retry returned here silently: the button did nothing,
+        // the log said nothing, and only relaunching the app fixed it.
+        if case .error = state { state = .idle }
+        if case .notice = state { state = .idle }
         guard state == .idle else { return }
         let url = URL(fileURLWithPath: audioPath)
         guard FileManager.default.fileExists(atPath: audioPath) else {
