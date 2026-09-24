@@ -54,24 +54,25 @@ public enum TranscriptionEngineFactory {
         switch config.engine {
         case .whispercpp:
             let settings = config.whispercpp
-            // The detector only earns its place when the language is not already
-            // known: `auto` is what costs a second encoder pass.
-            // The resident model detects for nothing, so it is not asked twice.
+            // The detector earns its place wherever the language is not already
+            // known, the resident server included. `auto` is not a hint whisper
+            // takes cheaply: it encodes the whole padded thirty-second window
+            // once to work the language out, throws that away, and encodes it
+            // again to transcribe. whisper reports it plainly —
+            // `encode time = 2582.13 ms / 2 runs` against 1291 ms for one.
             //
-            // The separate detector was measured against `auto` on a loaded Mac
-            // running the q5_0 model, where asking the big model to work the
-            // language out cost a second encoder pass: 6.8s against 3.4s. On
-            // q8_0 that pass is free — measured on the same clip, told 56ms,
-            // detecting itself 47ms — while the detector is a second HTTP call
-            // that transcribes the whole recording with the base model before the
-            // real one starts. On a nine-word dictation that was 300ms of the
-            // 340ms spent transcribing, to save nothing.
+            // An earlier note here claimed that second pass was free on q8_0,
+            // measured at 56ms against 47ms, and switched the detector off for
+            // the server on the strength of it. That measurement was wrong. On
+            // this machine, same clip, same resident server, the only variable
+            // being the language field: `en` 1431ms, `auto` 2619ms. It is half
+            // of every dictation.
             //
-            // The command line still uses it: there each pass is a process launch
-            // and a model load, so the original measurement still holds there.
+            // The base model answers the same question from a 113ms encode, at
+            // 99% confidence. Detection does not need a good model, only a fast
+            // one — which was the point of the detector to begin with.
             let detectModel = Config.expand(settings.detectModel)
             let detector = settings.language == "auto"
-                && !settings.useServer
                 && FileManager.default.fileExists(atPath: detectModel)
                 ? LanguageDetector(serverBinary: settings.serverBinary, model: detectModel,
                                    threads: max(2, settings.threads / 2),
