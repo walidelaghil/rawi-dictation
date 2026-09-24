@@ -45,3 +45,40 @@ import Foundation
         #expect(LanguageDetector.confidenceFloor < 0.9)
     }
 }
+
+@Suite("Language detection over HTTP") struct LanguageDetectorJSONTests {
+    private func data(_ s: String) -> Data { Data(s.utf8) }
+
+    @Test("reads the language and the model's own confidence") func detected() throws {
+        // A real answer from whisper-server, detect_language=true + verbose_json.
+        let d = try #require(LanguageDetector.parse(json: data("""
+        {"task":"transcribe","language":"arabic","duration":7.5,"text":"","segments":[],
+         "detected_language":"arabic","detected_language_probability":0.999}
+        """)))
+        #expect(d.language == "arabic")
+        #expect(abs(d.probability - 0.999) < 0.0001)
+    }
+
+    @Test("an unsure detection is reported unsure, not certain") func unsure() throws {
+        // The regression this guards: the probability was hard-coded to 1, so a
+        // coin-flip detection outranked `confidenceFloor` and got used anyway
+        // instead of being handed back to the big model.
+        let d = try #require(LanguageDetector.parse(json: data("""
+        {"detected_language":"english","detected_language_probability":0.41}
+        """)))
+        #expect(d.probability < LanguageDetector.confidenceFloor)
+    }
+
+    @Test("falls back to the plain language field") func plainField() throws {
+        let d = try #require(LanguageDetector.parse(json: data(#"{"language":"english"}"#)))
+        #expect(d.language == "english")
+        #expect(d.probability == 1)
+    }
+
+    @Test("nothing usable comes back as nothing") func unusable() {
+        #expect(LanguageDetector.parse(json: data(#"{"language":"auto"}"#)) == nil)
+        #expect(LanguageDetector.parse(json: data(#"{"language":""}"#)) == nil)
+        #expect(LanguageDetector.parse(json: data(#"{"text":""}"#)) == nil)
+        #expect(LanguageDetector.parse(json: data("not json at all")) == nil)
+    }
+}

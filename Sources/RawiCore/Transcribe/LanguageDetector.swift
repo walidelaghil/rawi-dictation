@@ -100,13 +100,8 @@ public final class LanguageDetector: @unchecked Sendable {
         request.setValue("multipart/form-data; boundary=\(WhisperServerEngine.boundary)",
                          forHTTPHeaderField: "Content-Type")
         request.httpBody = body
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let language = json["language"] as? String,
-              !language.isEmpty, language != "auto" else { return nil }
-        // whisper-server answers with the language's name; whisper accepts either
-        // the name or the code, so the name is passed straight through.
-        return Detection(language: language, probability: 1)
+        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
+        return Self.parse(json: data)
     }
 
     private func multipart(wav: URL) throws -> Data {
@@ -119,14 +114,37 @@ public final class LanguageDetector: @unchecked Sendable {
         body.append(Data("Content-Type: audio/wav\r\n\r\n".utf8))
         body.append(try Data(contentsOf: wav))
         body.append(Data("\r\n".utf8))
-        for (name, value) in [("language", "auto"), ("response_format", "verbose_json"),
-                              ("temperature", "0")] {
+        // Ask only for the language. The detector used to request a full
+        // transcript from the base model and read the language off the top of
+        // it, which is a whole decode to answer a question the encoder has
+        // already answered: 380ms against 260ms on the same clip. `verbose_json`
+        // is what carries `detected_language` — the plainer formats return an
+        // empty body with no language in it at all.
+        for (name, value) in [("detect_language", "true"),
+                              ("response_format", "verbose_json")] {
             body.append(Data("--\(boundary)\r\n".utf8))
             body.append(Data("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".utf8))
             body.append(Data("\(value)\r\n".utf8))
         }
         body.append(Data("--\(boundary)--\r\n".utf8))
         return body
+    }
+
+    /// What `detect_language=true` with `verbose_json` answers.
+    ///
+    /// whisper-server names the language rather than coding it ("arabic", not
+    /// "ar"); whisper accepts either, so the name goes straight through.
+    ///
+    /// The probability is the model's own. It used to be hard-coded to 1, which
+    /// quietly retired `confidenceFloor`: a detection could never be too unsure
+    /// to use, so a wrong one was never handed back to the big model to settle.
+    static func parse(json data: Data) -> Detection? {
+        guard let object = try? JSONSerialization.jsonObject(with: data),
+              let json = object as? [String: Any],
+              let language = (json["detected_language"] ?? json["language"]) as? String,
+              !language.isEmpty, language != "auto" else { return nil }
+        let probability = json["detected_language_probability"] as? Double ?? 1
+        return Detection(language: language, probability: probability)
     }
 
     /// `whisper_full_with_state: auto-detected language: ar (p = 0.995071)`
