@@ -88,6 +88,20 @@ enum Doctor {
             line("whisper-server", server != nil, detail: server?.path ?? "not found",
                  fix: "brew install whisper-cpp")
         }
+        // The encoder is the whole fixed cost of a dictation, and on a Homebrew
+        // build the Neural Engine is not merely unused — it is not in the binary.
+        // Worth saying, because nothing else would ever mention it.
+        let whisperBinary = config.whispercpp.useServer
+            ? ToolBinary.resolve(config.whispercpp.serverBinary)
+            : binary
+        let coreMLBuild = whisperBinary.map(CoreMLEncoder.isSupported(by:)) ?? false
+        let coreMLModel = CoreMLEncoder.isInstalled(forModel: config.whispercpp.model)
+        line("Neural Engine", coreMLBuild && coreMLModel,
+             detail: coreMLBuild
+                 ? (coreMLModel ? "encoder loaded — the fast path"
+                                : "this build supports it, but the encoder is not downloaded")
+                 : "off — this whisper.cpp was built without Core ML",
+             fix: "run: make coreml   (about twice as fast per dictation)")
         let modelPath = Config.expand(config.whispercpp.model)
         let modelExists = FileManager.default.fileExists(atPath: modelPath)
         let known = ModelStore.model(forPath: config.whispercpp.model)

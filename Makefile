@@ -13,7 +13,7 @@ APP           := build/Rawi.app
 INSTALLED     := $(INSTALL_DIR)/Rawi.app
 BIN           := .build/release/Rawi
 
-.PHONY: all build bundle install uninstall run test clean warm doctor icon
+.PHONY: all build bundle install uninstall run test clean warm doctor icon coreml
 
 # The icon on its own, for looking at it without installing.
 icon: build
@@ -100,3 +100,56 @@ warm:
 clean:
 	swift package clean
 	rm -rf build
+
+# The encoder is the whole cost of a dictation: whisper pads every recording to
+# a thirty-second window and encodes all of it, whichever few seconds you
+# actually spoke. On this M4 that is 1200ms on the GPU and 513ms on the Neural
+# Engine. Homebrew's whisper.cpp is built with COREML=0, so the Neural Engine is
+# not an option until you build it yourself -- which is all this target does.
+#
+# Costs: ~1.2GB for the encoder, a few minutes to build, and one slow first
+# launch while macOS compiles the model for the Neural Engine. That compile is
+# cached; every launch after it is normal. Rawi stands the command line in while
+# it waits and swaps back on its own once the server answers.
+COREML_DIR   := $(HOME)/Library/Application Support/Rawi/whisper-coreml
+MODELS_DIR   := $(HOME)/Library/Application Support/Rawi/models
+WHISPER_TAG  ?= v1.9.2
+COREML_MODEL ?= large-v3-turbo
+
+coreml:
+	@command -v cmake >/dev/null || { echo "cmake is needed: brew install cmake"; exit 1; }
+	@xcrun --find coremlc >/dev/null 2>&1 || { echo "Xcode is needed to compile the Core ML model"; exit 1; }
+	@mkdir -p build/whisper-coreml "$(MODELS_DIR)"
+	@test -d build/whisper-coreml/src || \
+		git clone --depth 1 --branch $(WHISPER_TAG) https://github.com/ggml-org/whisper.cpp.git build/whisper-coreml/src
+	@echo "Building whisper.cpp $(WHISPER_TAG) with Core ML..."
+	@# ALLOW_FALLBACK matters: without it a missing or mismatched encoder is
+	@# fatal rather than quietly going back to the GPU.
+	cmake -S build/whisper-coreml/src -B build/whisper-coreml/build \
+		-DCMAKE_BUILD_TYPE=Release -DWHISPER_COREML=1 -DWHISPER_COREML_ALLOW_FALLBACK=1 >/dev/null
+	cmake --build build/whisper-coreml/build --config Release -j >/dev/null
+	rm -rf "$(COREML_DIR)"
+	cmake --install build/whisper-coreml/build --prefix "$(COREML_DIR)" >/dev/null
+	@# cmake installs the dylibs but bakes no rpath into the binaries, so they
+	@# cannot find them; the ad-hoc signature has to be reapplied after editing.
+	@for b in whisper-server whisper-cli; do \
+		install_name_tool -add_rpath "@loader_path/../lib" "$(COREML_DIR)/bin/$$b" 2>/dev/null; \
+		codesign -f -s - "$(COREML_DIR)/bin/$$b" 2>/dev/null; \
+	done
+	@# whisper.cpp looks for the encoder beside the model, with ".bin" replaced
+	@# by "-encoder.mlmodelc" and any "-qX_X" suffix stripped -- so one encoder
+	@# serves every quantisation of the same model.
+	@test -d "$(MODELS_DIR)/ggml-$(COREML_MODEL)-encoder.mlmodelc" || { \
+		echo "Fetching the Core ML encoder for $(COREML_MODEL) (~1.2GB)..."; \
+		curl -fL --progress-bar -o build/whisper-coreml/encoder.zip \
+			"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$(COREML_MODEL)-encoder.mlmodelc.zip" && \
+		unzip -q -o build/whisper-coreml/encoder.zip -d "$(MODELS_DIR)" && \
+		rm -f build/whisper-coreml/encoder.zip; }
+	@"$(COREML_DIR)/bin/whisper-cli" --help >/dev/null 2>&1 || { echo "the built binary will not run"; exit 1; }
+	@echo
+	@echo "Built. Point Rawi at it in ~/.config/rawi/config.json:"
+	@echo '  "serverBinary": "$(COREML_DIR)/bin/whisper-server",'
+	@echo '  "binary":       "$(COREML_DIR)/bin/whisper-cli"'
+	@echo
+	@echo "Then restart Rawi. The first launch is slow while the Neural Engine"
+	@echo "model compiles; it is cached after that."

@@ -614,7 +614,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             config: fallback, env: env, log: log) else { return }
         log.info("whisper-server did not answer; the command line stands in until it does")
         controller.reconfigure(config: config, engine: cli, cleanup: makeCleanup(env: env))
+        keepTryingTheResident(resident)
     }
+
+    /// "Until it does" was not true: nothing looked again. `warmEngine` runs at
+    /// launch and on a config reload, so a server that was merely slow to start
+    /// left the command line reloading the model on every dictation for the rest
+    /// of the session.
+    ///
+    /// A Core ML encoder makes that easy to hit rather than unlucky: the very
+    /// first launch after one is installed spends a minute or more compiling it
+    /// for the Neural Engine, which is longer than `warm()` waits. The compile is
+    /// cached afterwards, so this costs nothing on any later launch — but the
+    /// launch that pays for it is exactly the one that must not be ruined.
+    @MainActor
+    private func keepTryingTheResident(_ resident: WhisperServerEngine) {
+        guard !residentRetryRunning else { return }
+        residentRetryRunning = true
+        Task.detached(priority: .utility) { [weak self] in
+            // `warmAll` already waits up to thirty seconds per attempt, so this is
+            // patient for several minutes without being a busy loop.
+            for _ in 0..<8 {
+                let ready = await resident.warmAll()
+                let settled = await MainActor.run { () -> Bool in
+                    guard let self else { return true }
+                    self.useResidentModel(resident, ifReady: ready)
+                    return ready
+                }
+                if settled { break }
+                try? await Task.sleep(for: .seconds(15))
+            }
+            await MainActor.run { self?.residentRetryRunning = false }
+        }
+    }
+
+    /// One retry loop at a time, however many times the stand-in is installed.
+    private var residentRetryRunning = false
 
     /// Kept whether or not it is the engine in use, so a stand-in can be handed back.
     private var residentEngine: WhisperServerEngine?

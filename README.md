@@ -367,6 +367,47 @@ for.
 
 ---
 
+### Making it faster with the Neural Engine
+
+Whisper pads every recording to a thirty-second window and runs the encoder over
+all of it, whichever three seconds you actually spoke. That one pass is the
+whole cost of a dictation — it does not grow with how long you talk, and on this
+M4 it is about 1200ms on the GPU.
+
+The Apple Neural Engine does the same pass in about 510ms. whisper.cpp supports
+it, but Homebrew builds with `COREML=0`, so `--doctor` will tell you the Neural
+Engine is off and there is no way to turn it on without building whisper.cpp
+yourself. That is all `make coreml` does:
+
+```
+brew install cmake
+make coreml
+```
+
+It builds whisper.cpp with Core ML into
+`~/Library/Application Support/Rawi/whisper-coreml`, fetches the matching
+encoder (about 1.2GB) into the models folder, and prints the two config lines to
+paste into `~/.config/rawi/config.json`:
+
+```json
+"serverBinary": "/Users/you/Library/Application Support/Rawi/whisper-coreml/bin/whisper-server",
+"binary":       "/Users/you/Library/Application Support/Rawi/whisper-coreml/bin/whisper-cli"
+```
+
+Measured end to end on a 3.5 second dictation with the language on auto: **1441ms
+before, 885ms after**.
+
+Two things to expect. The **first launch is slow** — macOS compiles the model for
+the Neural Engine, which takes a minute or two. Rawi stands the command line in
+while it waits and swaps back to the resident model on its own once the server
+answers, so it is slow rather than broken, and only once: the compile is cached.
+And it costs **about 1.2GB of disk** for the encoder, on top of the model.
+
+One encoder serves every quantisation of a model. whisper.cpp looks for the
+model's path with `.bin` replaced by `-encoder.mlmodelc` and any `-qX_X` suffix
+removed, so `ggml-large-v3-turbo-q8_0.bin` and the plain `ggml-large-v3-turbo.bin`
+both use `ggml-large-v3-turbo-encoder.mlmodelc`.
+
 ## 6. Choosing a cleanup provider
 
 On first launch Rawi picks one based on what it finds: an `OPENAI_API_KEY`
