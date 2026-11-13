@@ -8,6 +8,10 @@ public protocol TranscriptionEngine: AnyObject, Sendable {
     func cancel()
     /// Transcribe as this language from now on, rather than detecting it.
     func use(language: DictationLanguage)
+    /// Declared here, not only in the extension: called through
+    /// `any TranscriptionEngine`, an extension-only method is statically
+    /// dispatched to the no-op default and the engine's own never runs.
+    func prefetch()
 }
 
 public extension TranscriptionEngine {
@@ -15,6 +19,10 @@ public extension TranscriptionEngine {
     /// An engine that is always told its language by configuration has nothing to
     /// do here, and should not have to say so.
     func use(language: DictationLanguage) {}
+    /// Called the moment recording starts. An engine with something to load —
+    /// weights paged out to swap, a cold Neural Engine — gets the length of the
+    /// sentence to bring it back, instead of making the user wait for it after.
+    func prefetch() {}
 }
 
 public enum TranscriptionError: Error, LocalizedError, Equatable {
@@ -97,7 +105,18 @@ public enum TranscriptionEngineFactory {
             guard let key = env["GROQ_API_KEY"], !key.isEmpty else {
                 throw TranscriptionError.missingAPIKey("GROQ_API_KEY")
             }
-            return WhisperAPIEngine(provider: .groq, apiKey: key, model: config.api.groqModel)
+            let cloud = WhisperAPIEngine(provider: .groq, apiKey: key, model: config.api.groqModel,
+                                         language: config.whispercpp.language)
+            // The local fallback is the command line, not the resident server: it
+            // holds no memory until it is needed, and memory is what made the
+            // resident model slow. See `FailoverEngine`.
+            let settings = config.whispercpp
+            let local = WhisperCppEngine(binary: settings.binary,
+                                         model: Config.expand(settings.model),
+                                         language: settings.language,
+                                         threads: settings.threads,
+                                         detector: nil)
+            return FailoverEngine(primary: cloud, fallback: local, log: log ?? SilentLog())
         case .openai:
             guard let key = env["OPENAI_API_KEY"], !key.isEmpty else {
                 throw TranscriptionError.missingAPIKey("OPENAI_API_KEY")

@@ -25,6 +25,13 @@ public protocol AudioRecording: AnyObject, Sendable {
     func cancel()
     var level: Double { get }
     var isRecording: Bool { get }
+    /// The 16 kHz mono samples captured so far, from `offset` on. Lets a long
+    /// dictation be transcribed while it is still being spoken.
+    func samples(from offset: Int) -> [Int16]
+}
+
+public extension AudioRecording {
+    func samples(from offset: Int) -> [Int16] { [] }
 }
 
 public enum AudioError: Error, LocalizedError {
@@ -72,8 +79,18 @@ public final class AudioRecorder: AudioRecording, @unchecked Sendable {
     private var _level: Double = 0
     private var _peak: Double = 0
     private var _isRecording = false
+    /// Everything recorded so far, kept alongside the WAV: 32 KB a second, so a
+    /// five-minute session is under 10 MB.
+    private var captured: [Int16] = []
 
     public init() {}
+
+    public func samples(from offset: Int) -> [Int16] {
+        lock.withLock {
+            guard offset < captured.count else { return [] }
+            return Array(captured[max(0, offset)...])
+        }
+    }
 
     public var level: Double { lock.withLock { _level } }
     public var isRecording: Bool { lock.withLock { _isRecording } }
@@ -101,6 +118,8 @@ public final class AudioRecorder: AudioRecording, @unchecked Sendable {
             self.writer = writer
             self._level = 0
             self._peak = 0
+            self.captured = []
+            self.captured.reserveCapacity(16_000 * 60)
             self._isRecording = true
         }
 
@@ -124,6 +143,7 @@ public final class AudioRecorder: AudioRecording, @unchecked Sendable {
         lock.withLock {
             guard _isRecording, let writer else { return }
             try? writer.append(samples)
+            captured.append(contentsOf: samples)
             let rms = rmsLevel(samples)
             _level = smoothLevel(previous: _level, sample: rms)
             _peak = max(_peak, rms)
@@ -171,6 +191,7 @@ public final class AudioRecorder: AudioRecording, @unchecked Sendable {
         try writer.finalize()
         let peak = lock.withLock { self._peak }
         lock.withLock { self.engine = nil; self.converter = nil; self.writer = nil }
+        // `captured` survives stop: the rolling transcriber reads the tail from it.
         return RecordingResult(url: writer.url, duration: writer.duration, peakLevel: peak)
     }
 
@@ -181,6 +202,8 @@ public final class AudioRecorder: AudioRecording, @unchecked Sendable {
         lock.withLock { self._isRecording = false; self._level = 0 }
         try? writer?.finalize()
         if let url = writer?.url { try? FileManager.default.removeItem(at: url) }
-        lock.withLock { self.engine = nil; self.converter = nil; self.writer = nil }
+        lock.withLock {
+            self.engine = nil; self.converter = nil; self.writer = nil; self.captured = []
+        }
     }
 }

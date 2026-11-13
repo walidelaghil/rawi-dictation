@@ -10,15 +10,52 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
     private let model: String
     private let session: URLSession
 
+    private let requestedLanguage: String
+    /// How long one request may take before the caller is better served elsewhere.
+    private let timeout: TimeInterval
+
     private let lock = NSLock()
     private var currentTask: URLSessionUploadTask?
+    private var chosenLanguage: DictationLanguage = .auto
+    private var lastConnected: ContinuousClock.Instant?
 
     public init(provider: EngineKind, apiKey: String, model: String,
+                language: String = "auto", timeout: TimeInterval = 20,
                 session: URLSession = .shared) {
         self.provider = provider
         self.apiKey = apiKey
         self.model = model
+        self.requestedLanguage = language
+        self.timeout = timeout
         self.session = session
+    }
+
+    public func use(language: DictationLanguage) {
+        lock.withLock { chosenLanguage = language }
+    }
+
+    /// The language to send, or nil to let the provider detect it. Detection
+    /// there is part of the one request, not a second pass as it is locally.
+    var language: String? {
+        let code = lock.withLock { chosenLanguage.whisperCode } ?? requestedLanguage
+        return code == "auto" || code.isEmpty ? nil : code
+    }
+
+    /// Opens the connection while the user is still speaking. DNS, TCP and TLS to
+    /// the provider cost 100 to 300 ms that would otherwise land after release.
+    /// The pooled connection in `session` is what the real request then reuses.
+    public func prefetch() {
+        let now = ContinuousClock.now
+        let stale = lock.withLock { () -> Bool in
+            defer { lastConnected = now }
+            guard let last = lastConnected else { return true }
+            return last.duration(to: now) > .seconds(20)
+        }
+        guard stale else { return }
+        var request = URLRequest(url: Self.endpoint(for: provider))
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 5
+        session.dataTask(with: request) { _, _, _ in }.resume()
     }
 
     public func transcribe(wav: URL, prompt: String = "") async throws -> String {
@@ -27,17 +64,21 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
 
         var request = URLRequest(url: Self.endpoint(for: provider))
         request.httpMethod = "POST"
+        request.timeoutInterval = timeout
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)",
                          forHTTPHeaderField: "Content-Type")
         let body = Self.multipartBody(boundary: boundary, model: model,
                                       filename: wav.lastPathComponent, wav: wavData,
-                                      prompt: prompt)
+                                      prompt: prompt, language: language)
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 let task = session.uploadTask(with: request, from: body) { data, response, error in
-                    self.lock.withLock { self.currentTask = nil }
+                    self.lock.withLock {
+                        self.currentTask = nil
+                        self.lastConnected = .now
+                    }
 
                     if let error = error as? URLError, error.code == .cancelled {
                         continuation.resume(throwing: TranscriptionError.cancelled); return
@@ -94,7 +135,8 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
     }
 
     static func multipartBody(boundary: String, model: String,
-                              filename: String, wav: Data, prompt: String = "") -> Data {
+                              filename: String, wav: Data, prompt: String = "",
+                              language: String? = nil) -> Data {
         var body = Data()
         func field(_ name: String, _ value: String) {
             body.append(Data("--\(boundary)\r\n".utf8))
@@ -103,6 +145,8 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
         }
         field("model", model)
         field("response_format", "json")
+        field("temperature", "0")
+        if let language { field("language", language) }
         // Both Groq and OpenAI accept a biasing prompt on this endpoint.
         if !prompt.isEmpty { field("prompt", prompt) }
 

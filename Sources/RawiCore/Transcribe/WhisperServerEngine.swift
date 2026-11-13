@@ -51,6 +51,9 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
     private let lock = NSLock()
     private var server: Process?
     private var currentTask: URLSessionDataTask?
+    /// When the model last did any work. Idle long enough on a Mac short of
+    /// memory, its weights are in swap and the next dictation pays to read them back.
+    private var lastUsed = Date.distantPast
     private var session: URLSession { .shared }
 
     public init(binary: String = "whisper-server", model: String, threads: Int,
@@ -220,6 +223,8 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
                          forHTTPHeaderField: "Content-Type")
         request.httpBody = body
 
+        lock.withLock { lastUsed = Date() }
+        defer { lock.withLock { lastUsed = Date() } }
         let text: String = try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 let task = session.dataTask(with: request) { data, response, error in
@@ -252,6 +257,47 @@ public final class WhisperServerEngine: TranscriptionEngine, @unchecked Sendable
         guard !trimmed.isEmpty else { throw TranscriptionError.emptyResult }
         return trimmed
     }
+
+    /// Wakes a model that has sat idle, while the user is still speaking.
+    ///
+    /// A resident model is only resident while macOS lets it be. On a 16 GB Mac
+    /// with 15 GB in swap, the same 98-second clip took 5 s on a freshly loaded
+    /// server and 14.5 s on Rawi's own, idle one: the first request after a quiet
+    /// spell spends most of its time paging 1.9 GB of weights back in. A second of
+    /// silence, sent the moment recording starts, makes that page-in happen during
+    /// the sentence rather than after it.
+    public func prefetch() {
+        let idle = lock.withLock { () -> Bool in
+            let stale = Date().timeIntervalSince(lastUsed) > 45
+            if stale { lastUsed = Date() }
+            return stale
+        }
+        guard idle else { return }
+        Task.detached(priority: .userInitiated) { [self] in
+            guard await isHealthy(), let wav = Self.silence() else { return }
+            if let body = try? multipart(wav: wav, language: "en", prompt: "") {
+                var request = URLRequest(url: endpoint)
+                request.httpMethod = "POST"
+                request.timeoutInterval = 30
+                request.setValue("multipart/form-data; boundary=\(Self.boundary)",
+                                 forHTTPHeaderField: "Content-Type")
+                request.httpBody = body
+                _ = try? await session.data(for: request)
+            }
+            _ = await detector?.detect(wav: wav)
+        }
+    }
+
+    /// One second of silence, written once.
+    private static let silenceURL: URL? = {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rawi-prefetch-silence.wav")
+        guard let writer = try? WAVWriter(url: url) else { return nil }
+        try? writer.append([Int16](repeating: 0, count: 16_000))
+        try? writer.finalize()
+        return url
+    }()
+    static func silence() -> URL? { silenceURL }
 
     public func use(language: DictationLanguage) {
         lock.withLock { chosenLanguage = language }

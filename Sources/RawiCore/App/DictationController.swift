@@ -140,6 +140,9 @@ public final class DictationController {
     private var capturedDestination: DestinationRule?
 
     private var currentRecordingURL: URL?
+    /// Transcribes a long dictation while it is still being spoken. Nil between
+    /// dictations, and for anything that is not a dictation.
+    private var rolling: RollingTranscriber?
 
     /// Everything a dictation captured at key-press, as one value.
     ///
@@ -254,6 +257,8 @@ public final class DictationController {
             discardRecording(reason: "cancelled")
         case .transcribing, .cleaning, .inserting, .transforming:
             cancelled = true
+            rolling?.cancel()
+            rolling = nil
             transcriber.cancel()
             cleanup.cancel()
             polisher?.cancel()
@@ -308,6 +313,19 @@ public final class DictationController {
             // painted over by the pipeline it interrupted.
             generation += 1
             try recorder.start(to: url)
+            // Whatever the engine needs to load, it loads while you speak.
+            transcriber.prefetch()
+            rolling?.cancel()
+            if intent == .dictate {
+                let source = recorder
+                let roller = RollingTranscriber(
+                    engine: transcriber, prompt: capturedVocabulary.whisperPrompt,
+                    log: log, read: { source.samples(from: $0) })
+                roller.start()
+                rolling = roller
+            } else {
+                rolling = nil
+            }
             currentRecordingURL = url
             let now = ContinuousClock.now
             recordingStartedAt = now
@@ -349,6 +367,8 @@ public final class DictationController {
     private func discardRecording(reason: String) {
         guard case .recording = state else { return }
         recorder.cancel()
+        rolling?.cancel()
+        rolling = nil
         currentRecordingURL = nil
         recordingStartedAt = nil
         log.info("Recording discarded: \(reason)")
@@ -399,9 +419,18 @@ public final class DictationController {
         //    dictation is never silently lost.
         let raw: String
         let transcribeStarted = ContinuousClock.now
+        let roller = rolling
+        rolling = nil
         do {
-            raw = try await transcriber.transcribe(wav: recording.url,
-                                              prompt: capturedVocabulary.whisperPrompt)
+            // Most of a long dictation was transcribed while it was spoken; only
+            // the tail is left. Nil means nothing was rolled (a short dictation)
+            // or a chunk failed, and the whole file goes through as it always did.
+            if let roller, let rolled = try await roller.finish() {
+                raw = rolled
+            } else {
+                raw = try await transcriber.transcribe(wav: recording.url,
+                                                  prompt: capturedVocabulary.whisperPrompt)
+            }
         } catch {
             if cancelled { state = .idle; return }
             if case TranscriptionError.emptyResult = error {
