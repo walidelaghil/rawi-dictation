@@ -246,6 +246,8 @@ public struct HistoryView: View {
             .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
     }
 
+    /// Languages are two chips; apps are one menu. An app per chip squeezed a dozen
+    /// capsules into one row until the names wrapped a letter per line.
     private var filters: some View {
         HStack(spacing: 8) {
             chip("All", active: model.filter.script == nil && model.filter.bundleID == nil) {
@@ -257,16 +259,49 @@ public struct HistoryView: View {
             chip("العربية", active: model.filter.script == .arabic) {
                 model.filter.script = model.filter.script == .arabic ? nil : .arabic
             }
-            ForEach(model.apps, id: \.id) { app in
-                chip(app.name, active: model.filter.bundleID == app.id) {
-                    model.filter.bundleID = model.filter.bundleID == app.id ? nil : app.id
-                }
-            }
-            Spacer()
+            if !model.apps.isEmpty { appMenu }
+            Spacer(minLength: 8)
             Text("\(model.entries.count) kept")
                 .font(.system(size: TypeScale.small).monospacedDigit())
                 .foregroundStyle(c(.faint))
+                .lineLimit(1)
+                .fixedSize()
         }
+    }
+
+    private var appMenu: some View {
+        let selected = model.apps.first { $0.id == model.filter.bundleID }
+        return Menu {
+            Button("All apps") { model.filter.bundleID = nil }
+            Divider()
+            ForEach(model.apps, id: \.id) { app in
+                Button {
+                    model.filter.bundleID = app.id
+                } label: {
+                    if app.id == model.filter.bundleID {
+                        Label(app.name, systemImage: "checkmark")
+                    } else {
+                        Text(app.name)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(selected?.name ?? "All apps")
+                Image(systemName: "chevron.down").font(.system(size: TypeScale.micro, weight: .semibold))
+            }
+            .font(.system(size: TypeScale.small))
+            .foregroundStyle(selected != nil ? c(.bone) : c(.muted))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(Capsule().fill(selected != nil ? c(.raised) : .clear)
+                .overlay(Capsule().strokeBorder(selected != nil ? c(.saffron) : c(.edge))))
+            .contentShape(Capsule())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     private func chip(_ title: String, active: Bool, action: @escaping () -> Void) -> some View {
@@ -274,6 +309,8 @@ public struct HistoryView: View {
             Text(title)
                 .font(.system(size: TypeScale.small))
                 .foregroundStyle(active ? c(.bone) : c(.muted))
+                .lineLimit(1)
+                .fixedSize()
                 .padding(.horizontal, 10).padding(.vertical, 4)
                 .background(Capsule().fill(active ? c(.raised) : .clear)
                     .overlay(Capsule().strokeBorder(active ? c(.saffron) : c(.edge))))
