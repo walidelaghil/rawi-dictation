@@ -105,5 +105,8 @@ Also fixed: `prefetch()` was only in a protocol extension, so calls through
 `any TranscriptionEngine` went to the empty default. It is now a protocol
 requirement.
 
-Not verified: Groq's latency on this machine. That needs a key in
-`~/.config/rawi/.env`, which only the user can create.
+Measured once a key was in place: a direct request answered a short clip in
+0.30–0.35 s, and the first three real dictations through the app waited 0.80 s,
+0.84 s and 1.15 s from release to paste (transcription 486–765 ms of that), the
+last after six minutes idle. On the local model, that idle gap alone was worth a
+median 3.1 s.

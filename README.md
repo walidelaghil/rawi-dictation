@@ -3,17 +3,23 @@
 System-wide AI dictation for macOS. Hold a key, speak, release — cleaned-up text
 appears at your cursor in whatever app you are using.
 
-A local-first alternative to Wispr Flow. No account, no sign-in, no telemetry, no
-network calls at all unless you explicitly configure a hosted provider.
+A fast alternative to Wispr Flow, for English, Arabic, and both in one sentence.
+About a second from letting go of the key to text at your cursor. No Rawi account,
+no sign-in, no telemetry. Speech and polish run on [Groq](https://groq.com) by
+default, with your own free key; everything can run on this Mac instead.
 
 - **Hold `fn`** → record. Release → transcribe, clean up, paste at the cursor.
 - **Double-tap `fn`** → hands-free session, nothing held. One more tap ends it.
   Auto-stops after 5 minutes so a forgotten session cannot record all afternoon.
 - **`Esc`** → cancel. Drops the recording, or kills a transcription already running.
   Esc is *never* swallowed, so it still reaches the app you are typing in.
-- Transcribes with **whisper.cpp locally**, or the **Groq / OpenAI** Whisper API.
-- Optionally pipes the transcript through an **LLM** to strip filler words, fix
-  punctuation, and match casing to dictation style.
+- Transcribes with **Groq** by default: about 0.3–0.8 s, however long the Mac
+  has been idle. If Groq is unreachable, the same audio is transcribed by
+  **whisper.cpp on this Mac**, so a dictation is never lost. Or run fully local.
+- **Polishes** what you said through an LLM: filler out, punctuation in, spoken
+  corrections applied. Routed by language, so Arabic stays Arabic.
+- **Breaks a long dictation into paragraphs**, one per idea. The model only
+  chooses where; it never gets to rewrite your words.
 - Leaves the transcript on your clipboard so you can paste it again.
 - Tiny floating pill while recording, showing the mode and a live level meter.
 - **Says "first…, second…, third…"** and gets a numbered list, the way you meant it.
@@ -30,6 +36,30 @@ network calls at all unless you explicitly configure a hosted provider.
 ## 1. Install
 
 ```bash
+make install
+open ~/Applications/Rawi.app
+```
+
+That installs to `~/Applications/Rawi.app`, no admin password needed. Pass
+`INSTALL_DIR=/Applications` if you would rather put it there (that one needs sudo).
+
+A microphone icon appears in your menu bar. There is no Dock icon and no app
+switcher entry. That is deliberate (`LSUIElement`).
+
+On first launch Rawi walks you through the rest: microphone, auto-paste, your
+**Groq key**, and your hotkey. Create the key at
+[console.groq.com/keys](https://console.groq.com/keys) (the free tier covers
+normal dictation) and paste it into setup. Rawi checks it with Groq before saving
+it to `~/.config/rawi/.env`, readable only by you. Skip any step and it stays on
+a checklist in the sidebar rather than failing quietly later.
+
+### Optional: whisper.cpp on this Mac
+
+Not needed with Groq, but worth having: it is what Rawi falls back to when Groq
+cannot be reached, and it is the whole engine if you choose
+**Transcribe on this Mac** in setup.
+
+```bash
 brew install whisper-cpp
 ```
 
@@ -42,7 +72,7 @@ curl -L -o ~/Library/Application\ Support/Rawi/models/ggml-large-v3-turbo-q8_0.b
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin
 ```
 
-~834 MB, ~1.6 s per dictation on an M4. `make doctor` will tell you if the
+~834 MB, ~1.6 s per dictation on an M4 while the model is warm, much more after the Mac has sat idle (see §6). `make doctor` will tell you if the
 configured model is English-only.
 
 The q8_0 rather than the smaller q5_0 for a reason worth knowing: Metal has no
@@ -54,19 +84,6 @@ Turbo carries the full large-v3 encoder — only its decoder is pruned — and
 whisper always encodes a 30-second window, so a dictation costs the same whether
 you spoke for three seconds or twenty. That fixed cost is nearly all of the wait.
 
-On first launch Rawi walks you through the rest: microphone, auto-paste, the
-model download, polish, and your key. Skip any step and it stays on a checklist
-in the sidebar rather than failing quietly later.
-
-Build and install the app:
-
-```bash
-make install
-```
-
-That installs to `~/Applications/Rawi.app` — no admin password needed. Pass
-`INSTALL_DIR=/Applications` if you would rather put it there (that one needs sudo).
-
 Warm the Metal shader cache once. whisper.cpp compiles GPU shaders on its very
 first run, which takes about 30 seconds — do it now so your first real dictation
 isn't mistaken for a hang:
@@ -74,15 +91,6 @@ isn't mistaken for a hang:
 ```bash
 make warm
 ```
-
-Launch it:
-
-```bash
-open ~/Applications/Rawi.app
-```
-
-A microphone icon appears in your menu bar. There is no Dock icon and no app
-switcher entry — that is deliberate (`LSUIElement`).
 
 ---
 
@@ -299,7 +307,7 @@ An *invalid* value is reported rather than silently ignored.
 | `doubleTapWindowMs` | `350` | How long after the first press a second tap still counts as a double-tap |
 | `minHoldMs` | `250` | Holds shorter than this are treated as taps, not speech |
 | `maxSessionSeconds` | `300` | Hands-free auto-stop. 5 minutes |
-| `engine` | `"whispercpp"` | `whispercpp` (local, offline), `groq`, or `openai` |
+| `engine` | `"groq"` | `groq` (falls back to whisper.cpp when unreachable), `whispercpp` (local, offline), or `openai` |
 | `whispercpp.binary` | `"whisper-cli"` | Name on `PATH`, or an absolute path |
 | `whispercpp.model` | `…/models/ggml-large-v3-turbo-q8_0.bin` | Path to a `ggml-*.bin` model. Must be multilingual |
 | `whispercpp.language` | `"auto"` | Or a code like `"en"` to skip detection |
@@ -309,15 +317,17 @@ An *invalid* value is reported rather than silently ignored.
 | `whispercpp.detectModel` | `…/models/ggml-base.bin` | The small model that decides which language you spoke, so the big one is told rather than working it out. Worth about three seconds |
 | `api.groqModel` | `"whisper-large-v3-turbo"` | Model for `engine: groq` |
 | `api.openaiModel` | `"whisper-1"` | Model for `engine: openai` |
-| `cleanup.provider` | detected | `openai`, `anthropic`, `ollama`, or `off` |
+| `api.groqParagraphModel` | `"qwen/qwen3.8-27b"` | Chooses where paragraphs break. Answers with sentence numbers only |
+| `cleanup.provider` | `"groq"` | `groq`, `openai`, `anthropic`, `ollama`, or `off` |
 | `cleanup.mode` | `"polish"` | `clean` removes filler and fixes punctuation; `polish` also applies the corrections you spoke and turns run-on speech into sentences |
-| `cleanup.models.latin` | `"qwen2.5:1.5b"` | Used for English. Small on purpose — see §6 |
-| `cleanup.models.arabic` | `"qwen2.5:3b"` | Used as soon as any Arabic appears |
+| `cleanup.models.latin` | `"qwen/qwen3.8-27b"` | Used for English. Locally, `qwen2.5:1.5b` — see §6 |
+| `cleanup.models.arabic` | `"openai/gpt-oss-120b"` | Used as soon as any Arabic appears (on Groq, a single Arabic word is enough). Locally, `qwen2.5:3b` |
 | `cleanup.transformModel` | `""` | Model for Transforms. Empty means the routed pair above |
 | `cleanup.prompt` | see below | The cleanup instruction. Edit freely |
 | `output.restorePreviousClipboard` | `false` | Restore your previous clipboard after pasting |
 | `output.restoreDelayMs` | `300` | How long to wait before restoring |
 | `output.deliverRawFirst` | `true` | Put the raw transcript on the clipboard the moment it exists, then upgrade it once cleanup finishes, so you never wait to be able to paste |
+| `output.ideaParagraphs` | `true` | Break a long dictation into one paragraph per idea. Groq only |
 | `output.formatSpokenLists` | `true` | "first…, second…, third…" becomes a numbered list. A dictation that does this is also cleaned by the bigger model rather than rewritten by the fast one — see below |
 | `history.enabled` | `true` | Keep a local record of dictations |
 | `history.encrypted` | `true` | AES-GCM on disk, under a key file only your account can read |
@@ -330,9 +340,8 @@ API keys never go in this file. They live in `~/.config/rawi/.env` — see
 
 [`config.example.json`](config.example.json) is a known-good configuration, verified
 working on a managed Mac with **neither Accessibility nor Input Monitoring granted**:
-`⌥Space` push-to-talk via the permission-free Carbon backend, local whisper.cpp, and
-local Ollama cleanup. Copy it to `~/.config/rawi/config.json` to start from
-there.
+`⌥Space` push-to-talk via the permission-free Carbon backend, with Groq for
+speech and polish. Copy it to `~/.config/rawi/config.json` to start from there.
 
 ### The cleanup prompt
 
@@ -408,37 +417,80 @@ model's path with `.bin` replaced by `-encoder.mlmodelc` and any `-qX_X` suffix
 removed, so `ggml-large-v3-turbo-q8_0.bin` and the plain `ggml-large-v3-turbo.bin`
 both use `ggml-large-v3-turbo-encoder.mlmodelc`.
 
-## 6. Choosing a cleanup provider
+## 6. Speed, and why Groq is the default
 
-On first launch Rawi picks one based on what it finds: an `OPENAI_API_KEY`
-in `.env`, else an `ANTHROPIC_API_KEY`, else a running Ollama, else `off`.
+Rawi used to run everything on the Mac, and it was fast right up until you
+stopped using it. From 243 real dictations on a 16 GB M4, same model throughout,
+grouped by how long Rawi had sat idle beforehand:
 
-| Provider | Cost | Latency | Works offline |
+| Idle before dictating | Median wait to transcribe | Worst | Over 3 s |
 |---|---|---|---|
-| `ollama` (`qwen2.5:1.5b`) | free | **0.8–1.3 s measured** | ✅ |
+| under 2 min | 1.6 s | 6.1 s | 16% |
+| 2–30 min | 3.1 s | 12.2 s | 54% |
+| over 30 min | 8.0 s | 76.7 s | 77% |
+
+The model is about 2 GB. Left alone, macOS pages it out to make room, and the
+next dictation pays to read it back. No setting fixes that on a Mac under real
+memory pressure; it is how a resident model behaves. Local cleanup through
+Ollama had the same problem: a median 3.0 s, 18.5 s at worst, over 154
+dictations.
+
+Groq does not care how long the Mac has been idle. Measured on the same machine:
+
+| Stage | Local | Groq |
+|---|---|---|
+| Transcribe a 7–17 s dictation | 1.6 s warm, 8 s after idle | 0.5–0.8 s |
+| Polish | 3.0 s median | 0.2 s English, 0.4 s with Arabic |
+| Paragraphs (long dictations only) | not available | 0.2–0.5 s |
+
+So Groq is the default, and the local model is the safety net: if Groq fails or
+takes longer than 4 s plus a tenth of the clip, the same audio goes to
+whisper.cpp on this Mac and Groq is skipped for a minute. Being offline costs one
+timeout, not one per dictation.
+
+**Which model polishes.** On Groq, English goes to `qwen/qwen3.8-27b` (about
+0.2 s). Anything with even one Arabic word goes to `openai/gpt-oss-120b`,
+because Qwen translated code-switched speech, turning "بس they want" into
+"but they want", and once rewrote a whole Arabic sentence in English. The
+guard below caught the second; the routing prevents both.
+
+**Limits.** Groq's free tier allows 1,000 requests a day per chat model and
+8,000 tokens a minute. Past that a dictation is pasted without polish rather
+than lost.
+
+| Provider | Cost | Polish latency | Works offline |
+|---|---|---|---|
+| `groq` | free tier | **0.2–0.5 s measured** | ❌ (falls back to raw text) |
+| `ollama` (`qwen2.5:1.5b` / `3b`) | free | 3.0 s median measured, after idle much more | ✅ |
 | `openai` (`gpt-4o-mini`) | ~$0.30/mo at 100 dictations/day | ~0.5 s | ❌ |
 | `anthropic` (Haiku) | ~$2/mo at the same rate | ~0.7 s | ❌ |
 | `off` | free | none | ✅ |
-
-End-to-end on an M4, local throughout: ~2 s transcription + ~0.8 s cleanup, so
-roughly **2.8 seconds** from releasing the key to text appearing. That is ~1.4 s
-slower than an English-only setup, and it buys one hotkey plus genuine Arabic and
-mixed speech — a trade taken deliberately.
 
 > **A ChatGPT or Claude subscription does not include API access.** ChatGPT
 > Plus/Go and Claude Pro/Max are consumer chat products; the OpenAI and Anthropic
 > APIs are billed separately, with their own keys and their own prepaid balance.
 > Nothing this app sends to those APIs draws on a subscription.
 
-For a free, fully offline setup:
+For a free, fully offline setup, choose **Transcribe on this Mac** in setup, then:
 
 ```bash
 brew install ollama
 brew services start ollama
 ollama pull qwen2.5:1.5b
+ollama pull qwen2.5:3b
 ```
 
-then set `"cleanup": { "provider": "ollama", "model": "qwen2.5:1.5b" }`.
+and pick **Ollama, on this Mac** under Settings → Cleanup and transforms.
+
+### Paragraphs, one per idea
+
+Whisper returns a minute of speech as one block. Rawi asks a model where each
+idea starts, by number: it is shown numbered sentences and answers with
+something like `{"starts": [4, 7]}`. The breaks are made in code, so the words
+on the page are exactly the words transcribed. Pauses were tried first and do
+not work: Whisper's segment timestamps often run back to back across a real
+pause. A slow or failed answer (over 1.5 s) costs the paragraphs, never the
+text, and dictations under four sentences are not sent at all.
 
 ### A spoken list is structure, so the model is not trusted with it
 
@@ -785,10 +837,12 @@ a protocol so it is swappable and testable with fakes. Design notes are in
 ## 12. Privacy
 
 - No account, no sign-in, no telemetry, no analytics, no crash reporting.
+- **By default your audio and its transcript go to Groq**, with your own key, to be
+  transcribed and polished. Nowhere else. The sidebar says where your words go
+  for the settings you have, and changes when they do.
 - With `engine: whispercpp` and `cleanup.provider` of `ollama` or `off`, **nothing
   leaves your machine.**
-- With a hosted provider configured, audio (or the transcript) goes only to that
-  provider's API. Nowhere else.
+- History is kept on this Mac only, encrypted.
 - API keys are read from `.env`, held in memory, and never logged or written back
   to disk.
 - Recordings live in `~/Library/Application Support/Rawi/recordings/` and
