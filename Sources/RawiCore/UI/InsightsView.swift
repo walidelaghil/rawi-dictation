@@ -575,7 +575,7 @@ private struct VoiceTab: View {
                       model.taught().isEmpty ? "Fix a spelling after Rawi types it." : model.taught().prefix(3).joined(separator: ", "))
             }
             .fixedSize(horizontal: false, vertical: true)
-            Text("Your dictations are private and stay on this Mac. This page is worked out here, from your own history.")
+            Text("Your history is private and stays on this Mac. This page is worked out here, from it.")
                 .font(.system(size: TypeScale.small)).italic()
                 .foregroundStyle(c(.faint))
                 .frame(maxWidth: .infinity)

@@ -51,7 +51,8 @@ import Foundation
         let text = try await engine().transcribe(wav: wav)
 
         let router = RoutedCleanup(kind: .ollama, apiKey: nil,
-                                   models: Config.default.cleanup.models, prompt: "P")
+                                   models: CleanupProviderFactory.defaultModels(for: .ollama),
+                                   prompt: "P")
         #expect(router.model(for: text) == "qwen2.5:3b")
         #expect(router.model(for: "ship the release on Friday") == "qwen2.5:1.5b")
     }

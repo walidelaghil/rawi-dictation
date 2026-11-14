@@ -51,7 +51,7 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
         request.timeoutInterval = Self.timeout(for: kind)
 
         switch kind {
-        case .openai:
+        case .openai, .groq:
             request.setValue("Bearer \(apiKey ?? "")", forHTTPHeaderField: "Authorization")
         case .anthropic:
             request.setValue(apiKey ?? "", forHTTPHeaderField: "x-api-key")
@@ -144,6 +144,9 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
     static func timeout(for kind: CleanupKind) -> TimeInterval {
         switch kind {
         case .ollama: 90
+        // Groq answers in well under a second; past this it is not coming, and
+        // the raw transcript is better than more waiting.
+        case .groq: 6
         case .openai, .anthropic, .off: 20
         }
     }
@@ -170,6 +173,7 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
 
     static func endpoint(kind: CleanupKind) -> URL {
         switch kind {
+        case .groq: URL(string: "https://api.groq.com/openai/v1/chat/completions")!
         case .openai: URL(string: "https://api.openai.com/v1/chat/completions")!
         case .anthropic: URL(string: "https://api.anthropic.com/v1/messages")!
         case .ollama: URL(string: "http://localhost:11434/api/chat")!
@@ -184,8 +188,8 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
         // instructions.
         let payload: [String: Any]
         switch kind {
-        case .openai:
-            payload = [
+        case .openai, .groq:
+            var body: [String: Any] = [
                 "model": model,
                 "temperature": 0,
                 "messages": [
@@ -193,6 +197,13 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
                     ["role": "user", "content": user],
                 ],
             ]
+            // Reasoning models on Groq think before answering by default. For
+            // cleaning a sentence that is pure latency.
+            if kind == .groq {
+                if model.hasPrefix("qwen/") { body["reasoning_effort"] = "none" }
+                if model.hasPrefix("openai/gpt-oss") { body["reasoning_effort"] = "low" }
+            }
+            payload = body
         case .anthropic:
             // Anthropic takes the instruction as a top-level `system` field,
             // not as a system-role message.
@@ -228,7 +239,7 @@ public final class ChatCleanup: CleanupProvider, @unchecked Sendable {
     static func parse(kind: CleanupKind, _ data: Data) throws -> String {
         let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         switch kind {
-        case .openai:
+        case .openai, .groq:
             guard let choices = root?["choices"] as? [[String: Any]],
                   let message = choices.first?["message"] as? [String: Any],
                   let content = message["content"] as? String else {

@@ -9,7 +9,7 @@ import Foundation
         #expect(c.doubleTapWindowMs == 350)
         #expect(c.minHoldMs == 250)
         #expect(c.maxSessionSeconds == 300)
-        #expect(c.engine == .whispercpp)
+        #expect(c.engine == .groq)
         #expect(c.output.restorePreviousClipboard == false)
     }
 
@@ -55,10 +55,13 @@ import Foundation
 @Suite("Cleanup models") struct CleanupModelsTests {
     @Test("defaults are the measured winners per script") func defaults() {
         let m = Config.default.cleanup.models
-        #expect(m.latin == "qwen2.5:1.5b")
-        #expect(m.arabic == "qwen2.5:3b")
-        #expect(m.model(for: .latin) == "qwen2.5:1.5b")
-        #expect(m.model(for: .arabic) == "qwen2.5:3b")
+        #expect(m.latin == "qwen/qwen3.8-27b")
+        #expect(m.arabic == "openai/gpt-oss-120b")
+        #expect(m.model(for: .latin) == "qwen/qwen3.8-27b")
+        #expect(m.model(for: .arabic) == "openai/gpt-oss-120b")
+        let local = CleanupProviderFactory.defaultModels(for: .ollama)
+        #expect(local.latin == "qwen2.5:1.5b")
+        #expect(local.arabic == "qwen2.5:3b")
     }
 
     @Test("whisper now runs with automatic language detection") func autoLang() {

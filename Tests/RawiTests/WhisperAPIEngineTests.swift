@@ -45,10 +45,12 @@ import Foundation
     }
 
     @Test("the factory builds a local engine without any key") func localFactory() throws {
-        let e = try TranscriptionEngineFactory.make(config: .default, env: DotEnv(contents: ""))
+        var config = Config.default
+        config.engine = .whispercpp
+        let e = try TranscriptionEngineFactory.make(config: config, env: DotEnv(contents: ""))
         // Resident by default now: the CLI reloaded the model on every dictation.
         #expect(e is WhisperServerEngine)
-        var cliConfig = Config.default
+        var cliConfig = config
         cliConfig.whispercpp.useServer = false
         #expect(try TranscriptionEngineFactory.make(config: cliConfig, env: DotEnv(contents: ""))
                 is WhisperCppEngine)

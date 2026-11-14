@@ -23,21 +23,25 @@ public struct Probes: Sendable, Equatable {
 }
 
 public enum FirstRunSetup {
-    /// Chooses a working configuration from what is available, preferring local
-    /// and free over hosted and paid.
+    /// Chooses a working configuration from what is available, preferring Groq,
+    /// then what is already installed locally, then other hosted providers.
     public static func detect(_ p: Probes) -> Config {
         var config = Config.default
 
         // Only a multilingual model qualifies for the local path: one hotkey means
         // one model, and an English-only model cannot serve Arabic at all.
+        // Groq first: it is the fast path, and the local model is what made Rawi
+        // slow on a busy Mac. Without a key, a local install that is already there
+        // is used; with neither, Groq stays selected and setup asks for the key.
         config.engine =
-            if p.whisperBinaryFound && p.multilingualModelFound { .whispercpp }
-            else if p.envKeys.contains("GROQ_API_KEY") { .groq }
+            if p.envKeys.contains("GROQ_API_KEY") { .groq }
+            else if p.whisperBinaryFound && p.multilingualModelFound { .whispercpp }
             else if p.envKeys.contains("OPENAI_API_KEY") { .openai }
-            else { .whispercpp }          // menu bar will flag the missing model
+            else { .groq }
 
         let cleanupKind: CleanupKind =
-            if p.envKeys.contains("OPENAI_API_KEY") { .openai }
+            if p.envKeys.contains("GROQ_API_KEY") { .groq }
+            else if p.envKeys.contains("OPENAI_API_KEY") { .openai }
             else if p.envKeys.contains("ANTHROPIC_API_KEY") { .anthropic }
             else if p.ollamaReachable { .ollama }
             else { .off }

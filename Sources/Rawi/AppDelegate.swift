@@ -362,6 +362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         wireTransforms(env: env)
         wirePolish(env: env)
+        wireParagraphs(env: env)
         wireInsightsWriter(env: env)
         controller.onRecord = { [weak self] entry in
             guard let self else { return }
@@ -493,6 +494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = config.cleanup.transformModel.isEmpty ? config.cleanup.models.arabic
                                                           : config.cleanup.transformModel
         let key: String? = switch kind {
+        case .groq: env["GROQ_API_KEY"]
         case .openai: env["OPENAI_API_KEY"]
         case .anthropic: env["ANTHROPIC_API_KEY"]
         case .ollama, .off: nil
@@ -510,6 +512,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The polisher, when the mode asks for one. Built here with the rest of the
     /// provider graph, and rebuilt on a config reload so changing the mode or the
     /// model in config.json takes effect without a relaunch.
+    /// Paragraphs by idea, through Groq — only when transcription already goes
+    /// there, so turning it on sends no text off the Mac that was not leaving it
+    /// as audio anyway.
+    private func wireParagraphs(env: DotEnv) {
+        guard config.engine == .groq, config.output.ideaParagraphs,
+              let key = env["GROQ_API_KEY"], !key.isEmpty else {
+            controller.paragraphPlanner = nil
+            return
+        }
+        controller.paragraphPlanner = GroqParagraphPlanner(
+            apiKey: key, model: config.api.groqParagraphModel)
+        log.info("Paragraphs: by idea via \(config.api.groqParagraphModel)")
+    }
+
     private func wirePolish(env: DotEnv) {
         do {
             controller.polisher = try CleanupProviderFactory.makePolisher(
@@ -1076,14 +1092,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         watcher?.start()
+        // A key saved in setup changes `.env`, not config.json, so the watcher
+        // above would never notice it.
+        NotificationCenter.default.addObserver(forName: GroqKey.changed, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reloadConfig(force: true) }
+        }
     }
 
-    private func reloadConfig() {
+    private func reloadConfig(force: Bool = false) {
         guard let reloaded = try? Config.load() else {
             log.warn("Config file is not valid JSON; keeping the previous settings")
             return
         }
-        guard reloaded != config else { return }
+        guard force || reloaded != config else { return }
         guard controller.state == .idle else { return }   // never swap mid-dictation
 
         let hotkeyChanged = reloaded.hotkey != config.hotkey
@@ -1106,6 +1128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         publishHotkeyLabels()
         if transformsChanged { wireTransforms(env: env)
         wirePolish(env: env)
+        wireParagraphs(env: env)
         wireInsightsWriter(env: env) }
         history.setRetention(days: config.history.retentionDays)
         refreshChecklist()

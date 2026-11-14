@@ -57,6 +57,9 @@ public enum CleanupProviderFactory {
         case .ollama:
             return RoutedCleanup(kind: .ollama, apiKey: nil, models: config.cleanup.models,
                                  prompt: config.cleanup.prompt)
+        case .groq:
+            return RoutedCleanup(kind: .groq, apiKey: try apiKey(for: .groq, env: env)!,
+                                 models: config.cleanup.models, prompt: config.cleanup.prompt)
         case .openai:
             guard let key = env["OPENAI_API_KEY"], !key.isEmpty else {
                 throw CleanupError.missingAPIKey("OPENAI_API_KEY")
@@ -96,6 +99,9 @@ public enum CleanupProviderFactory {
             return ChatCleanup(kind: .ollama, apiKey: nil, model: model,
                                prompt: transformSystemPrompt, wrap: { $0 },
                                keepAlive: "2m")
+        case .groq:
+            return ChatCleanup(kind: .groq, apiKey: try apiKey(for: .groq, env: env), model: model,
+                               prompt: transformSystemPrompt, wrap: { $0 })
         case .openai:
             guard let key = env["OPENAI_API_KEY"], !key.isEmpty else {
                 throw CleanupError.missingAPIKey("OPENAI_API_KEY")
@@ -128,6 +134,8 @@ public enum CleanupProviderFactory {
             return nil
         case .ollama:
             key = nil
+        case .groq:
+            key = try apiKey(for: .groq, env: env)
         case .openai:
             guard let k = env["OPENAI_API_KEY"], !k.isEmpty else {
                 throw CleanupError.missingAPIKey("OPENAI_API_KEY")
@@ -146,6 +154,15 @@ public enum CleanupProviderFactory {
         // A pinned model is a decision someone made; use it for everything.
         if !config.cleanup.polishModel.isEmpty {
             return provider(config.cleanup.polishModel)
+        }
+        // On Groq both models are strong enough to rewrite, so polish routes by
+        // script like cleanup does. Measured: English through qwen3.8-27b in
+        // ~0.2 s, accepted by the guard every time. Anything with Arabic goes to
+        // gpt-oss-120b, because qwen translated "بس they want" into "but they
+        // want" and polished a whole Arabic sentence into English.
+        if kind == .groq {
+            return RoutedCleanup(kind: .groq, apiKey: key, models: config.cleanup.models,
+                                 prompt: "", makeProvider: provider)
         }
         // Polish goes to the bigger model whatever the language.
         //
@@ -167,6 +184,19 @@ public enum CleanupProviderFactory {
         return provider(models.arabic)
     }
 
+    /// The key a hosted provider needs, or nil for one that needs none.
+    public static func apiKey(for kind: CleanupKind, env: DotEnv) throws -> String? {
+        let name: String
+        switch kind {
+        case .groq: name = "GROQ_API_KEY"
+        case .openai: name = "OPENAI_API_KEY"
+        case .anthropic: name = "ANTHROPIC_API_KEY"
+        case .ollama, .off: return nil
+        }
+        guard let key = env[name], !key.isEmpty else { throw CleanupError.missingAPIKey(name) }
+        return key
+    }
+
     /// Default model per script for a provider, used by first-run detection.
     ///
     /// The local pair is the benchmarked outcome: 1.5b is faithful and fast on
@@ -174,6 +204,8 @@ public enum CleanupProviderFactory {
     /// Hosted providers are strong enough at both that one model serves each.
     public static func defaultModels(for kind: CleanupKind) -> CleanupModels {
         switch kind {
+        case .groq:
+            CleanupModels(latin: "qwen/qwen3.8-27b", arabic: "openai/gpt-oss-120b")
         case .openai:
             CleanupModels(latin: "gpt-4o-mini", arabic: "gpt-4o-mini")
         case .anthropic:

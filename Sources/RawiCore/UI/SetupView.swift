@@ -29,6 +29,9 @@ public final class SetupViewModel: ObservableObject {
     @Published public var progress: [String: Double] = [:]
     @Published public var problem: String?
     @Published public var tryText = ""
+    /// The Groq key as typed, before it is checked and stored.
+    @Published public var groqKeyInput = ""
+    @Published public var checkingKey = false
     /// Whether the key listener was started with Input Monitoring. A grant made
     /// during setup only reaches the listener after a restart.
     public var launchedWithInputMonitoring = Permissions.current().inputMonitoring
@@ -72,7 +75,9 @@ public final class SetupViewModel: ObservableObject {
         case .welcome: return self.step.rawValue > SetupStep.welcome.rawValue
         case .microphone: return status.microphone
         case .paste: return status.accessibility
-        case .models: return status.whisperInstalled && status.transcriptionModel && status.detectorModel
+        case .models:
+            if config.engine == .groq { return status.groqKey }
+            return status.whisperInstalled && status.transcriptionModel && status.detectorModel
         case .polish: return status.polishReady(provider: config.cleanup.provider)
         case .hotkey: return self.step.rawValue > SetupStep.hotkey.rawValue
         case .tryIt: return !tryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -164,6 +169,47 @@ public final class SetupViewModel: ObservableObject {
             }
             await refresh()
         }
+    }
+
+    /// Checks the key with Groq, stores it, and points transcription and polish at
+    /// Groq. Nothing is written if Groq refuses the key.
+    public func saveGroqKey() {
+        let key = groqKeyInput
+        problem = nil
+        checkingKey = true
+        Task {
+            defer { checkingKey = false }
+            do {
+                try await GroqKey.validate(key)
+                try GroqKey.save(key)
+                GroqKey.useGroq(&settings.config)
+                settings.save()
+                groqKeyInput = ""
+                NotificationCenter.default.post(name: GroqKey.changed, object: nil)
+                await refresh()
+            } catch {
+                problem = error.localizedDescription
+            }
+        }
+    }
+
+    /// Transcribe on this Mac instead. Polish on Groq without a key cannot run,
+    /// so it is turned off rather than left failing.
+    public func useLocalTranscription() {
+        settings.config.engine = .whispercpp
+        if settings.config.cleanup.provider == .groq, !(status?.groqKey ?? false) {
+            settings.config.cleanup.provider = .off
+        }
+        problem = nil
+        settings.save()
+        Task { await refresh() }
+    }
+
+    public func useGroqTranscription() {
+        GroqKey.useGroq(&settings.config)
+        problem = nil
+        settings.save()
+        Task { await refresh() }
     }
 
     /// Turns polish on with the local defaults, for a first run that found Ollama.
@@ -365,9 +411,10 @@ public struct SetupView: View {
         VStack(alignment: .leading, spacing: 12) {
             heading("Speak, and it types.",
                     "Hold a key anywhere on your Mac, talk in English or Arabic or both, and let go. "
-                  + "Rawi writes what you meant into whatever you are typing in. Everything runs on "
-                  + "this Mac: your voice never leaves it.")
-            item("A few minutes", "Setup asks for two permissions and downloads the speech model.",
+                  + "Rawi writes what you meant into whatever you are typing in, in about a second. "
+                  + "Your voice is transcribed by Groq; you can keep everything on this Mac instead, "
+                  + "at the cost of speed.")
+            item("A few minutes", "Setup asks for two permissions and a free Groq key.",
                  done: false)
         }
     }
@@ -396,7 +443,47 @@ public struct SetupView: View {
         }
     }
 
-    private var models: some View {
+    @ViewBuilder private var models: some View {
+        if model.config.engine == .groq { groqModels } else { localModels }
+    }
+
+    /// The default: Groq transcribes, so setup is one key, not a 1.6 GB download.
+    private var groqModels: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            heading("Connect Groq.",
+                    "Rawi sends what you say to Groq's Whisper and gets text back in about half a "
+                  + "second, whatever else your Mac is doing. Groq's free tier covers normal "
+                  + "dictation. Your key is kept in ~/.config/rawi/.env, readable only by you.")
+            let hasKey = model.status?.groqKey ?? false
+            item("Groq key", hasKey ? "Saved and working." : "Create one at console.groq.com/keys, then paste it here.",
+                 done: hasKey, required: true) {
+                secondary("Get a key") { NSWorkspace.shared.open(GroqKey.consoleURL) }
+            }
+            HStack(spacing: 10) {
+                SecureField(hasKey ? "Paste a new key to replace it" : "gsk_…", text: $model.groqKeyInput)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: TypeScale.body).monospaced())
+                    .foregroundStyle(c(.bone))
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
+                    .onSubmit(model.saveGroqKey)
+                if model.checkingKey {
+                    ProgressView().controlSize(.small)
+                } else {
+                    primary("Save key", model.saveGroqKey)
+                        .disabled(model.groqKeyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            problemText
+            let localSize = (ModelStore.recommended.approxBytes + ModelStore.detector.approxBytes) / 1_048_576
+            Text("Rather keep everything on this Mac? It is slower, and needs a \(localSize) MB download.")
+                .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
+            secondary("Transcribe on this Mac instead", model.useLocalTranscription)
+        }
+    }
+
+    private var localModels: some View {
         VStack(alignment: .leading, spacing: 12) {
             let turbo = ModelStore.model(forPath: model.config.whispercpp.model) ?? ModelStore.recommended
             heading("Download the speech model.",
@@ -423,10 +510,30 @@ public struct SetupView: View {
                 primary("Download", model.downloadModels)
             }
             problemText
+            secondary("Use Groq instead, it is faster", model.useGroqTranscription)
         }
     }
 
-    private var polish: some View {
+    @ViewBuilder private var polish: some View {
+        if model.config.cleanup.provider == .groq { groqPolish } else { localPolish }
+    }
+
+    private var groqPolish: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            heading("Polish what you say.",
+                    "Groq removes filler, applies the corrections you speak (\u{201C}Monday, no, "
+                  + "Tuesday\u{201D}) and breaks long dictations into paragraphs, in about half a "
+                  + "second. Anything with Arabic goes to a model that keeps it Arabic.")
+            let hasKey = model.status?.groqKey ?? false
+            item("Polish on Groq", hasKey ? "On, with your Groq key." : "Needs your Groq key from the previous step.",
+                 done: hasKey, required: false) {
+                if !hasKey { secondary("Add key") { model.step = .models } }
+            }
+            secondary("Turn polish off", model.skipPolish)
+        }
+    }
+
+    private var localPolish: some View {
         VStack(alignment: .leading, spacing: 12) {
             heading("Polish what you say.",
                     "A small language model on this Mac removes filler, applies the corrections you speak "

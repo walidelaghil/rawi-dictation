@@ -124,6 +124,9 @@ public final class DictationController {
     /// transform runner, because both are the same provider graph the app already
     /// builds, and the controller has no business building providers.
     public var polisher: (any CleanupProvider)?
+    /// Plans one paragraph per idea in a long dictation. Set from outside, and
+    /// only when transcription already goes to the cloud. See `IdeaParagraphs`.
+    public var paragraphPlanner: (any ParagraphPlanner)?
 
     /// Fired with the transform that ran, for the log and the menu.
     public var onTransform: ((TransformRunner.Outcome) -> Void)?
@@ -628,7 +631,11 @@ public final class DictationController {
         // "first…, second…, third…" is a list, and here it becomes one. Last,
         // because it is the only stage that adds line breaks, and every stage
         // before it reads the text as one line.
-        if config.output.formatSpokenLists { text = SpokenStructure.format(text) }
+        if config.output.formatSpokenLists {
+            let ideas = await ideaParagraphs(text)
+            if cancelled { publish(.idle, for: gen); return }
+            text = SpokenStructure.format(text, ideas: ideas)
+        }
 
         stageTimings.cleanup = cleanupStarted.duration(to: .now).milliseconds
         let insertStarted = ContinuousClock.now
@@ -752,6 +759,24 @@ public final class DictationController {
     ///
     /// Each piece is guarded on its own and falls back to its own words, so one
     /// piece the model mishandles costs that piece and not the dictation.
+    /// One paragraph per idea, or nil to leave the text as one block. Never fails a
+    /// dictation: an error or a slow answer costs the paragraphs, not the words.
+    private func ideaParagraphs(_ text: String) async -> [String]? {
+        guard let paragraphPlanner, IdeaParagraphs.worthPlanning(text) else { return nil }
+        let began = ContinuousClock.now
+        do {
+            let ideas = try await IdeaParagraphs.plan(text, using: paragraphPlanner)
+            log.info("Paragraphs: \(ideas?.count ?? 1) in \(began.duration(to: .now).milliseconds)ms")
+            return ideas
+        } catch {
+            log.warn("""
+                Paragraphs skipped (\(error.localizedDescription)) after \
+                \(began.duration(to: .now).milliseconds)ms
+                """)
+            return nil
+        }
+    }
+
     private func polished(_ raw: String, instruction: String,
                           using polisher: any CleanupProvider) async throws -> String {
         let pieces = PolishChunks.split(raw)

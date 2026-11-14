@@ -258,7 +258,13 @@ import SwiftUI
                     transcriptionModel: model, detectorModel: detector, ollamaReachable: ollama,
                     ollamaMissing: missing)
     }
-    var polishOn: Config { var c = Config.default; c.cleanup.provider = .ollama; return c }
+    var polishOn: Config {
+        var c = Config.default
+        c.engine = .whispercpp
+        c.cleanup.provider = .ollama
+        c.cleanup.models = CleanupProviderFactory.defaultModels(for: .ollama)
+        return c
+    }
 
     @Test("a finished setup has nothing outstanding") func complete() {
         let list = SetupChecklist.make(status: status(), config: polishOn)
@@ -354,6 +360,7 @@ import SwiftUI
 @Suite("Checklist rows are distinct") struct ChecklistIdentityTests {
     @Test("two items on one step still have their own identity") func ids() {
         var config = Config.default
+        config.engine = .whispercpp
         config.cleanup.provider = .ollama
         let list = SetupChecklist.make(
             status: SetupStatus(microphone: true, accessibility: true, inputMonitoring: true,

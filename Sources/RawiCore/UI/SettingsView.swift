@@ -480,6 +480,10 @@ public struct SettingsView: View {
                     model.config.cleanup.provider = kind
                     if kind != .off {
                         model.config.cleanup.models = CleanupProviderFactory.defaultModels(for: kind)
+                        // A pinned model belongs to the provider it was pinned on:
+                        // "gemma3:4b" is an Ollama name no hosted API has.
+                        model.config.cleanup.transformModel = ""
+                        model.config.cleanup.polishModel = ""
                     }
                     model.save()
                 }
@@ -502,6 +506,12 @@ public struct SettingsView: View {
                     modelRow("Cleaning English and other Latin", keyPath: \.latin)
                     modelRow("Cleaning Arabic, and all rewriting", keyPath: \.arabic)
                     transformModelRow
+                case .groq:
+                    Text("Cleans in about half a second, with the same Groq key as "
+                       + "transcription. The transcript goes to Groq, as the audio already "
+                       + "does. Model: \(model.config.cleanup.models.latin)")
+                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
+                    transformModelRow
                 case .openai, .anthropic:
                     Text("Transcripts leave your machine with this provider. One model "
                        + "serves both scripts: \(model.config.cleanup.models.latin)")
@@ -515,6 +525,7 @@ public struct SettingsView: View {
         switch kind {
         case .off: "Off, insert exactly what was heard"
         case .ollama: "Ollama, on this Mac"
+        case .groq: "Groq, fast (recommended)"
         case .openai: "OpenAI API"
         case .anthropic: "Anthropic API"
         }

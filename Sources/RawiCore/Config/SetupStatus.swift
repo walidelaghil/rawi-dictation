@@ -13,10 +13,12 @@ public struct SetupStatus: Sendable, Equatable {
     public var detectorModel: Bool
     public var ollamaReachable: Bool
     public var ollamaMissing: [String]
+    /// A Groq key is in `.env`. Transcription and polish need it when they run on Groq.
+    public var groqKey: Bool
 
     public init(microphone: Bool, accessibility: Bool, inputMonitoring: Bool,
                 whisperInstalled: Bool, transcriptionModel: Bool, detectorModel: Bool,
-                ollamaReachable: Bool, ollamaMissing: [String]) {
+                ollamaReachable: Bool, ollamaMissing: [String], groqKey: Bool = false) {
         self.microphone = microphone
         self.accessibility = accessibility
         self.inputMonitoring = inputMonitoring
@@ -25,6 +27,7 @@ public struct SetupStatus: Sendable, Equatable {
         self.detectorModel = detectorModel
         self.ollamaReachable = ollamaReachable
         self.ollamaMissing = ollamaMissing
+        self.groqKey = groqKey
     }
 
     /// Enough to dictate at all. Everything else makes it better, not possible.
@@ -33,12 +36,18 @@ public struct SetupStatus: Sendable, Equatable {
     /// Polish and transforms are optional, but only once decided: either Ollama is
     /// ready, or cleanup is off.
     public func polishReady(provider: CleanupKind) -> Bool {
-        provider != .ollama || (ollamaReachable && ollamaMissing.isEmpty)
+        switch provider {
+        case .ollama: ollamaReachable && ollamaMissing.isEmpty
+        case .groq: groqKey
+        case .openai, .anthropic, .off: true
+        }
     }
 
     public static func current(config: Config) async -> SetupStatus {
         let permissions = Permissions.current()
-        let transcription = config.engine != .whispercpp
+        let groqKey = GroqKey.isSet(in: DotEnv.load(from: Config.envFile))
+        let transcription = config.engine == .groq ? groqKey
+            : config.engine != .whispercpp
             || ModelStore.model(forPath: config.whispercpp.model).map(ModelStore.isInstalled)
             ?? FileManager.default.fileExists(atPath: Config.expand(config.whispercpp.model))
         let detector = config.whispercpp.language != "auto"
@@ -67,7 +76,7 @@ public struct SetupStatus: Sendable, Equatable {
                            inputMonitoring: permissions.inputMonitoring,
                            whisperInstalled: whisper, transcriptionModel: transcription,
                            detectorModel: detector, ollamaReachable: reachable,
-                           ollamaMissing: missing)
+                           ollamaMissing: missing, groqKey: groqKey)
     }
 }
 
@@ -112,7 +121,9 @@ public struct SetupChecklist: Sendable, Equatable {
                                      + "Learning spellings from your corrections is off too.",
                                done: status.accessibility, required: false),
             SetupChecklistItem(step: .models, title: "Speech model",
-                               detail: status.whisperInstalled
+                               detail: config.engine == .groq
+                                   ? "Add your Groq key, or transcribe on this Mac instead."
+                                   : status.whisperInstalled
                                    ? "The model is not downloaded yet."
                                    : "whisper.cpp is not installed yet.",
                                done: status.whisperInstalled && status.transcriptionModel,
@@ -126,6 +137,12 @@ public struct SetupChecklist: Sendable, Equatable {
         }
         // Polish counts as done when it is off: that is a choice, not a gap. When it
         // is on, it has to actually work.
+        if config.cleanup.provider == .groq, config.engine != .groq {
+            items.append(SetupChecklistItem(
+                step: .polish, title: "Polish",
+                detail: "Polish runs on Groq and needs your Groq key.",
+                done: status.groqKey, required: false))
+        }
         if config.cleanup.provider == .ollama {
             items.append(SetupChecklistItem(
                 step: .polish, title: "Polish",

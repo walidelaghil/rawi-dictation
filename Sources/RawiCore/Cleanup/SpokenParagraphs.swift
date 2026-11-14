@@ -108,4 +108,20 @@ public enum SpokenStructure {
             .map(SpokenLists.format)
             .joined(separator: "\n\n")
     }
+
+    /// The same, with paragraphs already planned by idea (`IdeaParagraphs`). The
+    /// spoken-opener rule still applies inside each one.
+    ///
+    /// A spoken list wins. "First…, second…, third…" spans exactly the sentences an
+    /// idea planner puts in separate paragraphs, and cut apart, no piece has the
+    /// two ordinals it takes to be a list.
+    public static func format(_ text: String, ideas: [String]?) -> String {
+        let plain = format(text)
+        guard let ideas, ideas.count > 1 else { return plain }
+        let hasList = SpokenParagraphs.split(text).contains { SpokenLists.format($0) != $0 }
+        guard !hasList else { return plain }
+        return ideas.flatMap(SpokenParagraphs.split)
+            .map(SpokenLists.format)
+            .joined(separator: "\n\n")
+    }
 }

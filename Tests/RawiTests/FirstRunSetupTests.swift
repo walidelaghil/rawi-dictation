@@ -9,8 +9,12 @@ import Testing
                multilingualModelFound: multi ?? model)
     }
 
-    @Test("local whisper wins when binary and model are present") func localEngine() {
-        #expect(FirstRunSetup.detect(probes(env: ["GROQ_API_KEY"])).engine == .whispercpp)
+    @Test("a Groq key wins even when local whisper is installed") func groqFirst() {
+        #expect(FirstRunSetup.detect(probes(env: ["GROQ_API_KEY"])).engine == .groq)
+    }
+
+    @Test("local whisper is used when installed and there is no Groq key") func localEngine() {
+        #expect(FirstRunSetup.detect(probes()).engine == .whispercpp)
     }
 
     @Test("falls back to groq when the model is missing") func groqFallback() {
@@ -27,8 +31,8 @@ import Testing
         #expect(FirstRunSetup.detect(p).engine == .groq)
     }
 
-    @Test("with nothing available it still names a working local engine") func nothing() {
-        #expect(FirstRunSetup.detect(probes(bin: false, model: false)).engine == .whispercpp)
+    @Test("with nothing available it stays on Groq, and setup asks for the key") func nothing() {
+        #expect(FirstRunSetup.detect(probes(bin: false, model: false)).engine == .groq)
     }
 
     @Test("openai key wins for cleanup") func cleanupOpenAI() {

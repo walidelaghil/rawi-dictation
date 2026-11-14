@@ -236,11 +236,12 @@ struct MainWindowView: View {
 
             SetupChecklistCard(model: setup, appearance: history.appearance)
 
+            let privacy = PrivacyNote.describe(settings.config)
             VStack(alignment: .leading, spacing: 3) {
-                Text("Stays on this Mac")
+                Text(privacy.title)
                     .font(.system(size: TypeScale.small, weight: .semibold))
                     .foregroundStyle(c(.verdigris))
-                Text("No account, no upload, no sync")
+                Text(privacy.detail)
                     .font(.system(size: TypeScale.small))
                     .foregroundStyle(c(.faint))
             }

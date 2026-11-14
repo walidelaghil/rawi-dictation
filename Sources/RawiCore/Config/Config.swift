@@ -5,7 +5,7 @@ public enum EngineKind: String, Codable, Sendable, CaseIterable {
 }
 
 public enum CleanupKind: String, Codable, Sendable, CaseIterable {
-    case openai, anthropic, ollama, off
+    case groq, openai, anthropic, ollama, off
 }
 
 public struct WhisperCppSettings: Codable, Sendable, Equatable {
@@ -51,6 +51,8 @@ public struct WhisperCppSettings: Codable, Sendable, Equatable {
 public struct APISettings: Codable, Sendable, Equatable {
     public var groqModel: String
     public var openaiModel: String
+    /// The chat model that plans paragraphs. See `GroqParagraphPlanner`.
+    public var groqParagraphModel: String = GroqParagraphPlanner.defaultModel
 
     public init(groqModel: String, openaiModel: String) {
         self.groqModel = groqModel; self.openaiModel = openaiModel
@@ -61,6 +63,8 @@ public struct APISettings: Codable, Sendable, Equatable {
         let d = Config.defaultAPI
         groqModel = try c.decodeIfPresent(String.self, forKey: .groqModel) ?? d.groqModel
         openaiModel = try c.decodeIfPresent(String.self, forKey: .openaiModel) ?? d.openaiModel
+        groqParagraphModel = try c.decodeIfPresent(String.self, forKey: .groqParagraphModel)
+            ?? GroqParagraphPlanner.defaultModel
     }
 }
 
@@ -152,7 +156,9 @@ public struct CleanupSettings: Codable, Sendable, Equatable {
             models = explicit
         } else if let legacy = try c.decodeIfPresent(String.self, forKey: .legacyModel) {
             // A v1 config only ever named an English-capable model, so it maps to latin.
-            models = CleanupModels(latin: legacy, arabic: d.models.arabic)
+            // And it was an Ollama setup, so its Arabic partner is the local one.
+            models = CleanupModels(latin: legacy,
+                                   arabic: CleanupProviderFactory.defaultModels(for: .ollama).arabic)
         } else {
             models = d.models
         }
@@ -186,6 +192,8 @@ public struct OutputSettings: Codable, Sendable, Equatable {
     public var deliverRawFirst: Bool = true
     /// Lay a spoken enumeration out as a numbered list.
     public var formatSpokenLists: Bool = true
+    /// Break a long dictation into one paragraph per idea (cloud engine only).
+    public var ideaParagraphs: Bool = true
 
     public init(restorePreviousClipboard: Bool, restoreDelayMs: Int,
                 deliverRawFirst: Bool = true, formatSpokenLists: Bool = true) {
@@ -203,6 +211,8 @@ public struct OutputSettings: Codable, Sendable, Equatable {
         restoreDelayMs = try c.decodeIfPresent(Int.self, forKey: .restoreDelayMs) ?? d.restoreDelayMs
         deliverRawFirst = try c.decodeIfPresent(Bool.self, forKey: .deliverRawFirst)
             ?? d.deliverRawFirst
+        formatSpokenLists = try c.decodeIfPresent(Bool.self, forKey: .formatSpokenLists) ?? true
+        ideaParagraphs = try c.decodeIfPresent(Bool.self, forKey: .ideaParagraphs) ?? true
     }
 }
 
@@ -318,9 +328,11 @@ public struct Config: Codable, Sendable, Equatable {
         groqModel: "whisper-large-v3-turbo",
         openaiModel: "whisper-1")
 
+    /// Groq by default, like transcription: about 0.4 s against a measured median
+    /// 3 s (and 18 s at worst) for the local Ollama pair on a 16 GB Mac.
     public static let defaultCleanup = CleanupSettings(
-        provider: .off,
-        models: CleanupModels(latin: "qwen2.5:1.5b", arabic: "qwen2.5:3b"),
+        provider: .groq,
+        models: CleanupModels(latin: "qwen/qwen3.8-27b", arabic: "openai/gpt-oss-120b"),
         prompt: defaultCleanupPrompt)
 
     public static let defaultOutput = OutputSettings(
@@ -345,7 +357,7 @@ public struct Config: Codable, Sendable, Equatable {
         fallbackHotkey: "ctrl+option+space",
         cancelHotkey: "ctrl+option+escape",
         transformHotkey: "ctrl+option+t",
-        engine: .whispercpp,
+        engine: .groq,
         whispercpp: defaultWhisperCpp,
         api: defaultAPI,
         cleanup: defaultCleanup,

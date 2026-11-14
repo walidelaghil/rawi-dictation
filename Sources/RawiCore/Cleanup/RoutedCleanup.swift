@@ -10,6 +10,8 @@ import Foundation
 /// connection and most sessions only ever touch one script.
 public final class RoutedCleanup: CleanupProvider, @unchecked Sendable {
     private let models: CleanupModels
+    /// Share of Arabic letters that sends a transcript to the Arabic model.
+    private let arabicThreshold: Double
     private let makeProvider: (String) -> any CleanupProvider
 
     private let lock = NSLock()
@@ -22,6 +24,10 @@ public final class RoutedCleanup: CleanupProvider, @unchecked Sendable {
                 prompt: String, glossary: String = "",
                 makeProvider: ((String) -> any CleanupProvider)? = nil) {
         self.models = models
+        // On Groq a single Arabic word is enough: the fast model translated
+        // "يعني they liked the demo بس they want" into English, and the larger
+        // one costs a quarter of a second, not the seconds a local model did.
+        self.arabicThreshold = kind == .groq ? 0.000_1 : 0.15
         let full = glossary.isEmpty ? prompt : prompt + glossary
         self.makeProvider = makeProvider ?? { model in
             ChatCleanup(kind: kind, apiKey: apiKey, model: model, prompt: full)
@@ -31,7 +37,7 @@ public final class RoutedCleanup: CleanupProvider, @unchecked Sendable {
     /// The model that would serve this transcript. Exposed so the log can say
     /// which one ran without having to run it.
     public func model(for transcript: String) -> String {
-        models.model(for: ScriptDetector.detect(transcript))
+        models.model(for: ScriptDetector.detect(transcript, threshold: arabicThreshold))
     }
 
     public func clean(_ transcript: String, instruction: String = "") async throws -> String {
