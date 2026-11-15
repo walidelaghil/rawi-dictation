@@ -13,7 +13,7 @@ APP           := build/Rawi.app
 INSTALLED     := $(INSTALL_DIR)/Rawi.app
 BIN           := .build/release/Rawi
 
-.PHONY: all build bundle install uninstall run test clean warm doctor icon coreml
+.PHONY: all build bundle install uninstall run test clean warm doctor icon coreml release
 
 # The icon on its own, for looking at it without installing.
 icon: build
@@ -72,6 +72,22 @@ install: bundle
 	@echo "Installed to $(INSTALLED)"
 	@echo "Check setup with: $(INSTALLED)/Contents/MacOS/Rawi --doctor"
 	@echo "Then grant Input Monitoring and Accessibility -- see README section 2."
+
+# A zip for the GitHub release page. Signed ad-hoc, never with a local
+# certificate: nobody else has yours, and the zip must not depend on this keychain.
+# Ad-hoc is not notarized, so macOS asks the downloader to approve it once; the
+# README says how. `ditto` keeps the bundle intact where `zip` can break it.
+VERSION := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+ARCH    := $(shell uname -m)
+ZIP     := build/Rawi-$(VERSION)-$(ARCH).zip
+
+release:
+	$(MAKE) bundle SIGN_IDENTITY=-
+	codesign --verify --strict $(APP)
+	rm -f $(ZIP)
+	ditto -c -k --keepParent $(APP) $(ZIP)
+	@shasum -a 256 $(ZIP) | tee $(ZIP).sha256
+	@echo "Built $(ZIP)"
 
 uninstall:
 	-pkill -x Rawi

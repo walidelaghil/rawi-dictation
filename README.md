@@ -35,6 +35,25 @@ default, with your own free key; everything can run on this Mac instead.
 
 ## 1. Install
 
+### Download (no Xcode needed)
+
+Take `Rawi-<version>-arm64.zip` from the
+[Releases page](https://github.com/walidelaghil/rawi-dictation/releases), unzip it,
+and drag `Rawi.app` into Applications. It needs an Apple silicon Mac on macOS 14 or
+later.
+
+Rawi is not notarized by Apple (that needs a paid developer account), so macOS
+blocks the first launch. Allow it once, either way:
+
+- right-click `Rawi.app`, choose **Open**, then **Open** again; or
+- run `xattr -dr com.apple.quarantine /Applications/Rawi.app` and open it normally.
+
+Because the download is signed ad-hoc, macOS ties the Accessibility and Input
+Monitoring grants to that exact build. Installing an update means granting them
+again (section 4 explains why, and how building from source avoids it).
+
+### Build from source
+
 ```bash
 make install
 open ~/Applications/Rawi.app
@@ -831,8 +850,7 @@ Logs: `~/Library/Logs/Rawi/rawi.log` (rotates at 5 MB).
 Architecture: a `DictationController` state machine drives
 `AudioRecorder → TranscriptionEngine → CleanupProvider → TextInserter`, each behind
 a protocol so it is swappable and testable with fakes. Design notes are in
-[`docs/superpowers/specs/`](docs/superpowers/specs/) and the build plan in
-[`docs/superpowers/plans/`](docs/superpowers/plans/).
+[`docs/superpowers/specs/`](docs/superpowers/specs/).
 
 ## 12. Privacy
 
