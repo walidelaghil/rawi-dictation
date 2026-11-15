@@ -31,6 +31,13 @@ default, with your own free key; everything can run on this Mac instead.
   you exactly what it is about to do.
 - Menu bar toggle, launch at login, and a plain JSON settings file.
 
+<p align="center">
+  <img src="docs/images/menu-panel.png" alt="The Rawi menu bar panel: Dictate and Transform, with recent dictations tagged EN, AR and TR" width="300">
+  &nbsp;&nbsp;
+  <img src="docs/images/history.png" alt="Rawi History: every dictation with what was heard, filterable by language and app" width="560">
+</p>
+<p align="center"><sub>The menu bar panel and History. Screens are rendered from the app's own views with sample entries.</sub></p>
+
 ---
 
 ## 1. Install
@@ -757,6 +764,9 @@ yours to set.
 
 Transform rows are excluded from the spoken-word figures. That text was on your
 clipboard, not in your voice.
+
+<p align="center"><img src="docs/images/insights.png" alt="Rawi Insights: words per minute, words dictated, where you dictate, streak and Arabic share" width="560"></p>
+<p align="center"><sub>Insights, rendered with sample data.</sub></p>
 
 ## 9b. Your dictionary, and what it learns
 
