@@ -1,5 +1,5 @@
 import os,re,json,sys,time,subprocess,concurrent.futures as cf
-REPO="/Users/w.elaghil/Downloads/Personal - Downloads/Elden Studio/Rawi App/.claude/worktrees/rawi-performance-optimization-85195c"
+REPO=os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..','..'))
 for l in open(os.path.expanduser("~/.config/rawi/.env")):
     if l.startswith("GROQ_API_KEY="): KEY=l.split("=",1)[1].strip().strip('"')
 src=open(REPO+"/Sources/RawiCore/Cleanup/PolishPrompt.swift").read()
