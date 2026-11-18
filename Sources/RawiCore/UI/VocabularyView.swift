@@ -9,6 +9,16 @@ public final class VocabularyViewModel: ObservableObject {
     @Published public var newTerm = ""
     @Published public var newTrigger = ""
     @Published public var newExpansion = ""
+    @Published public var newSensitive = false
+    @Published public var query = ""
+    @Published public var editingID: UUID?
+    @Published public var editTrigger = ""
+    @Published public var editExpansion = ""
+    @Published public var editSensitive = false
+    /// Shown as "Removed. Undo" for a few seconds after a delete.
+    @Published public var undoMessage: String?
+    private var undoAction: (() -> Void)?
+    private var undoTask: Task<Void, Never>?
 
     private let store: VocabularyStore
     private let history: HistoryStore
@@ -60,14 +70,69 @@ public final class VocabularyViewModel: ObservableObject {
         newTerm = ""
         reload()
     }
-    public func removeTerm(_ term: DictionaryTerm) { store.removeTerm(term.id); reload() }
+    public func removeTerm(_ term: DictionaryTerm) {
+        let index = terms.firstIndex(of: term) ?? terms.count
+        store.removeTerm(term.id); reload()
+        offerUndo("Removed “\(term.term)”") { [store] in store.restoreTerm(term, at: index) }
+    }
 
-    public func addSnippet() {
-        guard store.addSnippet(trigger: newTrigger, expansion: newExpansion) else { return }
-        newTrigger = ""; newExpansion = ""
+    private func offerUndo(_ message: String, _ action: @escaping () -> Void) {
+        undoMessage = message
+        undoAction = action
+        undoTask?.cancel()
+        undoTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(6))
+            if !Task.isCancelled { undoMessage = nil; undoAction = nil }
+        }
+    }
+
+    public func undo() {
+        undoAction?()
+        undoMessage = nil; undoAction = nil; undoTask?.cancel()
         reload()
     }
-    public func removeSnippet(_ snippet: Snippet) { store.removeSnippet(snippet.id); reload() }
+
+    public func addSnippet() {
+        guard store.addSnippet(trigger: newTrigger, expansion: newExpansion,
+                               sensitive: newSensitive) else { return }
+        newTrigger = ""; newExpansion = ""; newSensitive = false
+        reload()
+    }
+    public func removeSnippet(_ snippet: Snippet) {
+        let index = snippets.firstIndex(of: snippet) ?? snippets.count
+        store.removeSnippet(snippet.id); reload()
+        offerUndo("Removed “\(snippet.trigger)”") { [store] in store.restoreSnippet(snippet, at: index) }
+    }
+
+    public var canAddSnippet: Bool {
+        !newTrigger.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !newExpansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    public var filteredSnippets: [Snippet] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return snippets }
+        // A sensitive snippet matches on its trigger only: searching must not
+        // reveal what is hidden.
+        return snippets.filter {
+            $0.trigger.localizedCaseInsensitiveContains(q)
+                || (!$0.sensitive && $0.expansion.localizedCaseInsensitiveContains(q))
+        }
+    }
+
+    public func beginEditing(_ snippet: Snippet) {
+        editingID = snippet.id
+        editTrigger = snippet.trigger; editExpansion = snippet.expansion
+        editSensitive = snippet.sensitive
+    }
+    public func saveEdit() {
+        guard let id = editingID,
+              store.updateSnippet(id, trigger: editTrigger, expansion: editExpansion,
+                                  sensitive: editSensitive) else { return }
+        editingID = nil
+        reload()
+    }
+    public func cancelEdit() { editingID = nil }
 }
 
 public struct DictionaryScreen: View {
@@ -95,95 +160,71 @@ public struct DictionaryScreen: View {
             } else {
                 RowGroup(appearance: model.appearance) {
                     ForEach(model.terms) { term in
-                      Row(appearance: model.appearance) {
-                        HStack(spacing: 14) {
-                            Text(term.term)
-                                .font(.system(size: TypeScale.heading, weight: .medium))
-                                .foregroundStyle(c(.bone))
-                                .frame(minWidth: 150, alignment: .leading)
-                                .fixedSize()
-                            Text(term.addedAutomatically
-                                 ? term.note
-                                 : (term.note.isEmpty ? "added by you" : term.note))
-                                .font(.system(size: TypeScale.body))
-                                .foregroundStyle(c(.faint))
-                            Spacer(minLength: 8)
-                            Button { model.removeTerm(term) } label: {
-                                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
-                                    .foregroundStyle(c(.faint))
-                            }
-                            .buttonStyle(.plain)
-                            .help(term.addedAutomatically
-                                  ? "Remove, and stop learning this word"
-                                  : "Remove")
-                        }
-                      }
+                      TermRow(term: term, model: model)
                     }
                 }
             }
 
-            HStack(spacing: 9) {
-                TextField("Add a term Rawi has not heard enough yet", text: $model.newTerm)
-                    .textFieldStyle(.plain).font(.system(size: TypeScale.heading))
-                    .foregroundStyle(c(.bone))
-                    .onSubmit { model.addTerm() }
-                Button("Add") { model.addTerm() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: TypeScale.body)).foregroundStyle(c(.saffron))
+            FormCard(appearance: model.appearance) {
+                GrowingField(placeholder: "Add a term Rawi has not heard enough yet",
+                             text: $model.newTerm, lines: 1...3,
+                             size: TypeScale.heading, appearance: model.appearance)
+                HStack {
+                    Spacer()
+                    PrimaryButton(title: "Add term",
+                                  enabled: !model.newTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                  appearance: model.appearance) { model.addTerm() }
+                        .keyboardShortcut(.return, modifiers: .command)
+                }
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
-                .overlay(RoundedRectangle(cornerRadius: Radius.control)
-                    .strokeBorder(c(.edge))))
 
             Spacer()
         }
         .padding(.horizontal, 24).padding(.vertical, 22)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(c(.surface))
+        .overlay(alignment: .bottom) { undoToast(model) }
     }
 }
 
-extension SnippetsScreen {
-    /// Two stacked fields in one card. The expansion grows with what you paste, up to
-    /// eight lines and then scrolls, so you can always read what you are about to save.
-    var snippetForm: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            TextField("When I say…", text: $model.newTrigger)
-                .textFieldStyle(.plain)
-                .font(.system(size: TypeScale.heading, weight: .medium))
-                .foregroundStyle(c(.bone))
-            Rectangle().fill(c(.edge)).frame(height: 1)
-            TextField("…type this", text: $model.newExpansion, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(2...8)
-                .font(.system(size: TypeScale.body))
-                .foregroundStyle(c(.bone))
-                .fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Text("Return adds a new line")
-                    .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
-                Spacer()
-                Button("Add snippet") { model.addSnippet() }
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .buttonStyle(.plain)
-                    .font(.system(size: TypeScale.body, weight: .semibold))
-                    .foregroundStyle(canAdd ? Color.black.opacity(0.85) : c(.faint))
-                    .padding(.horizontal, 14).padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: Radius.control)
-                        .fill(canAdd ? c(.saffron) : c(.raised)))
-                    .disabled(!canAdd)
-                    .help("Add (⌘Return)")
+/// Shared by Dictionary and Snippets.
+@MainActor @ViewBuilder
+func undoToast(_ model: VocabularyViewModel) -> some View {
+    if let message = model.undoMessage {
+        UndoToast(message: message, appearance: model.appearance) {
+            withAnimation(.easeOut(duration: 0.15)) { model.undo() }
+        }
+        .padding(.bottom, 18)
+    }
+}
+
+struct TermRow: View {
+    let term: DictionaryTerm
+    @ObservedObject var model: VocabularyViewModel
+    @State private var hovered = false
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, model.appearance) }
+
+    var body: some View {
+        Row(appearance: model.appearance) {
+            HStack(spacing: 14) {
+                Text(term.term)
+                    .font(.system(size: TypeScale.heading, weight: .medium))
+                    .foregroundStyle(c(.bone))
+                    .frame(minWidth: 150, alignment: .leading)
+                    .fixedSize()
+                Text(term.addedAutomatically
+                     ? term.note
+                     : (term.note.isEmpty ? "added by you" : term.note))
+                    .font(.system(size: TypeScale.body))
+                    .foregroundStyle(c(.muted))
+                Spacer(minLength: 8)
+                RemoveButton(visible: hovered,
+                             label: "Remove \(term.term)" + (term.addedAutomatically
+                                 ? ", and stop learning it" : ""),
+                             appearance: model.appearance) { model.removeTerm(term) }
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.ink))
-            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
-    }
-
-    private var canAdd: Bool {
-        !model.newTrigger.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !model.newExpansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        .onHover { hovered = $0 }
     }
 }
 
@@ -215,31 +256,88 @@ extension DictionaryScreen {
     }
 }
 
-/// A saved expansion: three lines at rest, all of it on request. Long text used to be
-/// cut at two lines with no way to read the rest.
-struct SnippetExpansionText: View {
-    let text: String
-    let appearance: ResolvedAppearance
+struct SnippetRow: View {
+    let snippet: Snippet
+    @ObservedObject var model: VocabularyViewModel
+    @State private var hovered = false
+    @State private var revealed = false
     @State private var expanded = false
-    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
-    private var isLong: Bool { text.count > 140 || text.contains("\n") }
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, model.appearance) }
+    private var editing: Bool { model.editingID == snippet.id }
+    private var hidden: Bool { snippet.sensitive && !revealed }
+    private var isLong: Bool { snippet.expansion.count > 140 || snippet.expansion.contains("\n") }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(text)
-                .font(.system(size: TypeScale.body))
-                .foregroundStyle(c(.bone))
-                .lineLimit(expanded ? nil : 3)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-            if isLong {
-                Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
+        if editing { editor } else { display }
+    }
+
+    private var display: some View {
+        Row(appearance: model.appearance) {
+            HStack(alignment: .top, spacing: 14) {
+                Text(snippet.trigger)
+                    .font(.system(size: TypeScale.heading, weight: .medium))
+                    .foregroundStyle(c(.bone))
+                    .frame(width: 150, alignment: .leading)
+                Image(systemName: "arrow.right")
+                    .font(.system(size: TypeScale.micro))
+                    .foregroundStyle(c(.muted))
+                    .padding(.top, 4)
+                VStack(alignment: .leading, spacing: 4) {
+                    if hidden {
+                        Text("••••••••").font(.system(size: TypeScale.body)).foregroundStyle(c(.muted))
+                    } else {
+                        Text(snippet.expansion)
+                            .font(.system(size: TypeScale.body))
+                            .foregroundStyle(c(.bone))
+                            .lineLimit(expanded ? nil : 3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if !hidden, isLong {
+                        Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
+                            .buttonStyle(.plain)
+                            .font(.system(size: TypeScale.small)).foregroundStyle(c(.saffron))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if snippet.sensitive {
+                    Button { revealed.toggle() } label: {
+                        Image(systemName: revealed ? "eye.slash" : "eye")
+                            .font(.system(size: TypeScale.body)).foregroundStyle(c(.muted))
+                            .frame(width: 24, height: 24).contentShape(Rectangle())
+                    }
                     .buttonStyle(.plain)
-                    .font(.system(size: TypeScale.small))
-                    .foregroundStyle(c(.saffron))
+                    .accessibilityLabel(revealed ? "Hide the text" : "Show the text")
+                }
+                RemoveButton(visible: hovered, label: "Delete the snippet for \(snippet.trigger)",
+                             appearance: model.appearance) { model.removeSnippet(snippet) }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .onHover { hovered = $0 }
+        .onTapGesture { model.beginEditing(snippet) }
+        .help("Click to edit")
+    }
+
+    private var editor: some View {
+        FormCard(appearance: model.appearance) {
+            GrowingField(placeholder: "When I say…", text: $model.editTrigger, lines: 1...2,
+                         weight: .medium, size: TypeScale.heading, appearance: model.appearance)
+            Rectangle().fill(c(.edge)).frame(height: 1)
+            GrowingField(placeholder: "…type this", text: $model.editExpansion, lines: 2...8,
+                         appearance: model.appearance)
+            HStack(spacing: 12) {
+                Toggle("Hide this text", isOn: $model.editSensitive)
+                    .toggleStyle(.checkbox).font(.system(size: TypeScale.small))
+                    .foregroundStyle(c(.muted))
+                Spacer()
+                Button("Cancel") { model.cancelEdit() }
+                    .buttonStyle(.plain).font(.system(size: TypeScale.body))
+                    .foregroundStyle(c(.muted))
+                    .keyboardShortcut(.escape, modifiers: [])
+                PrimaryButton(title: "Save", appearance: model.appearance) { model.saveEdit() }
+                    .keyboardShortcut(.return, modifiers: .command)
+            }
+        }
+        .padding(.horizontal, 8)
     }
 }
 
@@ -256,41 +354,46 @@ public struct SnippetsScreen: View {
                              + "keyboard expander this only fires while you are speaking, so it "
                              + "cannot surprise you inside a word or a password field.")
 
-            snippetForm
+            FormCard(appearance: model.appearance) {
+                GrowingField(placeholder: "When I say…", text: $model.newTrigger, lines: 1...2,
+                             weight: .medium, size: TypeScale.heading, appearance: model.appearance)
+                Rectangle().fill(c(.edge)).frame(height: 1)
+                GrowingField(placeholder: "…type this", text: $model.newExpansion, lines: 2...8,
+                             appearance: model.appearance)
+                HStack(spacing: 12) {
+                    Toggle("Hide this text (passwords, card numbers)", isOn: $model.newSensitive)
+                        .toggleStyle(.checkbox).font(.system(size: TypeScale.small))
+                        .foregroundStyle(c(.muted))
+                    Spacer()
+                    PrimaryButton(title: "Add snippet", enabled: model.canAddSnippet,
+                                  appearance: model.appearance) { model.addSnippet() }
+                        .keyboardShortcut(.return, modifiers: .command)
+                        .help("Add (⌘Return)")
+                }
+            }
+
+            if model.snippets.count > 3 {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(c(.muted))
+                    TextField("Search snippets", text: $model.query)
+                        .textFieldStyle(.plain).font(.system(size: TypeScale.body))
+                        .foregroundStyle(c(.bone))
+                }
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
+            }
 
             if model.snippets.isEmpty {
                 EmptyHint(title: "No snippets yet.",
                           detail: "Try “my email” or “my calendar”. Anything you say often.",
                           appearance: model.appearance)
+            } else if model.filteredSnippets.isEmpty {
+                EmptyHint(title: "No snippet matches “\(model.query)”.", detail: "",
+                          appearance: model.appearance)
             } else {
                 RowGroup(appearance: model.appearance) {
-                    ForEach(model.snippets) { snippet in
-                      Row(appearance: model.appearance) {
-                        HStack(alignment: .top, spacing: 14) {
-                            // What you say, then what lands. The arrow sits between
-                            // them rather than in front of the expansion, where it
-                            // read as a stray bullet.
-                            Text(snippet.trigger)
-                                .font(.system(size: TypeScale.heading, weight: .medium))
-                                .foregroundStyle(c(.bone))
-                                .frame(minWidth: 130, alignment: .leading)
-                                .fixedSize()
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: TypeScale.micro))
-                                .foregroundStyle(c(.faint))
-                                .padding(.top, 3)
-                            SnippetExpansionText(text: snippet.expansion, appearance: model.appearance)
-                            Spacer(minLength: 8)
-                            Button { model.removeSnippet(snippet) } label: {
-                                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
-                                    .foregroundStyle(c(.faint))
-                            }
-                            .buttonStyle(.plain)
-                            .help("Delete this snippet")
-                            .accessibilityLabel("Delete the snippet for \(snippet.trigger)")
-                        }
-                      }
-                    }
+                    ForEach(model.filteredSnippets) { SnippetRow(snippet: $0, model: model) }
                 }
             }
             Spacer()
@@ -298,9 +401,10 @@ public struct SnippetsScreen: View {
         .padding(.horizontal, 24).padding(.vertical, 22)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(c(.surface))
+        .overlay(alignment: .bottom) { undoToast(model) }
+        .animation(.easeOut(duration: 0.15), value: model.undoMessage)
     }
 }
-
 // MARK: - Shared pieces
 
 struct ScreenHeader: View {

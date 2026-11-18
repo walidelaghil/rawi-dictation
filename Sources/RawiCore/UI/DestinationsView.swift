@@ -153,8 +153,8 @@ public struct DestinationsView: View {
 
                         if !rule.isBuiltIn {
                             Button { model.remove(rule) } label: {
-                                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
-                                    .foregroundStyle(c(.faint))
+                                Image(systemName: "xmark").font(.system(size: TypeScale.small))
+                                    .foregroundStyle(c(.muted)).frame(width: 24, height: 24).contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                             .help("Delete this rule")

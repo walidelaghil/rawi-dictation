@@ -4,18 +4,19 @@ Headings are columns, bullets are cards. `[[double brackets]]` open the full bri
 Say "add this to roadmap" and it goes in the right column.
 
 ## Now
-- Snippets: growing multi-line input, expandable rows — built, awaiting visual check and commit
 
 ## Next
-- [[snippets-editing]] Click a snippet to edit it; search; usage count
-- [[sensitive-snippets]] Mask sensitive snippets (passwords); stop showing them in full
-- [[shared-add-form]] One growing AddForm for Dictionary, Snippets, Transforms, Commands
-- [[home-and-recent]] Home screen with a real Recent list and a stats tile, like Wispr Flow
-
-## Later
-- [[sidebar-grouping]] Group the sidebar: Home / Library / Customize / Settings
-- [[hover-delete-undo]] Hover-only delete with an Undo toast, everywhere
-- [[hit-targets-contrast]] 24pt hit targets, lift shortcut-hint contrast, name icon-only buttons
-- [[menu-panel-polish]] Menu panel: Recent list with copy, consistent Quit row
+- Look at the new screens in the running app and tell me what feels off
+- Undo for deletes on Transforms, Commands, Destinations and History
+- Rename the jargon in the rail (Transforms, Commands, Destinations)?
 
 ## Done
+- Snippets: growing multi-line input, expandable rows
+- [[snippets-editing]] Click to edit, search (when more than 3). Usage count not built: nothing records it yet
+- [[sensitive-snippets]] "Hide this text" with an eye to reveal
+- [[shared-add-form]] Shared growing field and button on Dictionary, Snippets, Transforms. Commands and Destinations keep their own forms
+- [[home-and-recent]] Home screen: three stat tiles and the last five dictations with copy
+- [[sidebar-grouping]] Rail grouped (Customize section). Names kept
+- [[hover-delete-undo]] Hover-only delete with Undo on Snippets and Dictionary. Other screens keep a visible, larger ×
+- [[hit-targets-contrast]] 24pt targets, brighter shortcut hints, labelled icon buttons
+- [[menu-panel-polish]] Recent open by default, last three; proper Quit button

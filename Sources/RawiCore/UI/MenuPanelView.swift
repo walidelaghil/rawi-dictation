@@ -9,7 +9,7 @@ public final class MenuPanelModel: ObservableObject {
     @Published public var detectedLanguage: String?
     @Published public var recent: [RecentDictation] = []
     @Published public var appearance: ResolvedAppearance = .dark
-    @Published public var recentOpen: Bool = false
+    @Published public var recentOpen: Bool = true
     @Published public var motion: MarkMotion = .rest
     /// The shortcuts as bound, not as defaulted.
     @Published public var labels: HotkeyLabels = .placeholder
@@ -221,7 +221,7 @@ public struct MenuPanelView: View {
             VStack(spacing: 0) {
                 // Keyed by position: the rows are rebuilt from history on every
                 // refresh, with fresh ids, and hover must not flicker off when they are.
-                ForEach(Array(model.recent.enumerated()), id: \.element.id) { index, item in
+                ForEach(Array(model.recent.prefix(3).enumerated()), id: \.element.id) { index, item in
                     recentRow(item, index: index)
                 }
             }
@@ -308,9 +308,11 @@ public struct MenuPanelView: View {
                 Image(systemName: "gearshape")
                     .font(.system(size: TypeScale.body))
                     .foregroundStyle(c(.muted))
+                    .frame(width: 24, height: 24).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Settings")
+            .accessibilityLabel("Settings")
             if model.canUndo {
                 Button { model.onUndo?() } label: {
                     Text("Undo transform")
@@ -322,9 +324,18 @@ public struct MenuPanelView: View {
             }
             Spacer()
             Button { model.onQuit?() } label: {
-                Text("Quit").font(.system(size: TypeScale.body)).foregroundStyle(c(.faint))
+                HStack(spacing: 5) {
+                    Image(systemName: "power").font(.system(size: TypeScale.small))
+                    Text("Quit").font(.system(size: TypeScale.body))
+                }
+                .foregroundStyle(hovered == "quit" ? c(.bone) : c(.muted))
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: Radius.control)
+                    .fill(hovered == "quit" ? c(.raised) : .clear))
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .onHover { hovered = $0 ? "quit" : (hovered == "quit" ? nil : hovered) }
         }
         .padding(.horizontal, 15).padding(.vertical, 9)
         // `ink` is darker than `surface` in the dark theme and all but identical to

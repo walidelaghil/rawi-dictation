@@ -16,6 +16,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         set { selection.screen = newValue }
     }
     private let model: HistoryViewModel
+    private let home: HomeViewModel
     private let vocabulary: VocabularyViewModel
     private let destinations: DestinationsViewModel
     private let store: HistoryStore
@@ -36,6 +37,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
                 commandStore: CommandStore = CommandStore(), appearance: ResolvedAppearance) {
         self.store = store
         self.model = HistoryViewModel(store: store)
+        self.home = HomeViewModel(store: store)
         self.vocabulary = VocabularyViewModel(store: vocabularyStore, history: store)
         self.destinations = DestinationsViewModel(store: destinationStore)
         self.transforms = TransformsViewModel(store: transformStore)
@@ -43,6 +45,8 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         self.insights = InsightsViewModel(store: store)
         self.settings = SettingsViewModel()
         super.init()
+        home.onShowHistory = { [weak self] in self?.selected = .history }
+        home.appearance = appearance
         model.appearance = appearance
         vocabulary.appearance = appearance
         destinations.appearance = appearance
@@ -70,6 +74,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     }
 
     public func setAppearance(_ appearance: ResolvedAppearance) {
+        home.appearance = appearance
         model.appearance = appearance
         vocabulary.appearance = appearance
         destinations.appearance = appearance
@@ -93,6 +98,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     }
 
     public func reload() {
+        home.reload()
         model.reload()
         vocabulary.reload()
         destinations.reload()
@@ -114,7 +120,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     /// The window's content, for the proof renders. Rendering a screen on its own
     /// hides density problems that only appear next to the rail at 980 points.
     public func testRootView() -> some View {
-        MainWindowView(history: model, vocabulary: vocabulary, destinations: destinations,
+        MainWindowView(home: home, history: model, vocabulary: vocabulary, destinations: destinations,
                        transforms: transforms, commands: commands, insights: insights,
                        settings: settings, selection: selection, setup: setup)
     }
@@ -134,7 +140,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         window.center()
         selection.closeToken = 0
         window.contentView = NSHostingView(
-            rootView: MainWindowView(history: model, vocabulary: vocabulary,
+            rootView: MainWindowView(home: home, history: model, vocabulary: vocabulary,
                                      destinations: destinations, transforms: transforms,
                                      commands: commands, insights: insights, settings: settings,
                                      selection: selection, setup: setup))
@@ -147,36 +153,47 @@ public final class MainWindow: NSObject, NSWindowDelegate {
 /// Which screen is showing, held outside the view so the menu bar can open one.
 @MainActor
 public final class ScreenSelection: ObservableObject {
-    @Published var screen: Screen = .history
+    @Published var screen: Screen = .home
     /// Bumped to ask the window to close itself from inside SwiftUI.
     @Published var closeToken = 0
 }
 
 public enum Screen: String, CaseIterable {
+    case home = "Home"
     case history = "History"
-    case transforms = "Transforms"
-    case commands = "Commands"
     case insights = "Insights"
     case dictionary = "Dictionary"
     case snippets = "Snippets"
+    case transforms = "Transforms"
+    case commands = "Commands"
     case destinations = "Destinations"
     case settings = "Settings"
 
     var symbol: String {
         switch self {
+        case .home: "house"
         case .history: "clock"
-        case .transforms: "wand.and.sparkles"
-        case .commands: "bolt"
         case .insights: "chart.bar"
         case .dictionary: "character.book.closed"
         case .snippets: "scissors"
+        case .transforms: "wand.and.sparkles"
+        case .commands: "bolt"
         case .destinations: "scope"
         case .settings: "gearshape"
         }
     }
+
+    /// The rail's sections. Nine flat rows read as a list to scan; three groups
+    /// read as a place with a layout.
+    static var groups: [(title: String?, items: [Screen])] { [
+        (nil, [.home, .history, .insights]),
+        ("Customize", [.dictionary, .snippets, .transforms, .commands, .destinations]),
+        (nil, [.settings]),
+    ] }
 }
 
 struct MainWindowView: View {
+    @ObservedObject var home: HomeViewModel
     @ObservedObject var history: HistoryViewModel
     @ObservedObject var vocabulary: VocabularyViewModel
     @ObservedObject var destinations: DestinationsViewModel
@@ -197,6 +214,7 @@ struct MainWindowView: View {
             rail
             Divider().overlay(c(.edge))
             switch screen {
+            case .home: HomeView(model: home, labels: history.labels)
             case .history: HistoryView(model: history)
             case .transforms: TransformsView(model: transforms)
             case .commands: CommandsView(model: commands)
@@ -224,12 +242,22 @@ struct MainWindowView: View {
 
             // Only built screens appear. A greyed row for an unbuilt phase is dead
             // UI that teaches you to stop reading the rail.
-            ForEach(Screen.allCases, id: \.self) { item in
-                Button { selection.screen = item } label: {
-                    railRow(item.rawValue, symbol: item.symbol, selected: screen == item,
-                            shortcut: (Screen.allCases.firstIndex(of: item) ?? 0) + 1)
+            ForEach(Array(Screen.groups.enumerated()), id: \.offset) { index, group in
+                if index > 0 { Spacer().frame(height: group.title == nil ? 10 : 6) }
+                if let title = group.title {
+                    Text(title.uppercased())
+                        .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
+                        .tracking(1.2)
+                        .foregroundStyle(c(.muted))
+                        .padding(.horizontal, 9).padding(.bottom, 2)
                 }
-                .buttonStyle(.plain)
+                ForEach(group.items, id: \.self) { item in
+                    Button { selection.screen = item } label: {
+                        railRow(item.rawValue, symbol: item.symbol, selected: screen == item,
+                                shortcut: (Screen.allCases.firstIndex(of: item) ?? 0) + 1)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
             Spacer()
@@ -264,7 +292,7 @@ struct MainWindowView: View {
             // ever learns one.
             Text("⌘\(shortcut)")
                 .font(.system(size: TypeScale.micro).monospaced())
-                .foregroundStyle(selected ? c(.muted) : c(.faint))
+                .foregroundStyle(c(.muted))
         }
         .foregroundStyle(selected ? c(.bone) : c(.muted))
         .padding(.horizontal, 9).padding(.vertical, 7)

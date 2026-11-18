@@ -441,11 +441,12 @@ public struct HistoryView: View {
             }
 
             Button { model.delete(entry) } label: {
-                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
-                    .foregroundStyle(c(.faint))
+                Image(systemName: "xmark").font(.system(size: TypeScale.small))
+                    .foregroundStyle(c(.muted)).frame(width: 24, height: 24).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Delete this entry")
+            .accessibilityLabel("Delete this entry")
         }
     }
 }

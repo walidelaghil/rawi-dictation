@@ -34,3 +34,23 @@ Each entry: **Asked** (what you wanted) · **Decided** (and why) · **Shipped** 
 
 **Shipped**
 - how_we_work.md updated. Snippets fix pushed to origin.
+
+---
+
+## 2026-11-18 — Rest of the design critique
+
+**Asked**
+- Fix everything else from the critique. No prototype needed.
+
+**Decided**
+- Kept the screen names (Transforms, Commands, Destinations); only grouped the rail. Why: they are feature names used in the README.
+- Undo only on Snippets and Dictionary for now. Why: their store could restore cleanly; the others need more work.
+- Skipped a snippet usage count: nothing records usage yet.
+
+**Shipped**
+- Snippets: edit in place, search, hide sensitive text, hover-only delete with Undo.
+- One growing field and button used on Dictionary, Snippets and Transforms.
+- New Home screen (stats and last five dictations); rail grouped; Home opens first, shortcuts ⌘1–⌘9 follow rail order.
+- Bigger click targets, brighter shortcut hints, labels on icon buttons.
+- Menu panel: Recent open by default (last three), proper Quit button.
+- All 868 tests pass. Not yet looked at in the running app.

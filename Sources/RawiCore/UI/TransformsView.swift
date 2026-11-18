@@ -281,14 +281,16 @@ public struct TransformsView: View {
                             }.buttonStyle(.plain).help("Put the shipped wording back")
                         }
                         Button { model.beginEditing(transform) } label: {
-                            Image(systemName: "pencil").font(.system(size: TypeScale.micro))
-                                .foregroundStyle(c(.faint))
+                            Image(systemName: "pencil").font(.system(size: TypeScale.small))
+                                .foregroundStyle(c(.muted)).frame(width: 24, height: 24).contentShape(Rectangle())
                         }.buttonStyle(.plain).help("Edit this transform")
+                            .accessibilityLabel("Edit \(transform.name)")
                         if !transform.isBuiltIn {
                             Button { model.remove(transform) } label: {
-                                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
-                                    .foregroundStyle(c(.faint))
+                                Image(systemName: "xmark").font(.system(size: TypeScale.small))
+                                    .foregroundStyle(c(.muted)).frame(width: 24, height: 24).contentShape(Rectangle())
                             }.buttonStyle(.plain).help("Delete")
+                                .accessibilityLabel("Delete \(transform.name)")
                         }
                     }
                     if model.editingID == transform.id {
@@ -314,26 +316,16 @@ public struct TransformsView: View {
         VStack(alignment: .leading, spacing: 9) {
             Text("Add a transform").font(.system(size: TypeScale.body, weight: .semibold))
                 .foregroundStyle(c(.bone))
-            HStack(spacing: 9) {
-                TextField("Name, what you will say", text: $model.draftName)
-                    .textFieldStyle(.plain).font(.system(size: TypeScale.body))
-                    .padding(8).frame(width: 200)
-                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
-                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
-                TextField("Instruction, what the model should do", text: $model.draftInstruction)
-                    .textFieldStyle(.plain).font(.system(size: TypeScale.body))
-                    .padding(8)
-                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
-                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
-                Button { model.add() } label: {
-                    Text("Add").font(.system(size: TypeScale.small, weight: .medium))
-                        .foregroundStyle(c(.ink))
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.bone)))
-                }
-                .buttonStyle(.plain)
-                .disabled(!model.canAdd)
-                .opacity(model.canAdd ? 1 : 0.4)
+            GrowingField(placeholder: "Name, what you will say", text: $model.draftName,
+                         lines: 1...2, weight: .medium, appearance: model.appearance)
+            Rectangle().fill(c(.edge)).frame(height: 1)
+            GrowingField(placeholder: "Instruction, what the model should do",
+                         text: $model.draftInstruction, lines: 2...8, appearance: model.appearance)
+            HStack {
+                Spacer()
+                PrimaryButton(title: "Add transform", enabled: model.canAdd,
+                              appearance: model.appearance) { model.add() }
+                    .keyboardShortcut(.return, modifiers: .command)
             }
         }
         .padding(14)

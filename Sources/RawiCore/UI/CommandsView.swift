@@ -186,15 +186,16 @@ public struct CommandsView: View {
                 Spacer(minLength: 8)
                 Button { model.editing = model.editing == command.id ? nil : command.id } label: {
                     Image(systemName: "slider.horizontal.3").font(.system(size: TypeScale.body))
-                        .foregroundStyle(model.editing == command.id ? c(.saffron) : c(.faint))
+                        .foregroundStyle(model.editing == command.id ? c(.saffron) : c(.muted))
+                        .frame(width: 24, height: 24).contentShape(Rectangle())
                 }
-                .buttonStyle(.plain).help("Edit")
+                .buttonStyle(.plain).help("Edit").accessibilityLabel("Edit \(command.phrase)")
                 if !command.isBuiltIn {
                     Button { model.remove(command) } label: {
-                        Image(systemName: "xmark").font(.system(size: TypeScale.micro))
-                            .foregroundStyle(c(.faint))
+                        Image(systemName: "xmark").font(.system(size: TypeScale.small))
+                            .foregroundStyle(c(.muted)).frame(width: 24, height: 24).contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain).help("Delete")
+                    .buttonStyle(.plain).help("Delete").accessibilityLabel("Delete \(command.phrase)")
                 }
             }
             if model.editing == command.id { editor(command) }
