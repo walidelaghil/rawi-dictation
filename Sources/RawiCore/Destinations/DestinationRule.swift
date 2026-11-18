@@ -123,6 +123,21 @@ public final class DestinationStore: @unchecked Sendable {
         }
     }
 
+    /// Changes what a rule matches and says (click-to-edit). Built-ins stay as shipped.
+    public func update(_ id: UUID, name: String, bundleIDs: [String], urlPattern: String?,
+                       fieldPattern: String?, instruction: String) {
+        lock.withLock {
+            guard let index = stored.firstIndex(where: { $0.id == id }),
+                  !stored[index].isBuiltIn else { return }
+            stored[index].name = name
+            stored[index].bundleIDs = bundleIDs
+            stored[index].urlPattern = urlPattern
+            stored[index].fieldPattern = fieldPattern
+            stored[index].instruction = instruction
+            save()
+        }
+    }
+
     public func setEnabled(_ id: UUID, _ enabled: Bool) {
         lock.withLock {
             guard let index = stored.firstIndex(where: { $0.id == id }) else { return }

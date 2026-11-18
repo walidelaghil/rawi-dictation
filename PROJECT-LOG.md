@@ -84,3 +84,15 @@ Each entry: **Asked** (what you wanted) · **Decided** (and why) · **Shipped** 
 **Shipped**
 - Transforms and Commands rebuilt; 22pt-plus gap before "Customize" in the sidebar.
 - Tests pass (one unrelated timing test flaked once, passed on rerun). New build is running.
+
+---
+
+## 2026-11-18 — Destinations match the other screens
+
+**Asked**
+- Do the same for Destinations.
+
+**Shipped**
+- Add card on top (name, when I am in: app / page / field, Detect field, how to shape the text), search when more than 3 rules, list below, hover delete with undo, click a rule to edit it. Built-in rules can be turned off but not edited.
+- The three "what Rawi can read" boxes are now one stacked card at the bottom, not side by side.
+- Tests pass (new edit tests included). Not visually checked by me.
