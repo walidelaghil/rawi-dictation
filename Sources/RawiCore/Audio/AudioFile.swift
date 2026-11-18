@@ -19,4 +19,14 @@ public enum AudioFile {
         // 1600 samples of 16-bit mono is a tenth of a second: shorter than any word.
         return size >= headerBytes + minimumSamples * 2
     }
+
+    /// Length of a recording made by `AudioRecorder`: 16 kHz, 16-bit, mono.
+    public static func seconds(bytes: Int) -> Double {
+        Double(max(0, bytes - headerBytes)) / 32_000
+    }
+
+    public static func seconds(at url: URL) -> Double {
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+        return seconds(bytes: size)
+    }
 }

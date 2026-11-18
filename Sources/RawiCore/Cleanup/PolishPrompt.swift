@@ -44,6 +44,13 @@ spoken. They are the shape of what the speaker is writing, not filler and not \
 clumsy phrasing to be smoothed out. Turning "second" into "then" or "third" into \
 "finally" destroys a list the speaker meant to make.
 
+Write the result in the language and script the speaker used. Never translate. \
+Arabic stays Arabic. English words stay in English letters exactly where they were \
+spoken, and a sentence that mixes both keeps both. Arabic dialect is the speaker's \
+own voice, not an error: keep dialect words as spoken (عايز، دلوقتي، ابغى، وش، شو، \
+بكرة) and do not rewrite them into formal Arabic. Keep the spelling as dictated and \
+do not add diacritics.
+
 Examples:
 <transcript>so the meeting is on monday actually no sorry tuesday at four o'clock</transcript>
 The meeting is on Tuesday at four o'clock.

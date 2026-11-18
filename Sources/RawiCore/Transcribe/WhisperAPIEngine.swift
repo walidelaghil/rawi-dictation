@@ -8,6 +8,8 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
     private let provider: EngineKind
     private let apiKey: String
     private let model: String
+    /// The model used for speech that may mix languages. See `plan`.
+    private let mixedModel: String?
     private let session: URLSession
 
     private let requestedLanguage: String
@@ -21,10 +23,12 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
 
     public init(provider: EngineKind, apiKey: String, model: String,
                 language: String = "auto", timeout: TimeInterval = 20,
+                mixedModel: String? = nil,
                 session: URLSession = .shared) {
         self.provider = provider
         self.apiKey = apiKey
         self.model = model
+        self.mixedModel = mixedModel
         self.requestedLanguage = language
         self.timeout = timeout
         self.session = session
@@ -58,8 +62,32 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
         session.dataTask(with: request) { _, _, _ in }.resume()
     }
 
+    /// Primes the decoder with text that switches language mid-sentence, which is
+    /// what makes it keep both. Without it Whisper picks one language for the
+    /// whole recording and translates or drops the other.
+    static let mixedPrimer = "أهلا، كيف الحال؟ Let's talk about the project. يعني خلنا نكمل الشغل tomorrow."
+    /// Under this the primer does harm: "تمام" came back as "دمامام".
+    static let mixedMinSeconds = 2.0
+
+    struct Plan: Equatable { let model: String; let prompt: String }
+
+    /// Which model and prompt to send. Only when the language is left to the
+    /// provider and there is enough speech for the primer not to dominate it.
+    static func plan(model: String, mixedModel: String?, language: String?,
+                     seconds: Double, dictionary: String) -> Plan {
+        guard language == nil, let mixedModel, !mixedModel.isEmpty,
+              seconds >= mixedMinSeconds else {
+            return Plan(model: model, prompt: dictionary)
+        }
+        return Plan(model: mixedModel,
+                    prompt: dictionary.isEmpty ? mixedPrimer : mixedPrimer + " " + dictionary)
+    }
+
     public func transcribe(wav: URL, prompt: String = "") async throws -> String {
         let wavData = try Data(contentsOf: wav)
+        let plan = Self.plan(model: model, mixedModel: provider == .groq ? mixedModel : nil,
+                             language: language, seconds: AudioFile.seconds(bytes: wavData.count),
+                             dictionary: prompt)
         let boundary = "Rawi-\(UUID().uuidString)"
 
         var request = URLRequest(url: Self.endpoint(for: provider))
@@ -68,9 +96,9 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)",
                          forHTTPHeaderField: "Content-Type")
-        let body = Self.multipartBody(boundary: boundary, model: model,
+        let body = Self.multipartBody(boundary: boundary, model: plan.model,
                                       filename: wav.lastPathComponent, wav: wavData,
-                                      prompt: prompt, language: language)
+                                      prompt: plan.prompt, language: language)
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in

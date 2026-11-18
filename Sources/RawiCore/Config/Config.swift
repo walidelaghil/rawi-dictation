@@ -53,6 +53,9 @@ public struct APISettings: Codable, Sendable, Equatable {
     public var openaiModel: String
     /// The chat model that plans paragraphs. See `GroqParagraphPlanner`.
     public var groqParagraphModel: String = GroqParagraphPlanner.defaultModel
+    /// Used on Groq when the language is left to detect and the clip is long enough
+    /// to mix languages. Empty turns it off. See `WhisperAPIEngine.plan`.
+    public var groqMixedModel: String = "whisper-large-v3"
 
     public init(groqModel: String, openaiModel: String) {
         self.groqModel = groqModel; self.openaiModel = openaiModel
@@ -65,6 +68,8 @@ public struct APISettings: Codable, Sendable, Equatable {
         openaiModel = try c.decodeIfPresent(String.self, forKey: .openaiModel) ?? d.openaiModel
         groqParagraphModel = try c.decodeIfPresent(String.self, forKey: .groqParagraphModel)
             ?? GroqParagraphPlanner.defaultModel
+        groqMixedModel = try c.decodeIfPresent(String.self, forKey: .groqMixedModel)
+            ?? "whisper-large-v3"
     }
 }
 

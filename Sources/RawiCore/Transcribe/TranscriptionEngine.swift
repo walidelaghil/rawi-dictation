@@ -106,7 +106,8 @@ public enum TranscriptionEngineFactory {
                 throw TranscriptionError.missingAPIKey("GROQ_API_KEY")
             }
             let cloud = WhisperAPIEngine(provider: .groq, apiKey: key, model: config.api.groqModel,
-                                         language: config.whispercpp.language)
+                                         language: config.whispercpp.language,
+                                         mixedModel: config.api.groqMixedModel)
             // The local fallback is the command line, not the resident server: it
             // holds no memory until it is needed, and memory is what made the
             // resident model slow. See `FailoverEngine`.

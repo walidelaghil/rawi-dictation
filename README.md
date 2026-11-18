@@ -508,6 +508,18 @@ ollama pull qwen2.5:3b
 
 and pick **Ollama, on this Mac** under Settings → Cleanup and transforms.
 
+### Arabic, and Arabic mixed with English
+
+Whisper decodes one language per recording. A sentence that starts in Arabic and
+turns English came back all English, with the Arabic translated or dropped. On 12
+synthetic mixed sentences, `whisper-large-v3-turbo` lost or translated a language in
+6. For a clip of two seconds or more with the language left on detect, Rawi now sends
+it to `whisper-large-v3` with a short mixed-script primer: 0 of 12 lost. Shorter clips
+keep the fast model, because the primer corrupts them ("تمام" came back as "دمامام").
+Set `api.groqMixedModel` to an empty string to turn this off. The polish prompt also
+now says to keep the language and dialect as spoken. The test set and scripts are in
+`docs/artifacts/arabic-eval`.
+
 ### Paragraphs, one per idea
 
 Whisper returns a minute of speech as one block. Rawi asks a model where each
