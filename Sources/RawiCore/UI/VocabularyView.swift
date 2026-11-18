@@ -144,6 +144,49 @@ public struct DictionaryScreen: View {
     }
 }
 
+extension SnippetsScreen {
+    /// Two stacked fields in one card. The expansion grows with what you paste, up to
+    /// eight lines and then scrolls, so you can always read what you are about to save.
+    var snippetForm: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField("When I say…", text: $model.newTrigger)
+                .textFieldStyle(.plain)
+                .font(.system(size: TypeScale.heading, weight: .medium))
+                .foregroundStyle(c(.bone))
+            Rectangle().fill(c(.edge)).frame(height: 1)
+            TextField("…type this", text: $model.newExpansion, axis: .vertical)
+                .textFieldStyle(.plain)
+                .lineLimit(2...8)
+                .font(.system(size: TypeScale.body))
+                .foregroundStyle(c(.bone))
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Text("Return adds a new line")
+                    .font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
+                Spacer()
+                Button("Add snippet") { model.addSnippet() }
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .buttonStyle(.plain)
+                    .font(.system(size: TypeScale.body, weight: .semibold))
+                    .foregroundStyle(canAdd ? Color.black.opacity(0.85) : c(.faint))
+                    .padding(.horizontal, 14).padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: Radius.control)
+                        .fill(canAdd ? c(.saffron) : c(.raised)))
+                    .disabled(!canAdd)
+                    .help("Add (⌘Return)")
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.ink))
+            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
+    }
+
+    private var canAdd: Bool {
+        !model.newTrigger.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !model.newExpansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 extension DictionaryScreen {
     var refreshButton: some View {
         HStack(spacing: 8) {
@@ -172,6 +215,34 @@ extension DictionaryScreen {
     }
 }
 
+/// A saved expansion: three lines at rest, all of it on request. Long text used to be
+/// cut at two lines with no way to read the rest.
+struct SnippetExpansionText: View {
+    let text: String
+    let appearance: ResolvedAppearance
+    @State private var expanded = false
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
+    private var isLong: Bool { text.count > 140 || text.contains("\n") }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(text)
+                .font(.system(size: TypeScale.body))
+                .foregroundStyle(c(.bone))
+                .lineLimit(expanded ? nil : 3)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            if isLong {
+                Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: TypeScale.small))
+                    .foregroundStyle(c(.saffron))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 public struct SnippetsScreen: View {
     @ObservedObject var model: VocabularyViewModel
     public init(model: VocabularyViewModel) { self.model = model }
@@ -185,20 +256,7 @@ public struct SnippetsScreen: View {
                              + "keyboard expander this only fires while you are speaking, so it "
                              + "cannot surprise you inside a word or a password field.")
 
-            HStack(spacing: 9) {
-                TextField("When I say…", text: $model.newTrigger)
-                    .textFieldStyle(.plain).font(.system(size: TypeScale.heading)).foregroundStyle(c(.bone))
-                    .frame(width: 170)
-                Text("→").foregroundStyle(c(.faint))
-                TextField("…type this", text: $model.newExpansion)
-                    .textFieldStyle(.plain).font(.system(size: TypeScale.heading)).foregroundStyle(c(.bone))
-                    .onSubmit { model.addSnippet() }
-                Button("Add") { model.addSnippet() }
-                    .buttonStyle(.plain).font(.system(size: TypeScale.body)).foregroundStyle(c(.saffron))
-            }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
-                .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
+            snippetForm
 
             if model.snippets.isEmpty {
                 EmptyHint(title: "No snippets yet.",
@@ -221,11 +279,7 @@ public struct SnippetsScreen: View {
                                 .font(.system(size: TypeScale.micro))
                                 .foregroundStyle(c(.faint))
                                 .padding(.top, 3)
-                            Text(snippet.expansion)
-                                .font(.system(size: TypeScale.body))
-                                .foregroundStyle(c(.muted))
-                                .lineLimit(2)
-                                .fixedSize(horizontal: false, vertical: true)
+                            SnippetExpansionText(text: snippet.expansion, appearance: model.appearance)
                             Spacer(minLength: 8)
                             Button { model.removeSnippet(snippet) } label: {
                                 Image(systemName: "xmark").font(.system(size: TypeScale.micro))
