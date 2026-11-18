@@ -59,3 +59,14 @@ import Foundation
         #expect(AudioFile.seconds(bytes: 10) == 0)
     }
 }
+
+@Suite("Mixed speech primer") struct MixedPrimerTests {
+    @Test("the primer is one short mixed sentence, not a passage the decoder can repeat")
+    func shape() {
+        let primer = WhisperAPIEngine.mixedPrimer
+        #expect(primer.contains("project"))
+        #expect(primer.contains("يعني"))
+        #expect(primer.count < 60)
+        #expect(!primer.contains("."))
+    }
+}

@@ -65,7 +65,10 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
     /// Primes the decoder with text that switches language mid-sentence, which is
     /// what makes it keep both. Without it Whisper picks one language for the
     /// whole recording and translates or drops the other.
-    static let mixedPrimer = "أهلا، كيف الحال؟ Let's talk about the project. يعني خلنا نكمل الشغل tomorrow."
+    /// One short mixed sentence and no full stop. A longer, finished passage made
+    /// whisper-large-v3 say a short clip twice ("Testing the recording." twice)
+    /// on real recordings; this one did not, and kept both languages as well.
+    static let mixedPrimer = "يعني we need to talk about the project بكرة"
     /// Under this the primer does harm: "تمام" came back as "دمامام".
     static let mixedMinSeconds = 2.0
 
@@ -125,7 +128,8 @@ public final class WhisperAPIEngine: TranscriptionEngine, @unchecked Sendable {
                             status: status, message: message)); return
                     }
                     do {
-                        let text = WhisperCppEngine.cleanTranscript(try Self.parseResponse(data))
+                        let text = RepeatedTranscript.collapse(
+                            WhisperCppEngine.cleanTranscript(try Self.parseResponse(data)))
                         guard !text.isEmpty else {
                             continuation.resume(throwing: TranscriptionError.emptyResult); return
                         }
