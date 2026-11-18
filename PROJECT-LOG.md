@@ -21,3 +21,16 @@ Each entry: **Asked** (what you wanted) · **Decided** (and why) · **Shipped** 
 **Shipped**
 - Snippets screen (`Sources/RawiCore/UI/VocabularyView.swift`): stacked add card, expansion field that grows from 2 to 8 lines, filled Add button (⌘Return), expandable saved rows. Builds cleanly; not yet viewed in the running app; not committed.
 - PROJECT-LOG.md, roadmap.md, how_we_work.md, docs/briefs/.
+
+---
+
+## 2026-11-18 — Working rules
+
+**Asked**
+- No pull requests (solo, no team). Replies short and non-technical, especially when a decision is needed. Prototype new features and design changes as a Claude Artifact first.
+
+**Decided**
+- Recorded all of it in how_we_work.md. Why: so it applies to every future session, not just this one.
+
+**Shipped**
+- how_we_work.md updated. Snippets fix pushed to origin.

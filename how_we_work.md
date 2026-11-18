@@ -8,6 +8,10 @@ Rules for working on Rawi. Add a rule when we agree one; keep each to a line plu
 - **how_we_work.md** — this file.
 
 ## Rules
+- Solo project, no reviewers: **no pull requests**. Commit and push straight to the branch.
+- The owner is not technical. Keep replies short and plain; no jargon.
+- Decisions: ask one short question with 2–3 options and a recommendation. No long write-ups before a choice.
+- New features and anything that changes the design: **prototype first as a Claude Artifact**, get a yes, then build it.
 - Work in a git worktree; never `cd` out of it.
 - No bare `git stash`; use a WIP commit instead (the stash is shared between sessions).
 - Commit and push only when asked.
