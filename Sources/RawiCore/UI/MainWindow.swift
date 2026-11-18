@@ -252,7 +252,7 @@ struct MainWindowView: View {
             // Only built screens appear. A greyed row for an unbuilt phase is dead
             // UI that teaches you to stop reading the rail.
             ForEach(Array(Screen.groups.enumerated()), id: \.offset) { index, group in
-                if index > 0 { Spacer().frame(height: group.title == nil ? 10 : 6) }
+                if index > 0 { Spacer().frame(height: 22) }
                 if let title = group.title {
                     Text(title.uppercased())
                         .font(.system(size: TypeScale.micro, weight: .medium).monospaced())

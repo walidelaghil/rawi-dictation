@@ -70,3 +70,17 @@ Each entry: **Asked** (what you wanted) · **Decided** (and why) · **Shipped** 
 - Undo after delete on Transforms, Commands, Destinations and History.
 - Snippets show "used N times"; counted when a snippet fires in a dictation.
 - 869 tests pass. Running build not visually checked by me.
+
+---
+
+## 2026-11-18 — Transforms and Commands match Snippets
+
+**Asked**
+- Same layout as Snippets on Transforms and Commands: add card on top, search, list below. Fix the "Add a command" design. Gap between the top three sidebar items and "Customize".
+
+**Decided**
+- Both screens use the shared add card, hover-only delete, and click-to-edit with Save/Cancel. "Try one" moved to the bottom as a stacked card.
+
+**Shipped**
+- Transforms and Commands rebuilt; 22pt-plus gap before "Customize" in the sidebar.
+- Tests pass (one unrelated timing test flaked once, passed on rerun). New build is running.
