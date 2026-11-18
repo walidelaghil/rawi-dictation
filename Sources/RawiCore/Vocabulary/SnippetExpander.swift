@@ -10,7 +10,14 @@ public enum SnippetExpander {
     /// Single pass by design: an expansion that contains another trigger is not
     /// re-expanded, because that is how you get a loop.
     public static func expand(_ text: String, with snippets: [Snippet]) -> String {
-        guard !snippets.isEmpty, !text.isEmpty else { return text }
+        expandReporting(text, with: snippets).text
+    }
+
+    /// `expand`, plus which snippets fired, so they can be counted.
+    public static func expandReporting(_ text: String, with snippets: [Snippet])
+        -> (text: String, used: [UUID]) {
+        guard !snippets.isEmpty, !text.isEmpty else { return (text, []) }
+        var used: [UUID] = []
 
         // Longest trigger first, so "my work email" wins over "my email".
         let ordered = snippets.sorted { $0.trigger.count > $1.trigger.count }
@@ -30,13 +37,14 @@ public enum SnippetExpander {
                     continue
                 }
                 result.replaceSubrange(found, with: snippet.expansion)
+                if !used.contains(snippet.id) { used.append(snippet.id) }
                 let end = result.index(found.lowerBound, offsetBy: snippet.expansion.count)
                 consumed.append(found.lowerBound..<end)
                 searchFrom = end
                 if searchFrom >= result.endIndex { break }
             }
         }
-        return result
+        return (result, used)
     }
 
     /// A trigger must sit on word boundaries — saying "email" inside "emailing"

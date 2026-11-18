@@ -6,6 +6,7 @@ public final class DestinationsViewModel: ObservableObject {
     @Published public var rules: [DestinationRule] = []
     @Published public var appearance: ResolvedAppearance = .dark
     @Published public var showInfo = false
+    public var undo: UndoCenter?
 
     /// The rule being written in the form.
     @Published public var draftName = ""
@@ -96,7 +97,13 @@ public final class DestinationsViewModel: ObservableObject {
     public func toggle(_ rule: DestinationRule) {
         store.setEnabled(rule.id, !rule.enabled); reload()
     }
-    public func remove(_ rule: DestinationRule) { store.remove(rule.id); reload() }
+    public func remove(_ rule: DestinationRule) {
+        let index = store.rules.firstIndex { $0.id == rule.id } ?? store.rules.count
+        store.remove(rule.id); reload()
+        undo?.offer("Deleted “\(rule.name)”") { [store, weak self] in
+            store.restore(rule, at: index); self?.reload()
+        }
+    }
 }
 
 public struct DestinationsView: View {

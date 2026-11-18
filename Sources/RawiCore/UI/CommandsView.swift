@@ -6,6 +6,7 @@ public final class CommandsViewModel: ObservableObject {
     @Published public var commands: [SpokenCommand] = []
     @Published public var appearance: ResolvedAppearance = .dark
     @Published public var showInfo = false
+    public var undo: UndoCenter?
     /// The command being edited, if any.
     @Published public var editing: UUID?
     @Published public var composing = false
@@ -30,7 +31,13 @@ public final class CommandsViewModel: ObservableObject {
     public func reload() { commands = store.commands }
 
     public func toggle(_ command: SpokenCommand) { store.setEnabled(command.id, !command.enabled); reload() }
-    public func remove(_ command: SpokenCommand) { store.remove(command.id); reload() }
+    public func remove(_ command: SpokenCommand) {
+        let index = store.commands.firstIndex { $0.id == command.id } ?? store.commands.count
+        store.remove(command.id); reload()
+        undo?.offer("Deleted “\(command.phrase)”") { [store, weak self] in
+            store.restore(command, at: index); self?.reload()
+        }
+    }
 
     public func update(_ command: SpokenCommand, phrase: String? = nil, detail: String? = nil,
                        confirm: Bool? = nil) {

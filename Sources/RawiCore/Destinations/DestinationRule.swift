@@ -114,6 +114,15 @@ public final class DestinationStore: @unchecked Sendable {
         }
     }
 
+    /// Puts a deleted rule back where it was (Undo).
+    public func restore(_ rule: DestinationRule, at index: Int) {
+        lock.withLock {
+            guard !stored.contains(where: { $0.id == rule.id }) else { return }
+            stored.insert(rule, at: min(max(index, 0), stored.count))
+            save()
+        }
+    }
+
     public func setEnabled(_ id: UUID, _ enabled: Bool) {
         lock.withLock {
             guard let index = stored.firstIndex(where: { $0.id == id }) else { return }

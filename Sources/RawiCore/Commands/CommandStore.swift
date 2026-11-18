@@ -43,6 +43,15 @@ public final class CommandStore: @unchecked Sendable {
         }
     }
 
+    /// Puts a deleted command back where it was (Undo).
+    public func restore(_ command: SpokenCommand, at index: Int) {
+        lock.withLock {
+            guard !stored.contains(where: { $0.id == command.id }) else { return }
+            stored.insert(command, at: min(max(index, 0), stored.count))
+            save()
+        }
+    }
+
     public func setEnabled(_ id: UUID, _ enabled: Bool) {
         lock.withLock {
             guard let index = stored.firstIndex(where: { $0.id == id }) else { return }

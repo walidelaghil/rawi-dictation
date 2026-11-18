@@ -100,3 +100,47 @@ struct UndoToast: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
+
+/// One "Removed. Undo" for the whole window. Screens call `offer`; the window
+/// shows the bar. A new offer replaces the old one, so Undo always means the last delete.
+@MainActor
+public final class UndoCenter: ObservableObject {
+    @Published public var message: String?
+    private var action: (() -> Void)?
+    private var task: Task<Void, Never>?
+
+    public init() {}
+
+    public func offer(_ message: String, _ action: @escaping () -> Void) {
+        self.message = message
+        self.action = action
+        task?.cancel()
+        task = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(6))
+            if !Task.isCancelled { self.message = nil; self.action = nil }
+        }
+    }
+
+    public func undo() {
+        action?()
+        message = nil; action = nil; task?.cancel()
+    }
+}
+
+struct UndoBar: View {
+    @ObservedObject var center: UndoCenter
+    let appearance: ResolvedAppearance
+    let onUndone: () -> Void
+
+    var body: some View {
+        Group {
+            if let message = center.message {
+                UndoToast(message: message, appearance: appearance) {
+                    center.undo(); onUndone()
+                }
+                .padding(.bottom, 18)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: center.message)
+    }
+}

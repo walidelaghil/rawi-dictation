@@ -17,6 +17,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     }
     private let model: HistoryViewModel
     private let home: HomeViewModel
+    private let undo = UndoCenter()
     private let vocabulary: VocabularyViewModel
     private let destinations: DestinationsViewModel
     private let store: HistoryStore
@@ -45,6 +46,8 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         self.insights = InsightsViewModel(store: store)
         self.settings = SettingsViewModel()
         super.init()
+        model.undo = undo; destinations.undo = undo
+        transforms.undo = undo; commands.undo = undo
         home.onShowHistory = { [weak self] in self?.selected = .history }
         home.appearance = appearance
         model.appearance = appearance
@@ -122,7 +125,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     public func testRootView() -> some View {
         MainWindowView(home: home, history: model, vocabulary: vocabulary, destinations: destinations,
                        transforms: transforms, commands: commands, insights: insights,
-                       settings: settings, selection: selection, setup: setup)
+                       settings: settings, selection: selection, setup: setup, undo: undo)
     }
 
     public func close() { window?.close() }
@@ -143,7 +146,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
             rootView: MainWindowView(home: home, history: model, vocabulary: vocabulary,
                                      destinations: destinations, transforms: transforms,
                                      commands: commands, insights: insights, settings: settings,
-                                     selection: selection, setup: setup))
+                                     selection: selection, setup: setup, undo: undo))
         window.appearance = NSAppearance(
             named: model.appearance == .dark ? .darkAqua : .aqua)
         return window
@@ -203,6 +206,7 @@ struct MainWindowView: View {
     @ObservedObject var settings: SettingsViewModel
     @ObservedObject var selection: ScreenSelection
     @ObservedObject var setup: SetupChecklistModel
+    @ObservedObject var undo: UndoCenter
     private var screen: Screen { selection.screen }
 
     private func c(_ token: ColorToken) -> Color {
@@ -223,6 +227,11 @@ struct MainWindowView: View {
             case .snippets: SnippetsScreen(model: vocabulary)
             case .destinations: DestinationsView(model: destinations)
             case .settings: SettingsView(model: settings)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            UndoBar(center: undo, appearance: history.appearance) {
+                history.reload(); transforms.reload(); commands.reload(); destinations.reload()
             }
         }
         .background(c(.surface))

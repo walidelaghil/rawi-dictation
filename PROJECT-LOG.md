@@ -54,3 +54,19 @@ Each entry: **Asked** (what you wanted) · **Decided** (and why) · **Shipped** 
 - Bigger click targets, brighter shortcut hints, labels on icon buttons.
 - Menu panel: Recent open by default (last three), proper Quit button.
 - All 868 tests pass. Not yet looked at in the running app.
+
+---
+
+## 2026-11-18 — Undo everywhere, snippet usage
+
+**Asked**
+- Finish the two leftovers (delete undo on the other screens, snippet usage count), then run the app.
+
+**Decided**
+- One shared Undo bar for the whole window, so every screen behaves the same.
+- Restarted the installed Rawi on this branch's build to run it.
+
+**Shipped**
+- Undo after delete on Transforms, Commands, Destinations and History.
+- Snippets show "used N times"; counted when a snippet fires in a dictation.
+- 869 tests pass. Running build not visually checked by me.

@@ -5,6 +5,7 @@ public final class TransformsViewModel: ObservableObject {
     @Published public var transforms: [Transform] = []
     @Published public var appearance: ResolvedAppearance = .dark
     @Published public var showInfo = false
+    public var undo: UndoCenter?
 
     // The add form.
     @Published public var draftName = ""
@@ -46,8 +47,12 @@ public final class TransformsViewModel: ObservableObject {
     }
 
     public func remove(_ transform: Transform) {
+        let index = store.transforms.firstIndex { $0.id == transform.id } ?? store.transforms.count
         store.remove(transform.id)
         reload()
+        undo?.offer("Deleted “\(transform.name)”") { [store, weak self] in
+            store.restore(transform, at: index); self?.reload()
+        }
     }
 
     // MARK: - Editing

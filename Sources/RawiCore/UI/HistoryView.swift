@@ -5,6 +5,7 @@ public final class HistoryViewModel: ObservableObject {
     @Published public var entries: [HistoryEntry] = []
     @Published public var filter = HistoryFilter()
     @Published public var showInfo = false
+    public var undo: UndoCenter?
     @Published public var confirmingPurge = false
     @Published public var confirmingDelete = false
     @Published public var appearance: ResolvedAppearance = .dark
@@ -98,7 +99,12 @@ public final class HistoryViewModel: ObservableObject {
         // should give you the sentence you spoke, not the four lines it arrived in.
         NSPasteboard.general.setString(Transcript.clean(entry.cleaned), forType: .string)
     }
-    public func delete(_ entry: HistoryEntry) { store.remove(entry.id); reload() }
+    public func delete(_ entry: HistoryEntry) {
+        store.remove(entry.id); reload()
+        undo?.offer("Deleted that dictation") { [store, weak self] in
+            store.restore(entry); self?.reload()
+        }
+    }
     public func purge() { store.purge(); reload(); confirmingPurge = false }
 }
 

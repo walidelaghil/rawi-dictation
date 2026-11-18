@@ -332,6 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return self.config.history.enabled && !self.config.history.excludes(bundleID)
         }
         controller.vocabulary = { [weak self] in self?.vocabulary.snapshot() ?? .empty }
+        controller.onSnippetsUsed = { [weak self] ids in self?.vocabulary.recordUse(of: ids) }
         controller.destination = { [weak self] bundleID in
             guard let self else { return nil }
             // Only ask a browser for its URL. Anything else pays nothing.

@@ -274,10 +274,16 @@ struct SnippetRow: View {
     private var display: some View {
         Row(appearance: model.appearance) {
             HStack(alignment: .top, spacing: 14) {
-                Text(snippet.trigger)
-                    .font(.system(size: TypeScale.heading, weight: .medium))
-                    .foregroundStyle(c(.bone))
-                    .frame(width: 150, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(snippet.trigger)
+                        .font(.system(size: TypeScale.heading, weight: .medium))
+                        .foregroundStyle(c(.bone))
+                    if snippet.uses > 0 {
+                        Text(snippet.uses == 1 ? "used once" : "used \(snippet.uses) times")
+                            .font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
+                    }
+                }
+                .frame(width: 150, alignment: .leading)
                 Image(systemName: "arrow.right")
                     .font(.system(size: TypeScale.micro))
                     .foregroundStyle(c(.muted))

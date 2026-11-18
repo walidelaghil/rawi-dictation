@@ -49,15 +49,19 @@ public struct Snippet: Codable, Sendable, Equatable, Identifiable {
     public var expansion: String
     /// Hidden in the list (a password, a card number). It still expands when spoken.
     public var sensitive: Bool
+    /// How many times it has fired in a dictation.
+    public var uses: Int
 
-    public init(id: UUID = UUID(), trigger: String, expansion: String, sensitive: Bool = false) {
+    public init(id: UUID = UUID(), trigger: String, expansion: String, sensitive: Bool = false,
+                uses: Int = 0) {
+        self.uses = uses
         self.id = id
         self.trigger = trigger
         self.expansion = expansion
         self.sensitive = sensitive
     }
 
-    private enum CodingKeys: String, CodingKey { case id, trigger, expansion, sensitive }
+    private enum CodingKeys: String, CodingKey { case id, trigger, expansion, sensitive, uses }
 
     /// Tolerant: files written before `sensitive` existed still load.
     public init(from decoder: any Decoder) throws {
@@ -66,6 +70,7 @@ public struct Snippet: Codable, Sendable, Equatable, Identifiable {
         trigger = try c.decode(String.self, forKey: .trigger)
         expansion = try c.decode(String.self, forKey: .expansion)
         sensitive = try c.decodeIfPresent(Bool.self, forKey: .sensitive) ?? false
+        uses = try c.decodeIfPresent(Int.self, forKey: .uses) ?? 0
     }
 }
 
@@ -278,6 +283,19 @@ public final class VocabularyStore: @unchecked Sendable {
             payload.snippets[index].sensitive = sensitive
             save()
             return true
+        }
+    }
+
+    /// Counts each snippet that fired in a dictation.
+    public func recordUse(of ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        lock.withLock {
+            for id in ids {
+                if let index = payload.snippets.firstIndex(where: { $0.id == id }) {
+                    payload.snippets[index].uses += 1
+                }
+            }
+            save()
         }
     }
 

@@ -39,4 +39,14 @@ import Testing
         let snippet = try JSONDecoder().decode(Snippet.self, from: Data(json.utf8))
         #expect(!snippet.sensitive)
     }
+
+    @Test("a snippet that fires is counted") func usage() {
+        let snippet = Snippet(trigger: "my email", expansion: "a@b.c")
+        let result = SnippetExpander.expandReporting("send to my email now", with: [snippet])
+        #expect(result.used == [snippet.id])
+        let s = store()
+        s.addSnippet(trigger: "my email", expansion: "a@b.c")
+        s.recordUse(of: [s.snippets[0].id]); s.recordUse(of: [s.snippets[0].id])
+        #expect(s.snippets[0].uses == 2)
+    }
 }
