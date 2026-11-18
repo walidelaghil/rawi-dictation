@@ -21,7 +21,40 @@ public enum RepeatedTranscript {
             guard words >= minimumWords else { return text }
             return sentences[0..<period].joined(separator: " ")
         }
-        return text
+        return collapseNearRepeat(sentences) ?? text
+    }
+
+    /// The decoder said it twice but not word for word ("Open to me the file" then
+    /// "Open the file"). Only when the text splits into two equal halves, each at
+    /// least `nearMinimumWords` long and 80% the same words. The later half stays:
+    /// the second pass is usually the cleaner one.
+    static let nearMinimumWords = 8
+    static let nearSimilarity = 0.8
+
+    private static func collapseNearRepeat(_ sentences: [String]) -> String? {
+        guard sentences.count >= 2, sentences.count % 2 == 0 else { return nil }
+        let half = sentences.count / 2
+        let first = key(sentences[0..<half].joined(separator: " ")).split(separator: " ")
+        let second = key(sentences[half...].joined(separator: " ")).split(separator: " ")
+        guard min(first.count, second.count) >= nearMinimumWords else { return nil }
+        let distance = editDistance(Array(first), Array(second))
+        let similarity = 1 - Double(distance) / Double(max(first.count, second.count))
+        guard similarity >= nearSimilarity else { return nil }
+        return sentences[half...].joined(separator: " ")
+    }
+
+    private static func editDistance(_ a: [Substring], _ b: [Substring]) -> Int {
+        var row = Array(0...b.count)
+        for i in 1...a.count {
+            var previous = row[0]
+            row[0] = i
+            for j in 1...b.count {
+                let saved = row[j]
+                row[j] = a[i - 1] == b[j - 1] ? previous : min(previous, row[j], row[j - 1]) + 1
+                previous = saved
+            }
+        }
+        return row[b.count]
     }
 
     /// Sentences with their own punctuation kept, so the survivor reads as spoken.

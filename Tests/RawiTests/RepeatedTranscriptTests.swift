@@ -40,4 +40,19 @@ import Testing
         let text = "Testing the recording. Testing the recording. And then we stop."
         #expect(RepeatedTranscript.collapse(text) == text)
     }
+
+    @Test("a repeat the decoder worded slightly differently is kept once, the later wording")
+    func nearRepeat() {
+        let text = "Open to me the MD file here. Why are you taking me to downloads and all that? "
+            + "Open the MD file here. Why are you taking me to downloads and all that?"
+        #expect(RepeatedTranscript.collapse(text)
+                == "Open the MD file here. Why are you taking me to downloads and all that?")
+    }
+
+    @Test("two different long sentences are never merged")
+    func differentSentences() {
+        let text = "Please send the report to the finance team today. "
+            + "Please send the invoice to the client before Friday."
+        #expect(RepeatedTranscript.collapse(text) == text)
+    }
 }
