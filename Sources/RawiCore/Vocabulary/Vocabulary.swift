@@ -195,6 +195,20 @@ public final class VocabularyStore: @unchecked Sendable {
         }
     }
 
+    /// One learning pass over the history, then the sync.
+    ///
+    /// "Known" must mean terms the learner does *not* own: the ones you typed and
+    /// the ones you corrected. It used to be every term, which includes what the
+    /// learner added on the pass before, so a learned word was hidden from the next
+    /// pass, looked unwanted, and was dropped; the pass after relearned it. The
+    /// dictionary flipped on every dictation (1,406 learn and drop lines in one
+    /// log), which changed the decoder hint and the cleanup glossary each time.
+    @discardableResult
+    public func learnTerms(from entries: [HistoryEntry]) -> (added: [String], dropped: [String]) {
+        let notMine = terms.filter { !$0.addedAutomatically || $0.learnedFromCorrection }
+        return syncLearned(TermLearner.learn(from: entries, known: notMine, blocked: blocked))
+    }
+
     /// You changed Rawi's `heard` into `fixed` in a document. Returns true when
     /// `fixed` is new to the dictionary.
     @discardableResult

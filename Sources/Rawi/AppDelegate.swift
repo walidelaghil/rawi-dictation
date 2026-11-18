@@ -458,10 +458,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// most 500 short strings, and a term learned an hour from now is a term that
     /// spelled your colleague's name wrong an hour longer.
     private func learnTerms() {
-        let learned = TermLearner.learn(from: history.all(),
-                                        known: vocabulary.terms,
-                                        blocked: vocabulary.blocked)
-        let change = vocabulary.syncLearned(learned)
+        let change = vocabulary.learnTerms(from: history.all())
         for term in change.added { log.info("Learned “\(term)” from your own dictations") }
         for term in change.dropped { log.info("Dropped “\(term)” — you stopped saying it") }
     }
