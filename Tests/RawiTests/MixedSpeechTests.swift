@@ -70,3 +70,15 @@ import Foundation
         #expect(!primer.contains("."))
     }
 }
+
+/// On the user's real mixed recording, whisper-large-v3 with the primer translated
+/// English words into formal Arabic ("meeting" became مقابلة); turbo with only the
+/// dictionary kept the speaker's own words and 8 of 14 English words in Latin, and
+/// the restore pass took it to 14. So the primer path is opt-in, not the default.
+@Suite("Mixed speech default") struct MixedSpeechDefaultTests {
+    @Test("the long-model primer is off unless a config asks for it")
+    func offByDefault() throws {
+        let api = try JSONDecoder().decode(APISettings.self, from: Data("{}".utf8))
+        #expect(api.groqMixedModel.isEmpty)
+    }
+}
