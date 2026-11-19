@@ -9,7 +9,7 @@ public final class MenuPanelModel: ObservableObject {
     @Published public var detectedLanguage: String?
     @Published public var recent: [RecentDictation] = []
     @Published public var appearance: ResolvedAppearance = .dark
-    @Published public var recentOpen: Bool = false
+    @Published public var recentOpen: Bool = true
     @Published public var motion: MarkMotion = .rest
     /// The shortcuts as bound, not as defaulted.
     @Published public var labels: HotkeyLabels = .placeholder
@@ -120,54 +120,46 @@ public struct MenuPanelView: View {
     // MARK: - Actions
 
     private var actionStrip: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(MenuActions.all(model.labels).enumerated()),
-                    id: \.element.id) { index, action in
-                if index > 0 { Rectangle().fill(c(.edge)).frame(width: 1, height: 34) }
-                actionCell(action)
-            }
+        HStack(spacing: 8) {
+            ForEach(MenuActions.all(model.labels)) { actionCell($0) }
         }
+        .padding(.horizontal, 12).padding(.vertical, 10)
     }
 
+    /// A compact tile: the icon in a box, the name, and the key beneath it.
     private func actionCell(_ action: MenuAction) -> some View {
-        Button { model.onAction?(action.id) } label: {
-            VStack(spacing: 3) {
-                HStack(spacing: 7) {
-                    Image(systemName: action.symbol)
-                        .font(.system(size: TypeScale.body))
-                        .foregroundStyle(action.id == "dictate" ? c(.saffron) : c(.muted))
+        let isDictate = action.id == "dictate"
+        return Button { model.onAction?(action.id) } label: {
+            HStack(spacing: 9) {
+                Image(systemName: action.symbol)
+                    .font(.system(size: TypeScale.body, weight: .semibold))
+                    .foregroundStyle(isDictate ? c(.ink) : c(.lapis))
+                    .frame(width: 30, height: 30)
+                    .background(RoundedRectangle(cornerRadius: Radius.control)
+                        .fill(isDictate ? c(.saffron) : c(.surface))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control)
+                            .strokeBorder(isDictate ? .clear : c(.edge))))
+                VStack(alignment: .leading, spacing: 1) {
                     Text(action.title == "Transform clipboard" ? "Transform" : action.title)
-                        .font(.system(size: TypeScale.small, weight: .medium))
+                        .font(.system(size: TypeScale.body, weight: .semibold))
                         .foregroundStyle(c(.bone))
+                    Text(action.shortcut)
+                        .font(.system(size: TypeScale.micro, weight: .semibold).monospaced())
+                        .foregroundStyle(c(.muted))
                 }
-                Text(action.shortcut)
-                    .font(.system(size: TypeScale.micro).monospaced())
-                    .foregroundStyle(c(.muted))
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 10).padding(.vertical, 8)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: Radius.surface)
+                .fill(hovered == action.id ? c(.edge).opacity(0.5) : c(.raised))
+                .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(hovered == action.id ? c(.raised) : .clear)
         .onHover { hovered = $0 ? action.id : (hovered == action.id ? nil : hovered) }
-        // The name lives on hover AND on keyboard focus — a tooltip that only
-        // answers to a mouse is not much of a label.
         .help(action.title)
         .accessibilityLabel(action.title)
-        .overlay(alignment: .top) {
-            if hovered == action.id {
-                Text(action.title)
-                    .font(.system(size: TypeScale.small))
-                    .foregroundStyle(c(.bone))
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
-                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
-                    .fixedSize()
-                    .offset(y: -24)
-                    .transition(.opacity)
-            }
-        }
         .animation(.easeOut(duration: 0.12), value: hovered)
     }
 
@@ -221,7 +213,7 @@ public struct MenuPanelView: View {
             VStack(spacing: 0) {
                 // Keyed by position: the rows are rebuilt from history on every
                 // refresh, with fresh ids, and hover must not flicker off when they are.
-                ForEach(Array(model.recent.enumerated()), id: \.element.id) { index, item in
+                ForEach(Array(model.recent.prefix(3).enumerated()), id: \.element.id) { index, item in
                     recentRow(item, index: index)
                 }
             }
@@ -308,9 +300,11 @@ public struct MenuPanelView: View {
                 Image(systemName: "gearshape")
                     .font(.system(size: TypeScale.body))
                     .foregroundStyle(c(.muted))
+                    .frame(width: 24, height: 24).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Settings")
+            .accessibilityLabel("Settings")
             if model.canUndo {
                 Button { model.onUndo?() } label: {
                     Text("Undo transform")
@@ -322,9 +316,18 @@ public struct MenuPanelView: View {
             }
             Spacer()
             Button { model.onQuit?() } label: {
-                Text("Quit").font(.system(size: TypeScale.body)).foregroundStyle(c(.faint))
+                HStack(spacing: 5) {
+                    Image(systemName: "power").font(.system(size: TypeScale.small))
+                    Text("Quit").font(.system(size: TypeScale.body))
+                }
+                .foregroundStyle(hovered == "quit" ? c(.bone) : c(.muted))
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: Radius.control)
+                    .fill(hovered == "quit" ? c(.raised) : .clear))
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .onHover { hovered = $0 ? "quit" : (hovered == "quit" ? nil : hovered) }
         }
         .padding(.horizontal, 15).padding(.vertical, 9)
         // `ink` is darker than `surface` in the dark theme and all but identical to

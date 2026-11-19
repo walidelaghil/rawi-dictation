@@ -135,6 +135,8 @@ public final class DictationController {
     /// started speaking, not as it might be by the time you stop.
     public var vocabulary: () -> VocabularySnapshot = { .empty }
     private var capturedVocabulary: VocabularySnapshot = .empty
+    /// Told which snippets fired, so the Snippets screen can show how often.
+    public var onSnippetsUsed: ([UUID]) -> Void = { _ in }
 
     /// Resolves where this dictation is going. Given the frontmost bundle id so
     /// the app delegate can read a browser URL without the controller knowing
@@ -626,7 +628,9 @@ public final class DictationController {
 
         // Snippets, after the guard, so an expanded address can never be mistaken
         // for the model rewriting your words.
-        text = SnippetExpander.expand(text, with: context.vocabulary.snippets)
+        let expanded = SnippetExpander.expandReporting(text, with: context.vocabulary.snippets)
+        text = expanded.text
+        onSnippetsUsed(expanded.used)
 
         // "first…, second…, third…" is a list, and here it becomes one. Last,
         // because it is the only stage that adds line breaks, and every stage

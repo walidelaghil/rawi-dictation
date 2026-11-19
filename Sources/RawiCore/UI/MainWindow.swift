@@ -16,6 +16,8 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         set { selection.screen = newValue }
     }
     private let model: HistoryViewModel
+    private let home: HomeViewModel
+    private let undo = UndoCenter()
     private let vocabulary: VocabularyViewModel
     private let destinations: DestinationsViewModel
     private let store: HistoryStore
@@ -36,6 +38,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
                 commandStore: CommandStore = CommandStore(), appearance: ResolvedAppearance) {
         self.store = store
         self.model = HistoryViewModel(store: store)
+        self.home = HomeViewModel(store: store)
         self.vocabulary = VocabularyViewModel(store: vocabularyStore, history: store)
         self.destinations = DestinationsViewModel(store: destinationStore)
         self.transforms = TransformsViewModel(store: transformStore)
@@ -43,6 +46,12 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         self.insights = InsightsViewModel(store: store)
         self.settings = SettingsViewModel()
         super.init()
+        model.undo = undo; destinations.undo = undo
+        transforms.undo = undo; commands.undo = undo
+        home.onShowHistory = { [weak self] in self?.selected = .history }
+        transforms.onOpenSettings = { [weak self] in self?.selection.openSettings(from: .transforms) }
+        commands.onOpenSettings = { [weak self] in self?.selection.openSettings(from: .commands) }
+        home.appearance = appearance
         model.appearance = appearance
         vocabulary.appearance = appearance
         destinations.appearance = appearance
@@ -70,6 +79,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     }
 
     public func setAppearance(_ appearance: ResolvedAppearance) {
+        home.appearance = appearance
         model.appearance = appearance
         vocabulary.appearance = appearance
         destinations.appearance = appearance
@@ -93,6 +103,7 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     }
 
     public func reload() {
+        home.reload()
         model.reload()
         vocabulary.reload()
         destinations.reload()
@@ -114,9 +125,9 @@ public final class MainWindow: NSObject, NSWindowDelegate {
     /// The window's content, for the proof renders. Rendering a screen on its own
     /// hides density problems that only appear next to the rail at 980 points.
     public func testRootView() -> some View {
-        MainWindowView(history: model, vocabulary: vocabulary, destinations: destinations,
+        MainWindowView(home: home, history: model, vocabulary: vocabulary, destinations: destinations,
                        transforms: transforms, commands: commands, insights: insights,
-                       settings: settings, selection: selection, setup: setup)
+                       settings: settings, selection: selection, setup: setup, undo: undo)
     }
 
     public func close() { window?.close() }
@@ -134,10 +145,10 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         window.center()
         selection.closeToken = 0
         window.contentView = NSHostingView(
-            rootView: MainWindowView(history: model, vocabulary: vocabulary,
+            rootView: MainWindowView(home: home, history: model, vocabulary: vocabulary,
                                      destinations: destinations, transforms: transforms,
                                      commands: commands, insights: insights, settings: settings,
-                                     selection: selection, setup: setup))
+                                     selection: selection, setup: setup, undo: undo))
         window.appearance = NSAppearance(
             named: model.appearance == .dark ? .darkAqua : .aqua)
         return window
@@ -147,36 +158,67 @@ public final class MainWindow: NSObject, NSWindowDelegate {
 /// Which screen is showing, held outside the view so the menu bar can open one.
 @MainActor
 public final class ScreenSelection: ObservableObject {
-    @Published var screen: Screen = .history
+    @Published var screen: Screen = .home
+    /// Where "change this key" came from, so Settings can offer the way back.
+    @Published var returnTo: Screen?
     /// Bumped to ask the window to close itself from inside SwiftUI.
     @Published var closeToken = 0
+
+    /// Opens Settings from a screen that shows a shortcut, remembering that screen.
+    func openSettings(from screen: Screen) {
+        returnTo = screen
+        self.screen = .settings
+    }
+
+    func goBack() {
+        guard let back = returnTo else { return }
+        returnTo = nil
+        screen = back
+    }
+
+    /// Picking a row in the rail starts fresh: nothing to go back to.
+    func go(_ screen: Screen) {
+        returnTo = nil
+        self.screen = screen
+    }
 }
 
 public enum Screen: String, CaseIterable {
+    case home = "Home"
     case history = "History"
-    case transforms = "Transforms"
-    case commands = "Commands"
     case insights = "Insights"
     case dictionary = "Dictionary"
     case snippets = "Snippets"
+    case transforms = "Transforms"
+    case commands = "Commands"
     case destinations = "Destinations"
     case settings = "Settings"
 
     var symbol: String {
         switch self {
+        case .home: "house"
         case .history: "clock"
-        case .transforms: "wand.and.sparkles"
-        case .commands: "bolt"
         case .insights: "chart.bar"
         case .dictionary: "character.book.closed"
         case .snippets: "scissors"
+        case .transforms: "wand.and.sparkles"
+        case .commands: "bolt"
         case .destinations: "scope"
         case .settings: "gearshape"
         }
     }
+
+    /// The rail's sections. Nine flat rows read as a list to scan; three groups
+    /// read as a place with a layout.
+    static var groups: [(title: String?, items: [Screen])] { [
+        (nil, [.home, .history, .insights]),
+        ("Customize", [.dictionary, .snippets, .transforms, .commands, .destinations]),
+        (nil, [.settings]),
+    ] }
 }
 
 struct MainWindowView: View {
+    @ObservedObject var home: HomeViewModel
     @ObservedObject var history: HistoryViewModel
     @ObservedObject var vocabulary: VocabularyViewModel
     @ObservedObject var destinations: DestinationsViewModel
@@ -186,6 +228,7 @@ struct MainWindowView: View {
     @ObservedObject var settings: SettingsViewModel
     @ObservedObject var selection: ScreenSelection
     @ObservedObject var setup: SetupChecklistModel
+    @ObservedObject var undo: UndoCenter
     private var screen: Screen { selection.screen }
 
     private func c(_ token: ColorToken) -> Color {
@@ -197,6 +240,7 @@ struct MainWindowView: View {
             rail
             Divider().overlay(c(.edge))
             switch screen {
+            case .home: HomeView(model: home, labels: history.labels)
             case .history: HistoryView(model: history)
             case .transforms: TransformsView(model: transforms)
             case .commands: CommandsView(model: commands)
@@ -204,11 +248,34 @@ struct MainWindowView: View {
             case .dictionary: DictionaryScreen(model: vocabulary)
             case .snippets: SnippetsScreen(model: vocabulary)
             case .destinations: DestinationsView(model: destinations)
-            case .settings: SettingsView(model: settings)
+            case .settings:
+                SettingsView(model: settings)
+                    .overlay(alignment: .topTrailing) { backLink }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            UndoBar(center: undo, appearance: history.appearance) {
+                history.reload(); transforms.reload(); commands.reload(); destinations.reload()
             }
         }
         .background(c(.surface))
         .onExitCommand { selection.closeToken += 1 }
+    }
+
+    /// Shown when Settings was opened from a screen's key hint.
+    @ViewBuilder private var backLink: some View {
+        if let back = selection.returnTo {
+            Button { selection.goBack() } label: {
+                Label("Back to \(back.rawValue)", systemImage: "chevron.left")
+                    .font(.system(size: TypeScale.small, weight: .medium))
+                    .foregroundStyle(c(.muted))
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.raised))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 22).padding(.trailing, 24)
+        }
     }
 
     private var rail: some View {
@@ -224,12 +291,22 @@ struct MainWindowView: View {
 
             // Only built screens appear. A greyed row for an unbuilt phase is dead
             // UI that teaches you to stop reading the rail.
-            ForEach(Screen.allCases, id: \.self) { item in
-                Button { selection.screen = item } label: {
-                    railRow(item.rawValue, symbol: item.symbol, selected: screen == item,
-                            shortcut: (Screen.allCases.firstIndex(of: item) ?? 0) + 1)
+            ForEach(Array(Screen.groups.enumerated()), id: \.offset) { index, group in
+                if index > 0 { Spacer().frame(height: 22) }
+                if let title = group.title {
+                    Text(title.uppercased())
+                        .font(.system(size: TypeScale.micro, weight: .medium).monospaced())
+                        .tracking(1.2)
+                        .foregroundStyle(c(.muted))
+                        .padding(.horizontal, 9).padding(.bottom, 2)
                 }
-                .buttonStyle(.plain)
+                ForEach(group.items, id: \.self) { item in
+                    Button { selection.go(item) } label: {
+                        railRow(item.rawValue, symbol: item.symbol, selected: screen == item,
+                                shortcut: (Screen.allCases.firstIndex(of: item) ?? 0) + 1)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
             Spacer()
@@ -264,7 +341,7 @@ struct MainWindowView: View {
             // ever learns one.
             Text("⌘\(shortcut)")
                 .font(.system(size: TypeScale.micro).monospaced())
-                .foregroundStyle(selected ? c(.muted) : c(.faint))
+                .foregroundStyle(c(.muted))
         }
         .foregroundStyle(selected ? c(.bone) : c(.muted))
         .padding(.horizontal, 9).padding(.vertical, 7)

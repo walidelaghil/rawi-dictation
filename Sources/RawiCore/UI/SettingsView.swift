@@ -242,12 +242,7 @@ public struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(title: "Settings", appearance: model.appearance,
-                             showInfo: $model.showInfo,
-                             info: "Everything here writes to ~/.config/rawi/config.json, "
-                                 + "which the running app watches, so changes take effect as you "
-                                 + "make them, with no restart. The file stays hand-editable, "
-                                 + "and it holds a few things this screen does not show, like "
-                                 + "the cleanup prompt itself.")
+                         subtitle: "Everything here is saved as you change it.")
 
                 if let error = model.saveError {
                     Text("Could not save: \(error)")

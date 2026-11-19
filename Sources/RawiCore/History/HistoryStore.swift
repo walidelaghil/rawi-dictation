@@ -75,6 +75,16 @@ public final class HistoryStore: @unchecked Sendable {
         }
     }
 
+    /// Puts a deleted entry back in date order (Undo).
+    public func restore(_ entry: HistoryEntry) {
+        lock.withLock {
+            guard !entries.contains(where: { $0.id == entry.id }) else { return }
+            let index = entries.firstIndex { $0.at < entry.at } ?? entries.count
+            entries.insert(entry, at: index)
+            rewriteLocked()
+        }
+    }
+
     public func purge() {
         lock.withLock {
             for entry in entries { removeAudio(of: entry) }

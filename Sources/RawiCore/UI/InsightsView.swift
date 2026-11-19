@@ -16,6 +16,8 @@ public final class InsightsViewModel: ObservableObject {
     @Published public var profileProblem: String?
     @Published public var appearance: ResolvedAppearance = .dark
     @Published public var showInfo = false
+    /// The image Share just copied, shown in the pop-up until it is dismissed.
+    @Published public var copiedImage: NSImage?
     /// The baseline the time-saved estimate is measured against, and adjustable,
     /// because a claim about *your* typing speed should be yours to set.
     @Published public var typingWPM: Int = 41
@@ -30,6 +32,16 @@ public final class InsightsViewModel: ObservableObject {
     public var profileStore: VoiceProfileStore?
 
     private let store: HistoryStore
+
+    /// Share puts the page on the clipboard and says so, rather than opening a
+    /// menu of places to send it: paste it wherever it is wanted.
+    public func copyToClipboard(_ image: NSImage, pasteboard: NSPasteboard = .general) {
+        pasteboard.clearContents()
+        pasteboard.writeObjects([image])
+        copiedImage = image
+    }
+
+    public func dismissCopied() { copiedImage = nil }
 
     public init(store: HistoryStore) {
         self.store = store
@@ -98,14 +110,8 @@ public struct InsightsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .firstTextBaseline) {
                     ScreenHeader(title: "Insights", appearance: model.appearance,
-                                 showInfo: $model.showInfo,
-                                 info: "Everything here is worked out on this Mac from your own "
-                                     + "history, and changes when history does. Speed is words over "
-                                     + "time actually spoken. Time saved is an estimate against a "
-                                     + "typing speed you set. Your voice profile is written by the "
-                                     + "local model from a sample of your dictations with email "
-                                     + "addresses, links and numbers taken out first.",
-                                 trailing: AnyView(ShareButton(model: model)))
+                         subtitle: "Worked out on this Mac, from your history.",
+                         trailing: AnyView(ShareButton(model: model)))
                 }
                 tabs
                 if model.isEmpty {
@@ -125,7 +131,46 @@ public struct InsightsView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(c(.surface))
+        .overlay { if let image = model.copiedImage { copiedPopup(image) } }
+        .animation(.easeOut(duration: 0.15), value: model.copiedImage != nil)
         .onAppear { model.reload() }
+    }
+
+    /// Dimmed page, a card in the middle: the image, and the one thing to know.
+    private func copiedPopup(_ image: NSImage) -> some View {
+        ZStack {
+            Color.black.opacity(0.55)
+                .onTapGesture { model.dismissCopied() }
+            VStack(spacing: 16) {
+                Image(nsImage: image)
+                    .resizable().scaledToFit()
+                    .frame(maxWidth: 380, maxHeight: 260)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.control))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge)))
+                VStack(spacing: 5) {
+                    Label("Copied to the clipboard", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: TypeScale.heading, weight: .semibold))
+                        .foregroundStyle(c(.bone))
+                        .symbolRenderingMode(.palette)
+                    Text("Paste it anywhere: Messages, Slack, Mail or a post.")
+                        .font(.system(size: TypeScale.body)).foregroundStyle(c(.muted))
+                }
+                Button { model.dismissCopied() } label: {
+                    Text("Done").font(.system(size: TypeScale.body, weight: .semibold))
+                        .foregroundStyle(c(.ink))
+                        .frame(maxWidth: .infinity).padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.saffron)))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(24)
+            .frame(width: 440)
+            .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.surface))
+                .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
+            .shadow(color: .black.opacity(0.4), radius: 24, y: 10)
+        }
+        .transition(.opacity)
     }
 
     private var tabs: some View {
@@ -721,7 +766,7 @@ private struct ShareButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .help("Share this page as an image")
+        .help("Copy this page as an image")
         .background(AnchorView(view: $anchor))
         .disabled(model.isEmpty)
     }
@@ -745,8 +790,8 @@ private struct ShareButton: View {
         .background(c(.surface))
         let renderer = ImageRenderer(content: content)
         renderer.scale = 2
-        guard let image = renderer.nsImage, let anchor else { return }
-        NSSharingServicePicker(items: [image]).show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+        guard let image = renderer.nsImage else { return }
+        model.copyToClipboard(image)
     }
 
     private struct AnchorView: NSViewRepresentable {

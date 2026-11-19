@@ -5,6 +5,9 @@ public final class TransformsViewModel: ObservableObject {
     @Published public var transforms: [Transform] = []
     @Published public var appearance: ResolvedAppearance = .dark
     @Published public var showInfo = false
+    public var undo: UndoCenter?
+
+    @Published public var query = ""
 
     // The add form.
     @Published public var draftName = ""
@@ -18,6 +21,8 @@ public final class TransformsViewModel: ObservableObject {
     @Published public var tryError: String?
     @Published public var trying = false
     @Published public var labels: HotkeyLabels = .placeholder
+    /// The key hint at the top right opens Settings, where the key is changed.
+    public var onOpenSettings: (() -> Void)?
 
     private let store: TransformStore
 
@@ -31,6 +36,14 @@ public final class TransformsViewModel: ObservableObject {
     }
 
     public func reload() { transforms = store.transforms }
+
+    public var filtered: [Transform] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return transforms }
+        return transforms.filter {
+            $0.name.localizedCaseInsensitiveContains(q) || $0.instruction.localizedCaseInsensitiveContains(q)
+        }
+    }
 
     public var canAdd: Bool {
         !draftName.trimmingCharacters(in: .whitespaces).isEmpty
@@ -46,8 +59,12 @@ public final class TransformsViewModel: ObservableObject {
     }
 
     public func remove(_ transform: Transform) {
+        let index = store.transforms.firstIndex { $0.id == transform.id } ?? store.transforms.count
         store.remove(transform.id)
         reload()
+        undo?.offer("Deleted “\(transform.name)”") { [store, weak self] in
+            store.restore(transform, at: index); self?.reload()
+        }
     }
 
     // MARK: - Editing
@@ -110,6 +127,82 @@ public final class TransformsViewModel: ObservableObject {
     }
 }
 
+struct TransformRow: View {
+    let transform: Transform
+    @ObservedObject var model: TransformsViewModel
+    @State private var hovered = false
+    @State private var expanded = false
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, model.appearance) }
+    private var editing: Bool { model.editingID == transform.id }
+    private var isLong: Bool { transform.instruction.count > 140 || transform.instruction.contains("\n") }
+
+    var body: some View { if editing { editor } else { display } }
+
+    private var display: some View {
+        Row(appearance: model.appearance) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(transform.name)
+                        .font(.system(size: TypeScale.heading, weight: .medium))
+                        .foregroundStyle(c(.bone))
+                    if !transform.isBuiltIn {
+                        Text("yours").font(.system(size: TypeScale.small))
+                            .foregroundStyle(c(.verdigris))
+                    }
+                }
+                .frame(width: 150, alignment: .leading)
+                Image(systemName: "arrow.right")
+                    .font(.system(size: TypeScale.micro)).foregroundStyle(c(.muted)).padding(.top, 4)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(transform.instruction)
+                        .font(.system(size: TypeScale.body)).foregroundStyle(c(.bone))
+                        .lineLimit(expanded ? nil : 3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if isLong {
+                        Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
+                            .buttonStyle(.plain).font(.system(size: TypeScale.small))
+                            .foregroundStyle(c(.saffron))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if model.canRestore(transform) {
+                    Button("Reset") { model.restore(transform) }
+                        .buttonStyle(.plain).font(.system(size: TypeScale.small))
+                        .foregroundStyle(c(.muted)).help("Put the shipped wording back")
+                        .opacity(hovered ? 1 : 0)
+                }
+                if !transform.isBuiltIn {
+                    RemoveButton(visible: hovered, label: "Delete \(transform.name)",
+                                 appearance: model.appearance) { model.remove(transform) }
+                }
+            }
+        }
+        .onHover { hovered = $0 }
+        .onTapGesture { model.beginEditing(transform) }
+        .help("Click to edit")
+    }
+
+    private var editor: some View {
+        FormCard(appearance: model.appearance) {
+            GrowingField(placeholder: "What you will say", text: $model.editName, lines: 1...2,
+                         weight: .medium, size: TypeScale.heading, appearance: model.appearance)
+            Rectangle().fill(c(.edge)).frame(height: 1)
+            GrowingField(placeholder: "What the model should do", text: $model.editInstruction,
+                         lines: 2...8, appearance: model.appearance)
+            HStack(spacing: 12) {
+                Spacer()
+                Button("Cancel", action: model.cancelEditing)
+                    .buttonStyle(.plain).font(.system(size: TypeScale.body))
+                    .foregroundStyle(c(.muted)).keyboardShortcut(.escape, modifiers: [])
+                PrimaryButton(title: "Save", enabled: model.canSaveEdit,
+                              appearance: model.appearance) { model.saveEdit() }
+                    .keyboardShortcut(.return, modifiers: .command)
+            }
+        }
+        .padding(.horizontal, 8)
+    }
+}
+
 public struct TransformsView: View {
     @ObservedObject var model: TransformsViewModel
     public init(model: TransformsViewModel) { self.model = model }
@@ -119,18 +212,51 @@ public struct TransformsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(title: "Transforms", appearance: model.appearance,
-                             showInfo: $model.showInfo,
-                             info: "Copy some text, hold \(model.labels.transform) and say what "
-                                 + "to do with it. The clipboard comes back rewritten. Saying a "
-                                 + "transform's "
-                                 + "name uses its tuned instruction; anything else is used as "
-                                 + "you said it. The original goes to History before the model "
-                                 + "runs, and a failed transform leaves your clipboard exactly "
-                                 + "as it was.")
+                         subtitle: "Copy text, hold \(model.labels.transform), and say how to rewrite it.",
+                         trailing: AnyView(KeyHint(label: "Transform key", key: model.labels.transform,
+                                                       appearance: model.appearance) {
+                                 model.onOpenSettings?()
+                             }))
+
+                FormCard(appearance: model.appearance) {
+                    GrowingField(placeholder: "When I say…", text: $model.draftName, lines: 1...2,
+                                 weight: .medium, size: TypeScale.heading,
+                                 appearance: model.appearance)
+                    Rectangle().fill(c(.edge)).frame(height: 1)
+                    GrowingField(placeholder: "…rewrite the text like this", text: $model.draftInstruction,
+                                 lines: 2...8, appearance: model.appearance)
+                    HStack {
+                        Spacer()
+                        PrimaryButton(title: "Add transform", enabled: model.canAdd,
+                                      appearance: model.appearance) { model.add() }
+                            .keyboardShortcut(.return, modifiers: .command)
+                            .help("Add (⌘Return)")
+                    }
+                }
+
+                if model.transforms.count > 3 {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(c(.muted))
+                        TextField("Search transforms", text: $model.query)
+                            .textFieldStyle(.plain).font(.system(size: TypeScale.body))
+                            .foregroundStyle(c(.bone))
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
+                }
+
+                if model.filtered.isEmpty {
+                    EmptyHint(title: model.transforms.isEmpty ? "No transforms yet."
+                                  : "No transform matches “\(model.query)”.",
+                              detail: "", appearance: model.appearance)
+                } else {
+                    RowGroup(appearance: model.appearance, scrolls: false) {
+                        ForEach(model.filtered) { TransformRow(transform: $0, model: model) }
+                    }
+                }
 
                 tryIt
-                list
-                addForm
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 22)
@@ -142,7 +268,7 @@ public struct TransformsView: View {
     // MARK: - Try it
 
     private var tryIt: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        FormCard(appearance: model.appearance) {
             HStack(spacing: 8) {
                 Text("Try one").font(.system(size: TypeScale.body, weight: .semibold))
                     .foregroundStyle(c(.bone))
@@ -157,40 +283,30 @@ public struct TransformsView: View {
                         .foregroundStyle(c(.lapis))
                 }
             }
-
-            HStack(alignment: .top, spacing: 10) {
-                field("Text", text: $model.tryText, lines: 4)
-                field("Say", text: $model.trySpoken, lines: 4)
-            }
-
+            GrowingField(placeholder: "Paste some text…", text: $model.tryText, lines: 2...8,
+                         appearance: model.appearance)
+            Rectangle().fill(c(.edge)).frame(height: 1)
+            GrowingField(placeholder: "…and say what to do with it", text: $model.trySpoken,
+                         lines: 1...3, appearance: model.appearance)
             HStack(spacing: 10) {
-                // No provider, no button. A greyed-out control is a promise the
-                // screen cannot keep; the sentence says what to do instead.
+                // No provider, no button: the sentence says what to do instead.
                 if model.preview == nil {
                     Text("Transforms need a cleanup provider. Turn one on in Settings.")
-                        .font(.system(size: TypeScale.body)).foregroundStyle(c(.faint))
-                } else {
-                    Button { Task { await model.runTry() } } label: {
-                        Text(model.trying ? "Rewriting…" : "Rewrite")
-                            .font(.system(size: TypeScale.body, weight: .medium))
-                            .foregroundStyle(c(.ink))
-                            .padding(.horizontal, 14).padding(.vertical, 7)
-                            .background(RoundedRectangle(cornerRadius: Radius.control)
-                                .fill(c(.saffron)))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(model.trying)
-                }
-                if let error = model.tryError {
+                        .font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
+                } else if let error = model.tryError {
                     Text(error).font(.system(size: TypeScale.small)).foregroundStyle(c(.clay))
                 }
                 Spacer()
+                if model.preview != nil {
+                    PrimaryButton(title: model.trying ? "Rewriting…" : "Rewrite",
+                                  enabled: !model.trying, appearance: model.appearance) {
+                        Task { await model.runTry() }
+                    }
+                }
             }
-
             if !model.tryResult.isEmpty {
                 Text(model.tryResult)
-                    .font(.system(size: TypeScale.body))
-                    .foregroundStyle(c(.bone))
+                    .font(.system(size: TypeScale.body)).foregroundStyle(c(.bone))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(11)
@@ -200,144 +316,5 @@ public struct TransformsView: View {
                             .strokeBorder(c(.verdigris).opacity(0.45))))
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
-    }
-
-    private func field(_ label: String, text: Binding<String>, lines: Int) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label.uppercased())
-                .font(.system(size: TypeScale.micro, weight: .medium).monospaced()).tracking(1.1)
-                .foregroundStyle(c(.faint))
-            TextEditor(text: text)
-                .font(.system(size: TypeScale.body))
-                .scrollContentBackground(.hidden)
-                .frame(height: CGFloat(lines) * 17)
-                .padding(7)
-                .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
-                    .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
-        }
-    }
-
-    /// The row, open. Name and instruction both editable, because what you say to
-    /// reach a transform is as much a preference as what it then does.
-    private var editor: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            TextField("What you will say", text: $model.editName)
-                .textFieldStyle(.plain)
-                .font(.system(size: TypeScale.body))
-                .foregroundStyle(c(.bone))
-                .padding(.horizontal, 9).padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink)))
-            TextEditor(text: $model.editInstruction)
-                .font(.system(size: TypeScale.body))
-                .foregroundStyle(c(.bone))
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: 66)
-                .padding(.horizontal, 5).padding(.vertical, 4)
-                .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink)))
-            HStack(spacing: 8) {
-                Button("Save", action: model.saveEdit)
-                    .buttonStyle(.plain)
-                    .font(.system(size: TypeScale.small, weight: .semibold))
-                    .foregroundStyle(model.canSaveEdit ? c(.ink) : c(.faint))
-                    .padding(.horizontal, 11).padding(.vertical, 5)
-                    .background(Capsule().fill(model.canSaveEdit ? c(.saffron) : c(.raised)))
-                    .disabled(!model.canSaveEdit)
-                Button("Cancel", action: model.cancelEditing)
-                    .buttonStyle(.plain)
-                    .font(.system(size: TypeScale.small))
-                    .foregroundStyle(c(.muted))
-            }
-        }
-        .frame(maxWidth: 620, alignment: .leading)
-    }
-
-    // MARK: - List
-
-    private var list: some View {
-        RowGroup(appearance: model.appearance) {
-            ForEach(model.transforms) { transform in
-              Row(appearance: model.appearance) {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 9) {
-                        Text(transform.name)
-                            .font(.system(size: TypeScale.heading, weight: .medium))
-                            .foregroundStyle(c(.bone))
-                        if !transform.isBuiltIn {
-                            Text("yours")
-                                .font(.system(size: TypeScale.micro, weight: .medium))
-                                .foregroundStyle(c(.verdigris))
-                                .padding(.horizontal, 7).padding(.vertical, 2)
-                                .background(Capsule().fill(c(.verdigris).opacity(0.14)))
-                        }
-                        Spacer(minLength: 8)
-                        if model.canRestore(transform) {
-                            Button { model.restore(transform) } label: {
-                                Text("Reset")
-                                    .font(.system(size: TypeScale.micro, weight: .medium))
-                                    .foregroundStyle(c(.faint))
-                            }.buttonStyle(.plain).help("Put the shipped wording back")
-                        }
-                        Button { model.beginEditing(transform) } label: {
-                            Image(systemName: "pencil").font(.system(size: TypeScale.micro))
-                                .foregroundStyle(c(.faint))
-                        }.buttonStyle(.plain).help("Edit this transform")
-                        if !transform.isBuiltIn {
-                            Button { model.remove(transform) } label: {
-                                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
-                                    .foregroundStyle(c(.faint))
-                            }.buttonStyle(.plain).help("Delete")
-                        }
-                    }
-                    if model.editingID == transform.id {
-                        editor
-                    } else {
-                        Text(transform.instruction)
-                            .font(.system(size: TypeScale.body))
-                            .foregroundStyle(c(.muted))
-                            .lineSpacing(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: 620, alignment: .leading)
-                    }
-                }
-              }
-            }
-        }
-        .frame(minHeight: 200)
-    }
-
-    // MARK: - Add
-
-    private var addForm: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text("Add a transform").font(.system(size: TypeScale.body, weight: .semibold))
-                .foregroundStyle(c(.bone))
-            HStack(spacing: 9) {
-                TextField("Name, what you will say", text: $model.draftName)
-                    .textFieldStyle(.plain).font(.system(size: TypeScale.body))
-                    .padding(8).frame(width: 200)
-                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
-                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
-                TextField("Instruction, what the model should do", text: $model.draftInstruction)
-                    .textFieldStyle(.plain).font(.system(size: TypeScale.body))
-                    .padding(8)
-                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.surface))
-                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
-                Button { model.add() } label: {
-                    Text("Add").font(.system(size: TypeScale.small, weight: .medium))
-                        .foregroundStyle(c(.ink))
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.bone)))
-                }
-                .buttonStyle(.plain)
-                .disabled(!model.canAdd)
-                .opacity(model.canAdd ? 1 : 0.4)
-            }
-        }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
     }
 }

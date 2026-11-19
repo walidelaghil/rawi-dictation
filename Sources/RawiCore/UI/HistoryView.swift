@@ -5,6 +5,7 @@ public final class HistoryViewModel: ObservableObject {
     @Published public var entries: [HistoryEntry] = []
     @Published public var filter = HistoryFilter()
     @Published public var showInfo = false
+    public var undo: UndoCenter?
     @Published public var confirmingPurge = false
     @Published public var confirmingDelete = false
     @Published public var appearance: ResolvedAppearance = .dark
@@ -98,7 +99,12 @@ public final class HistoryViewModel: ObservableObject {
         // should give you the sentence you spoke, not the four lines it arrived in.
         NSPasteboard.general.setString(Transcript.clean(entry.cleaned), forType: .string)
     }
-    public func delete(_ entry: HistoryEntry) { store.remove(entry.id); reload() }
+    public func delete(_ entry: HistoryEntry) {
+        store.remove(entry.id); reload()
+        undo?.offer("Deleted that dictation") { [store, weak self] in
+            store.restore(entry); self?.reload()
+        }
+    }
     public func purge() { store.purge(); reload(); confirmingPurge = false }
 }
 
@@ -120,7 +126,6 @@ public struct HistoryView: View {
         .padding(.vertical, 22)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(c(.surface))
-        .overlay(alignment: .topLeading) { if model.showInfo { infoOverlay } }
         // The list owns the arrows, Return and Delete once the search box does not.
         // The ring is suppressed: a focus ring around an entire screen is not
         // telling anyone anything, and it drew a blue line down the window.
@@ -145,17 +150,14 @@ public struct HistoryView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .lastTextBaseline, spacing: 10) {
-            Text("History")
-                .font(.system(size: TypeScale.title, weight: .semibold))
-                .foregroundStyle(c(.bone))
-            Button { model.showInfo.toggle() } label: {
-                Image(systemName: "info.circle")
-                    .font(.system(size: TypeScale.heading))
-                    .foregroundStyle(c(.faint))
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("History")
+                    .font(.system(size: TypeScale.title, weight: .semibold))
+                    .foregroundStyle(c(.bone))
+                Text("Everything you dictated. It stays on this Mac.")
+                    .font(.system(size: TypeScale.body)).foregroundStyle(c(.muted))
             }
-            .buttonStyle(.plain)
-            .help("About history")
             Spacer()
             Button { model.confirmingPurge = true } label: {
                 Text("Clear all").font(.system(size: TypeScale.body)).foregroundStyle(c(.clay))
@@ -181,35 +183,6 @@ public struct HistoryView: View {
                 Text("The text is gone for good. Nothing else on your Mac is touched.")
             }
         }
-    }
-
-    /// The explanation sits behind the ⓘ because it is scaffolding you stop
-    /// needing — on screen it would be permanent clutter.
-    private var infoOverlay: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("About history").font(.system(size: TypeScale.body, weight: .semibold))
-                    .foregroundStyle(c(.bone))
-                Spacer()
-                Button { model.showInfo = false } label: {
-                    Text("×").font(.system(size: TypeScale.heading)).foregroundStyle(c(.faint))
-                }.buttonStyle(.plain)
-            }
-            Text("Both the cleaned text and what whisper actually heard. Search covers "
-               + "both, which is what you need when you remember what you said rather "
-               + "than what came out. "
-               + "Capped at \(model.limit) entries; password "
-               + "managers and private messages are never recorded.")
-                .font(.system(size: TypeScale.small))
-                .foregroundStyle(c(.muted))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(15)
-        .frame(width: 380, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
-        .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
-        .offset(x: 0, y: 52)
     }
 
     // MARK: - Search and filters
@@ -441,11 +414,12 @@ public struct HistoryView: View {
             }
 
             Button { model.delete(entry) } label: {
-                Image(systemName: "xmark").font(.system(size: TypeScale.micro))
-                    .foregroundStyle(c(.faint))
+                Image(systemName: "xmark").font(.system(size: TypeScale.small))
+                    .foregroundStyle(c(.muted)).frame(width: 24, height: 24).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Delete this entry")
+            .accessibilityLabel("Delete this entry")
         }
     }
 }

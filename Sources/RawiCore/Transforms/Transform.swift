@@ -31,6 +31,15 @@ public final class TransformStore: @unchecked Sendable {
 
     public var transforms: [Transform] { lock.withLock { stored } }
 
+    /// Puts a deleted transform back where it was (Undo).
+    public func restore(_ transform: Transform, at index: Int) {
+        lock.withLock {
+            guard !stored.contains(where: { $0.id == transform.id }) else { return }
+            stored.insert(transform, at: min(max(index, 0), stored.count))
+            save()
+        }
+    }
+
     public func add(name: String, instruction: String) {
         let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let i = instruction.trimmingCharacters(in: .whitespacesAndNewlines)

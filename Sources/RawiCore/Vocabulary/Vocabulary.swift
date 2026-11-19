@@ -47,11 +47,30 @@ public struct Snippet: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     public var trigger: String
     public var expansion: String
+    /// Hidden in the list (a password, a card number). It still expands when spoken.
+    public var sensitive: Bool
+    /// How many times it has fired in a dictation.
+    public var uses: Int
 
-    public init(id: UUID = UUID(), trigger: String, expansion: String) {
+    public init(id: UUID = UUID(), trigger: String, expansion: String, sensitive: Bool = false,
+                uses: Int = 0) {
+        self.uses = uses
         self.id = id
         self.trigger = trigger
         self.expansion = expansion
+        self.sensitive = sensitive
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, trigger, expansion, sensitive, uses }
+
+    /// Tolerant: files written before `sensitive` existed still load.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        trigger = try c.decode(String.self, forKey: .trigger)
+        expansion = try c.decode(String.self, forKey: .expansion)
+        sensitive = try c.decodeIfPresent(Bool.self, forKey: .sensitive) ?? false
+        uses = try c.decodeIfPresent(Int.self, forKey: .uses) ?? 0
     }
 }
 
@@ -242,7 +261,7 @@ public final class VocabularyStore: @unchecked Sendable {
     }
 
     @discardableResult
-    public func addSnippet(trigger: String, expansion: String) -> Bool {
+    public func addSnippet(trigger: String, expansion: String, sensitive: Bool = false) -> Bool {
         let t = trigger.trimmingCharacters(in: .whitespacesAndNewlines)
         let e = expansion.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty, !e.isEmpty else { return false }
@@ -250,7 +269,7 @@ public final class VocabularyStore: @unchecked Sendable {
             guard !payload.snippets.contains(where: {
                 $0.trigger.compare(t, options: .caseInsensitive) == .orderedSame
             }) else { return false }
-            payload.snippets.append(Snippet(trigger: t, expansion: e))
+            payload.snippets.append(Snippet(trigger: t, expansion: e, sensitive: sensitive))
             save()
             return true
         }
@@ -258,6 +277,59 @@ public final class VocabularyStore: @unchecked Sendable {
 
     public func removeSnippet(_ id: UUID) {
         lock.withLock { payload.snippets.removeAll { $0.id == id }; save() }
+    }
+
+    /// Edits a snippet in place. False when empty, or when another snippet already
+    /// has that trigger.
+    @discardableResult
+    public func updateSnippet(_ id: UUID, trigger: String, expansion: String,
+                              sensitive: Bool) -> Bool {
+        let t = trigger.trimmingCharacters(in: .whitespacesAndNewlines)
+        let e = expansion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, !e.isEmpty else { return false }
+        return lock.withLock {
+            guard let index = payload.snippets.firstIndex(where: { $0.id == id }),
+                  !payload.snippets.contains(where: {
+                      $0.id != id && $0.trigger.compare(t, options: .caseInsensitive) == .orderedSame
+                  }) else { return false }
+            payload.snippets[index].trigger = t
+            payload.snippets[index].expansion = e
+            payload.snippets[index].sensitive = sensitive
+            save()
+            return true
+        }
+    }
+
+    /// Counts each snippet that fired in a dictation.
+    public func recordUse(of ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        lock.withLock {
+            for id in ids {
+                if let index = payload.snippets.firstIndex(where: { $0.id == id }) {
+                    payload.snippets[index].uses += 1
+                }
+            }
+            save()
+        }
+    }
+
+    /// Puts a removed snippet back where it was. This is what Undo calls.
+    public func restoreSnippet(_ snippet: Snippet, at index: Int) {
+        lock.withLock {
+            guard !payload.snippets.contains(where: { $0.id == snippet.id }) else { return }
+            payload.snippets.insert(snippet, at: min(max(index, 0), payload.snippets.count))
+            save()
+        }
+    }
+
+    /// Puts a removed term back, and un-blocks it if removing it had blocked it.
+    public func restoreTerm(_ term: DictionaryTerm, at index: Int) {
+        lock.withLock {
+            guard !payload.terms.contains(where: { $0.id == term.id }) else { return }
+            payload.blocked.removeAll { $0 == term.term.lowercased() }
+            payload.terms.insert(term, at: min(max(index, 0), payload.terms.count))
+            save()
+        }
     }
 
     public func snapshot() -> VocabularySnapshot {

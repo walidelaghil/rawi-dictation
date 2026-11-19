@@ -6,9 +6,14 @@ public final class CommandsViewModel: ObservableObject {
     @Published public var commands: [SpokenCommand] = []
     @Published public var appearance: ResolvedAppearance = .dark
     @Published public var showInfo = false
+    public var undo: UndoCenter?
     /// The command being edited, if any.
     @Published public var editing: UUID?
     @Published public var composing = false
+    @Published public var query = ""
+    @Published public var editPhrase = ""
+    @Published public var editDetail = ""
+    @Published public var editConfirm = true
     @Published public var draftPhrase = ""
     @Published public var draftKind = "link"
     @Published public var draftDetail = ""
@@ -17,6 +22,8 @@ public final class CommandsViewModel: ObservableObject {
     @Published public var tryText = ""
     @Published public var tryResult: String?
     @Published public var key = "⌃⌥C"
+    /// The key hint at the top right opens Settings, where the key is changed.
+    public var onOpenSettings: (() -> Void)?
 
     private let store: CommandStore
     /// Runs a command for real, from the try box.
@@ -29,8 +36,38 @@ public final class CommandsViewModel: ObservableObject {
 
     public func reload() { commands = store.commands }
 
+    public var filtered: [SpokenCommand] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return commands }
+        return commands.filter {
+            $0.phrase.localizedCaseInsensitiveContains(q)
+                || Self.detail(of: $0.action).localizedCaseInsensitiveContains(q)
+        }
+    }
+
+    public func beginEditing(_ command: SpokenCommand) {
+        editing = command.id
+        editPhrase = command.phrase
+        editDetail = Self.detail(of: command.action)
+        editConfirm = command.confirm
+    }
+    public func cancelEditing() { editing = nil }
+    public func saveEdit() {
+        guard let id = editing, let command = commands.first(where: { $0.id == id }),
+              !editPhrase.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        update(command, phrase: editPhrase.trimmingCharacters(in: .whitespaces),
+               detail: editDetail.trimmingCharacters(in: .whitespaces), confirm: editConfirm)
+        editing = nil
+    }
+
     public func toggle(_ command: SpokenCommand) { store.setEnabled(command.id, !command.enabled); reload() }
-    public func remove(_ command: SpokenCommand) { store.remove(command.id); reload() }
+    public func remove(_ command: SpokenCommand) {
+        let index = store.commands.firstIndex { $0.id == command.id } ?? store.commands.count
+        store.remove(command.id); reload()
+        undo?.offer("Deleted “\(command.phrase)”") { [store, weak self] in
+            store.restore(command, at: index); self?.reload()
+        }
+    }
 
     public func update(_ command: SpokenCommand, phrase: String? = nil, detail: String? = nil,
                        confirm: Bool? = nil) {
@@ -113,63 +150,42 @@ public final class CommandsViewModel: ObservableObject {
     }
 }
 
-public struct CommandsView: View {
+struct CommandRow: View {
+    let command: SpokenCommand
     @ObservedObject var model: CommandsViewModel
-    public init(model: CommandsViewModel) { self.model = model }
+    @State private var hovered = false
     private func c(_ t: ColorToken) -> Color { RawiColors.color(t, model.appearance) }
+    private var editing: Bool { model.editing == command.id }
 
-    public var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ScreenHeader(title: "Commands", appearance: model.appearance, showInfo: $model.showInfo,
-                             info: "Hold \(model.key), say a command, let go. The phrase has to be the "
-                                 + "start of what you said, matched here on this Mac, never by a model "
-                                 + "guessing what you meant. Anything that creates something shows what "
-                                 + "it will do and waits: tap \(model.key) again to run it, Esc to drop "
-                                 + "it. What you say never reaches your document.")
-                RowGroup(appearance: model.appearance) {
-                    ForEach(model.commands) { command in
-                        Row(appearance: model.appearance) { row(command) }
-                    }
-                }
-                tryBox
-                addCommand
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 24).padding(.vertical, 22)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .background(c(.surface))
-        .onAppear { model.reload() }
-    }
+    var body: some View { if editing { editor } else { display } }
 
-    @ViewBuilder private func row(_ command: SpokenCommand) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var display: some View {
+        Row(appearance: model.appearance) {
             HStack(alignment: .top, spacing: 12) {
                 Button { model.toggle(command) } label: {
                     Image(systemName: command.enabled ? "checkmark.square.fill" : "square")
                         .font(.system(size: TypeScale.heading))
-                        .foregroundStyle(command.enabled ? c(.verdigris) : c(.faint))
+                        .foregroundStyle(command.enabled ? c(.verdigris) : c(.muted))
+                        .frame(width: 24, height: 24).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(command.enabled ? "Turn off" : "Turn on")
+                .accessibilityLabel(command.enabled ? "Turn off \(command.phrase)" : "Turn on \(command.phrase)")
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 9) {
                         Text("“\(command.phrase)”")
                             .font(.system(size: TypeScale.heading, weight: .medium))
-                            .foregroundStyle(command.enabled ? c(.bone) : c(.faint))
+                            .foregroundStyle(command.enabled ? c(.bone) : c(.muted))
                         Text(command.action.kindLabel.uppercased())
                             .font(.system(size: TypeScale.micro, weight: .medium)).tracking(1)
-                            .foregroundStyle(c(.faint))
+                            .foregroundStyle(c(.muted))
                         if command.confirm {
                             Text("ASKS FIRST")
                                 .font(.system(size: TypeScale.micro, weight: .medium)).tracking(1)
                                 .foregroundStyle(c(.saffron))
                         }
                     }
-                    // Only when there is one: an empty detail used to fall back to the
-                    // note, which then appeared twice in a row.
                     let detail = CommandsViewModel.detail(of: command.action)
                     if !detail.isEmpty {
                         Text(detail)
@@ -179,122 +195,143 @@ public struct CommandsView: View {
                     }
                     if !command.note.isEmpty {
                         Text(command.note).font(.system(size: TypeScale.small))
-                            .foregroundStyle(c(.faint))
+                            .foregroundStyle(c(.muted))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer(minLength: 8)
-                Button { model.editing = model.editing == command.id ? nil : command.id } label: {
-                    Image(systemName: "slider.horizontal.3").font(.system(size: TypeScale.body))
-                        .foregroundStyle(model.editing == command.id ? c(.saffron) : c(.faint))
-                }
-                .buttonStyle(.plain).help("Edit")
                 if !command.isBuiltIn {
-                    Button { model.remove(command) } label: {
-                        Image(systemName: "xmark").font(.system(size: TypeScale.micro))
-                            .foregroundStyle(c(.faint))
-                    }
-                    .buttonStyle(.plain).help("Delete")
+                    RemoveButton(visible: hovered, label: "Delete \(command.phrase)",
+                                 appearance: model.appearance) { model.remove(command) }
                 }
             }
-            if model.editing == command.id { editor(command) }
         }
+        .onHover { hovered = $0 }
+        .onTapGesture { model.beginEditing(command) }
+        .help("Click to edit")
     }
 
-    private func editor(_ command: SpokenCommand) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                labelled("Say", text: Binding(
-                    get: { command.phrase },
-                    set: { model.update(command, phrase: $0) }))
-                labelled(CommandsViewModel.kinds.first { $0.id == CommandsViewModel.kind(of: command.action) }?.hint ?? "",
-                         text: Binding(
-                    get: { CommandsViewModel.detail(of: command.action) },
-                    set: { model.update(command, detail: $0) }))
+    private var editor: some View {
+        FormCard(appearance: model.appearance) {
+            GrowingField(placeholder: "When I say…", text: $model.editPhrase, lines: 1...2,
+                         weight: .medium, size: TypeScale.heading, appearance: model.appearance)
+            Rectangle().fill(c(.edge)).frame(height: 1)
+            GrowingField(placeholder: CommandsViewModel.kinds
+                            .first { $0.id == CommandsViewModel.kind(of: command.action) }?.hint ?? "",
+                         text: $model.editDetail, lines: 1...4, appearance: model.appearance)
+            HStack(spacing: 12) {
+                Toggle("Ask before running", isOn: $model.editConfirm)
+                    .toggleStyle(.checkbox).font(.system(size: TypeScale.small))
+                    .foregroundStyle(c(.muted))
+                Spacer()
+                Button("Cancel", action: model.cancelEditing)
+                    .buttonStyle(.plain).font(.system(size: TypeScale.body))
+                    .foregroundStyle(c(.muted)).keyboardShortcut(.escape, modifiers: [])
+                PrimaryButton(title: "Save", appearance: model.appearance) { model.saveEdit() }
+                    .keyboardShortcut(.return, modifiers: .command)
             }
-            Toggle("Ask before running", isOn: Binding(
-                get: { command.confirm },
-                set: { model.update(command, confirm: $0) }))
-                .toggleStyle(.checkbox)
-                .font(.system(size: TypeScale.small))
-                .foregroundStyle(c(.muted))
         }
-        .padding(.leading, 34).padding(.top, 2)
+        .padding(.horizontal, 8)
+    }
+}
+
+public struct CommandsView: View {
+    @ObservedObject var model: CommandsViewModel
+    public init(model: CommandsViewModel) { self.model = model }
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, model.appearance) }
+
+    public var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ScreenHeader(title: "Commands", appearance: model.appearance,
+                         subtitle: "Say a command and Rawi acts on it. Nothing is typed.",
+                         trailing: AnyView(KeyHint(label: "Command key", key: model.key,
+                                                       appearance: model.appearance) {
+                                 model.onOpenSettings?()
+                             }))
+
+                addCard
+
+                if model.commands.count > 3 {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(c(.muted))
+                        TextField("Search commands", text: $model.query)
+                            .textFieldStyle(.plain).font(.system(size: TypeScale.body))
+                            .foregroundStyle(c(.bone))
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
+                }
+
+                if model.filtered.isEmpty {
+                    EmptyHint(title: model.commands.isEmpty ? "No commands yet."
+                                  : "No command matches “\(model.query)”.",
+                              detail: "", appearance: model.appearance)
+                } else {
+                    RowGroup(appearance: model.appearance, scrolls: false) {
+                        ForEach(model.filtered) { CommandRow(command: $0, model: model) }
+                    }
+                }
+
+                tryBox
+            }
+            .padding(.horizontal, 24).padding(.vertical, 22)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .background(c(.surface))
+        .onAppear { model.reload() }
+    }
+
+    /// Same shape as Snippets: what you say on top, what happens below.
+    private var addCard: some View {
+        FormCard(appearance: model.appearance) {
+            GrowingField(placeholder: "When I say…  (like: capture idea)", text: $model.draftPhrase,
+                         lines: 1...2, weight: .medium, size: TypeScale.heading,
+                         appearance: model.appearance)
+            Rectangle().fill(c(.edge)).frame(height: 1)
+            HStack(spacing: 10) {
+                Text("then").font(.system(size: TypeScale.body)).foregroundStyle(c(.muted))
+                Picker("", selection: $model.draftKind) {
+                    ForEach(CommandsViewModel.kinds, id: \.id) { Text($0.label).tag($0.id) }
+                }
+                .labelsHidden().pickerStyle(.menu).fixedSize()
+                Spacer()
+            }
+            GrowingField(placeholder: CommandsViewModel.kinds
+                            .first { $0.id == model.draftKind }?.hint ?? "",
+                         text: $model.draftDetail, lines: 1...4, appearance: model.appearance)
+            HStack(spacing: 12) {
+                Toggle("Ask before running", isOn: $model.draftConfirm)
+                    .toggleStyle(.checkbox).font(.system(size: TypeScale.small))
+                    .foregroundStyle(c(.muted))
+                Spacer()
+                PrimaryButton(title: "Add command", enabled: model.canSave,
+                              appearance: model.appearance) { model.saveDraft() }
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .help("Add (⌘Return)")
+            }
+        }
     }
 
     private var tryBox: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Try one").font(.system(size: TypeScale.body, weight: .semibold)).foregroundStyle(c(.bone))
-            HStack(spacing: 8) {
-                labelled("Say it in writing, like: remind me to send the deck", text: $model.tryText)
-                Button("Run") { model.runTry() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: TypeScale.body, weight: .semibold))
-                    .foregroundStyle(model.tryPreview == nil ? c(.faint) : c(.saffron))
-                    .disabled(model.tryPreview == nil)
-            }
-            if let preview = model.tryPreview {
-                Text(preview).font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
-                    .fixedSize(horizontal: false, vertical: true)
+        FormCard(appearance: model.appearance) {
+            Text("Try one").font(.system(size: TypeScale.body, weight: .semibold))
+                .foregroundStyle(c(.bone))
+            GrowingField(placeholder: "Say it in writing, like: remind me to send the deck",
+                         text: $model.tryText, lines: 1...3, appearance: model.appearance)
+            HStack(spacing: 10) {
+                if let preview = model.tryPreview {
+                    Text(preview).font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                PrimaryButton(title: "Run", enabled: model.tryPreview != nil,
+                              appearance: model.appearance) { model.runTry() }
             }
             if let result = model.tryResult {
                 Text(result).font(.system(size: TypeScale.small)).foregroundStyle(c(.verdigris))
             }
         }
-        .padding(15)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
-    }
-
-    private var addCommand: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Add a command").font(.system(size: TypeScale.body, weight: .semibold))
-                    .foregroundStyle(c(.bone))
-                Spacer()
-                if !model.composing {
-                    Button("New command") { model.composing = true }
-                        .buttonStyle(.plain)
-                        .font(.system(size: TypeScale.small, weight: .medium)).foregroundStyle(c(.saffron))
-                }
-            }
-            if model.composing {
-                HStack(spacing: 8) {
-                    labelled("Say, like: capture idea", text: $model.draftPhrase)
-                    Picker("", selection: $model.draftKind) {
-                        ForEach(CommandsViewModel.kinds, id: \.id) { kind in Text(kind.label).tag(kind.id) }
-                    }
-                    .labelsHidden().frame(width: 150)
-                }
-                labelled(CommandsViewModel.kinds.first { $0.id == model.draftKind }?.hint ?? "",
-                         text: $model.draftDetail)
-                HStack {
-                    Toggle("Ask before running", isOn: $model.draftConfirm)
-                        .toggleStyle(.checkbox).font(.system(size: TypeScale.small))
-                        .foregroundStyle(c(.muted))
-                    Spacer()
-                    Button("Add command") { model.saveDraft() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: TypeScale.body, weight: .semibold))
-                        .foregroundStyle(model.canSave ? c(.saffron) : c(.faint))
-                        .disabled(!model.canSave)
-                }
-            }
-        }
-        .padding(15)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
-    }
-
-    private func labelled(_ placeholder: String, text: Binding<String>) -> some View {
-        TextField(placeholder, text: text)
-            .textFieldStyle(.plain)
-            .font(.system(size: TypeScale.body))
-            .foregroundStyle(c(.bone))
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.ink))
-                .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
     }
 }
