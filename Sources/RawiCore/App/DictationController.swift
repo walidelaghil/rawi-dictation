@@ -124,6 +124,8 @@ public final class DictationController {
     /// transform runner, because both are the same provider graph the app already
     /// builds, and the controller has no business building providers.
     public var polisher: (any CleanupProvider)?
+    /// Puts English words the engine spelled in Arabic letters back into English.
+    public var englishRestorer: (any CleanupProvider)?
     /// Plans one paragraph per idea in a long dictation. Set from outside, and
     /// only when transcription already goes to the cloud. See `IdeaParagraphs`.
     public var paragraphPlanner: (any ParagraphPlanner)?
@@ -620,6 +622,17 @@ public final class DictationController {
             log.warn("LLM cleanup failed (\(error.localizedDescription)); inserting raw transcript")
         }
         if cancelled { publish(.idle, for: gen); return }
+
+        // English words the engine wrote in Arabic letters (ميتنغ) go back to English
+        // letters. Guarded token by token, so it can only ever swap such a word.
+        if let restorer = englishRestorer, !text.isEmpty, !rejected {
+            let restored = await EnglishRestore.apply(text, using: restorer)
+            if restored != text {
+                log.info("Restored English spelling in \(zip(text.split(separator: " "), restored.split(separator: " ")).filter { $0 != $1 }.count) words")
+                text = restored
+            }
+            if cancelled { publish(.idle, for: gen); return }
+        }
 
         // The dictionary, applied deterministically. The model layers are
         // unreliable — 1.5b ignores a glossary entirely — so the guarantee lives in

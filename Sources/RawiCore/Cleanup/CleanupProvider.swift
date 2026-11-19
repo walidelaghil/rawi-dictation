@@ -184,6 +184,24 @@ public enum CleanupProviderFactory {
         return provider(models.arabic)
     }
 
+    /// The provider the English-restore pass runs through: the Arabic-capable
+    /// model with its own narrow prompt. `nil` when cleanup is off.
+    public static func makeEnglishRestorer(config: Config, env: DotEnv) throws
+        -> (any CleanupProvider)? {
+        let kind = config.cleanup.provider
+        guard kind != .off else { return nil }
+        let key: String?
+        switch kind {
+        case .off: return nil
+        case .ollama: key = nil
+        default: key = try apiKey(for: kind, env: env)
+        }
+        let model = config.cleanup.polishModel.isEmpty ? config.cleanup.models.arabic
+                                                       : config.cleanup.polishModel
+        return ChatCleanup(kind: kind, apiKey: key, model: model,
+                           prompt: englishRestorePrompt, wrap: wrapTranscript)
+    }
+
     /// The key a hosted provider needs, or nil for one that needs none.
     public static func apiKey(for kind: CleanupKind, env: DotEnv) throws -> String? {
         let name: String
