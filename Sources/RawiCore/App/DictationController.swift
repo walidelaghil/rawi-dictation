@@ -456,6 +456,9 @@ public final class DictationController {
         }
         if cancelled { state = .idle; return }
         let transcribeMs = transcribeStarted.duration(to: .now).milliseconds
+        // Lengths only, never the words. When a dictation comes out twice this is
+        // what says whether the engine returned it that way or a later stage did.
+        log.info("Transcript from engine: \(raw.count) characters, \(raw.split(separator: " ").count) words")
 
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             log.info("Empty transcript; nothing to insert")
