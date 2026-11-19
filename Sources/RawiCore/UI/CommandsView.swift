@@ -22,6 +22,8 @@ public final class CommandsViewModel: ObservableObject {
     @Published public var tryText = ""
     @Published public var tryResult: String?
     @Published public var key = "⌃⌥C"
+    /// The key hint at the top right opens Settings, where the key is changed.
+    public var onOpenSettings: (() -> Void)?
 
     private let store: CommandStore
     /// Runs a command for real, from the try box.
@@ -241,12 +243,12 @@ public struct CommandsView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                ScreenHeader(title: "Commands", appearance: model.appearance, showInfo: $model.showInfo,
-                             info: "Hold \(model.key), say a command, let go. The phrase has to be the "
-                                 + "start of what you said, matched here on this Mac, never by a model "
-                                 + "guessing what you meant. Anything that creates something shows what "
-                                 + "it will do and waits: tap \(model.key) again to run it, Esc to drop "
-                                 + "it. What you say never reaches your document.")
+                ScreenHeader(title: "Commands", appearance: model.appearance,
+                         subtitle: "Say a command and Rawi acts on it. Nothing is typed.",
+                         trailing: AnyView(KeyHint(label: "Command key", key: model.key,
+                                                       appearance: model.appearance) {
+                                 model.onOpenSettings?()
+                             }))
 
                 addCard
 

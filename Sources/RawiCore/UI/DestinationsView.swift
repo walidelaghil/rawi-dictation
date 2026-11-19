@@ -235,12 +235,7 @@ public struct DestinationsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(title: "Destinations", appearance: model.appearance,
-                             showInfo: $model.showInfo,
-                             info: "Rawi reads which app you are in, which page for a browser, and "
-                                 + "which field you are typing in. The most specific rule wins: a field "
-                                 + "beats a page, a page beats an app. Rules change structure and "
-                                 + "register only. They never add facts, and the guard still protects "
-                                 + "your words.")
+                         subtitle: "Different apps and pages, different writing style.")
 
                 addCard
 

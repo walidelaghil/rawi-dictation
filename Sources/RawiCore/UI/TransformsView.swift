@@ -21,6 +21,8 @@ public final class TransformsViewModel: ObservableObject {
     @Published public var tryError: String?
     @Published public var trying = false
     @Published public var labels: HotkeyLabels = .placeholder
+    /// The key hint at the top right opens Settings, where the key is changed.
+    public var onOpenSettings: (() -> Void)?
 
     private let store: TransformStore
 
@@ -210,13 +212,11 @@ public struct TransformsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(title: "Transforms", appearance: model.appearance,
-                             showInfo: $model.showInfo,
-                             info: "Copy some text, hold \(model.labels.transform) and say what "
-                                 + "to do with it. The clipboard comes back rewritten. Saying a "
-                                 + "transform's name uses its tuned instruction; anything else "
-                                 + "is used as you said it. The original goes to History before "
-                                 + "the model runs, and a failed transform leaves your clipboard "
-                                 + "exactly as it was.")
+                         subtitle: "Copy text, hold \(model.labels.transform), and say how to rewrite it.",
+                         trailing: AnyView(KeyHint(label: "Transform key", key: model.labels.transform,
+                                                       appearance: model.appearance) {
+                                 model.onOpenSettings?()
+                             }))
 
                 FormCard(appearance: model.appearance) {
                     GrowingField(placeholder: "When I say…", text: $model.draftName, lines: 1...2,

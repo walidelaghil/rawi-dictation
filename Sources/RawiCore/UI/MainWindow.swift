@@ -49,6 +49,8 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         model.undo = undo; destinations.undo = undo
         transforms.undo = undo; commands.undo = undo
         home.onShowHistory = { [weak self] in self?.selected = .history }
+        transforms.onOpenSettings = { [weak self] in self?.selection.openSettings(from: .transforms) }
+        commands.onOpenSettings = { [weak self] in self?.selection.openSettings(from: .commands) }
         home.appearance = appearance
         model.appearance = appearance
         vocabulary.appearance = appearance
@@ -157,8 +159,28 @@ public final class MainWindow: NSObject, NSWindowDelegate {
 @MainActor
 public final class ScreenSelection: ObservableObject {
     @Published var screen: Screen = .home
+    /// Where "change this key" came from, so Settings can offer the way back.
+    @Published var returnTo: Screen?
     /// Bumped to ask the window to close itself from inside SwiftUI.
     @Published var closeToken = 0
+
+    /// Opens Settings from a screen that shows a shortcut, remembering that screen.
+    func openSettings(from screen: Screen) {
+        returnTo = screen
+        self.screen = .settings
+    }
+
+    func goBack() {
+        guard let back = returnTo else { return }
+        returnTo = nil
+        screen = back
+    }
+
+    /// Picking a row in the rail starts fresh: nothing to go back to.
+    func go(_ screen: Screen) {
+        returnTo = nil
+        self.screen = screen
+    }
 }
 
 public enum Screen: String, CaseIterable {
@@ -226,7 +248,9 @@ struct MainWindowView: View {
             case .dictionary: DictionaryScreen(model: vocabulary)
             case .snippets: SnippetsScreen(model: vocabulary)
             case .destinations: DestinationsView(model: destinations)
-            case .settings: SettingsView(model: settings)
+            case .settings:
+                SettingsView(model: settings)
+                    .overlay(alignment: .topTrailing) { backLink }
             }
         }
         .overlay(alignment: .bottom) {
@@ -236,6 +260,22 @@ struct MainWindowView: View {
         }
         .background(c(.surface))
         .onExitCommand { selection.closeToken += 1 }
+    }
+
+    /// Shown when Settings was opened from a screen's key hint.
+    @ViewBuilder private var backLink: some View {
+        if let back = selection.returnTo {
+            Button { selection.goBack() } label: {
+                Label("Back to \(back.rawValue)", systemImage: "chevron.left")
+                    .font(.system(size: TypeScale.small, weight: .medium))
+                    .foregroundStyle(c(.muted))
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.raised))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 22).padding(.trailing, 24)
+        }
     }
 
     private var rail: some View {
@@ -261,7 +301,7 @@ struct MainWindowView: View {
                         .padding(.horizontal, 9).padding(.bottom, 2)
                 }
                 ForEach(group.items, id: \.self) { item in
-                    Button { selection.screen = item } label: {
+                    Button { selection.go(item) } label: {
                         railRow(item.rawValue, symbol: item.symbol, selected: screen == item,
                                 shortcut: (Screen.allCases.firstIndex(of: item) ?? 0) + 1)
                     }

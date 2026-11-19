@@ -37,6 +37,11 @@ public final class VocabularyViewModel: ObservableObject {
     /// What the last refresh found, shown beside the button for a moment.
     @Published public var refreshResult: String?
     @Published public var refreshing = false
+    /// The refresh reads your whole history and can add or drop terms, so it asks first.
+    @Published public var confirmingRefresh = false
+    public func askToRefresh() { confirmingRefresh = true }
+    public func cancelRefresh() { confirmingRefresh = false }
+    public func confirmRefresh() { confirmingRefresh = false; refresh() }
 
     /// Reads the dictionary again and re-runs learning over your history now,
     /// rather than waiting for the next dictation to do it.
@@ -143,13 +148,7 @@ public struct DictionaryScreen: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ScreenHeader(title: "Dictionary", appearance: model.appearance,
-                         showInfo: $model.showInfo,
-                         info: "Rawi learns the names and jargon you use without being asked. "
-                             + "When you fix a word it typed, say Sala to Salla, it learns the "
-                             + "spelling you chose and uses it next time. It also notices names "
-                             + "whisper spells differently from day to day. Ordinary English "
-                             + "words are never learned: enforcing the wrong spelling is worse "
-                             + "than enforcing none.",
+                         subtitle: "Teach Rawi the words it keeps getting wrong.",
                          trailing: AnyView(refreshButton))
 
             if model.terms.isEmpty {
@@ -237,18 +236,31 @@ extension DictionaryScreen {
                     .foregroundStyle(c(.muted))
                     .transition(.opacity)
             }
-            Button { model.refresh() } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: TypeScale.body, weight: .medium))
-                    .foregroundStyle(c(.muted))
-                    .rotationEffect(.degrees(model.refreshing ? 360 : 0))
-                    .animation(model.refreshing ? .easeInOut(duration: 0.45) : nil,
-                               value: model.refreshing)
-                    .frame(width: 28, height: 28)
-                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.raised)))
-                    .contentShape(Rectangle())
+            Button { model.askToRefresh() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise")
+                        .rotationEffect(.degrees(model.refreshing ? 360 : 0))
+                        .animation(model.refreshing ? .easeInOut(duration: 0.45) : nil,
+                                   value: model.refreshing)
+                    Text("Find new terms")
+                }
+                .font(.system(size: TypeScale.small, weight: .medium))
+                .foregroundStyle(c(.muted))
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: Radius.control).fill(c(.raised)))
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(model.refreshing)
+            .confirmationDialog("Look through your history for new terms?",
+                                isPresented: $model.confirmingRefresh) {
+                Button("Find new terms") { model.confirmRefresh() }
+                Button("Cancel", role: .cancel) { model.cancelRefresh() }
+            } message: {
+                Text("Rawi reads your dictation history on this Mac and adds the names and jargon "
+                   + "you keep using. Terms it learned earlier that no longer show up are removed. "
+                   + "Words you added yourself stay.")
+            }
             .help("Check your history for new terms now")
             .accessibilityLabel("Refresh dictionary")
         }
@@ -355,10 +367,7 @@ public struct SnippetsScreen: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ScreenHeader(title: "Snippets", appearance: model.appearance,
-                         showInfo: $model.showInfo,
-                         info: "Say the phrase mid-dictation and it expands in place. Unlike a "
-                             + "keyboard expander this only fires while you are speaking, so it "
-                             + "cannot surprise you inside a word or a password field.")
+                         subtitle: "Say a short phrase and Rawi types the longer text.")
 
             FormCard(appearance: model.appearance) {
                 GrowingField(placeholder: "When I say…", text: $model.newTrigger, lines: 1...2,
@@ -416,32 +425,62 @@ public struct SnippetsScreen: View {
 struct ScreenHeader: View {
     let title: String
     let appearance: ResolvedAppearance
-    @Binding var showInfo: Bool
-    let info: String
+    /// One short line under the title: what this screen is for.
+    var subtitle: String? = nil
     var trailing: AnyView? = nil
     private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.system(size: TypeScale.title, weight: .semibold)).foregroundStyle(c(.bone))
-                Button { showInfo.toggle() } label: {
-                    Image(systemName: "info.circle").font(.system(size: TypeScale.heading))
-                        .foregroundStyle(c(.faint))
-                }.buttonStyle(.plain).help("About \(title.lowercased())")
-                Spacer()
-                if let trailing { trailing }
+                if let subtitle {
+                    Text(subtitle).font(.system(size: TypeScale.body)).foregroundStyle(c(.muted))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            if showInfo {
-                Text(info)
-                    .font(.system(size: TypeScale.small)).foregroundStyle(c(.muted))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(13)
-                    .frame(maxWidth: 520, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
-                        .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
-            }
+            Spacer()
+            if let trailing { trailing }
         }
+    }
+}
+
+/// The shortcut that triggers a screen, at the top right of it. The gear shows only
+/// on hover; clicking opens Settings, where the key is changed.
+struct KeyHint: View {
+    let label: String
+    let key: String
+    let appearance: ResolvedAppearance
+    let action: () -> Void
+    @State private var hovered = false
+    private func c(_ t: ColorToken) -> Color { RawiColors.color(t, appearance) }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(label).font(.system(size: TypeScale.small)).foregroundStyle(c(.faint))
+                Text(key)
+                    .font(.system(size: TypeScale.small, weight: .semibold).monospaced())
+                    .foregroundStyle(c(.bone))
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(c(.surface))
+                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(c(.edge))))
+                Image(systemName: "gearshape")
+                    .font(.system(size: TypeScale.small))
+                    .foregroundStyle(c(.faint))
+                    .opacity(hovered ? 1 : 0)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: Radius.control)
+                .fill(hovered ? c(.raised) : .clear)
+                .overlay(RoundedRectangle(cornerRadius: Radius.control).strokeBorder(c(.edge))))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovered)
+        .help("Shortcut set in Settings, Keys. Click to change it.")
+        .accessibilityLabel("\(label) \(key). Open Settings to change it.")
     }
 }
 

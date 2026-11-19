@@ -126,7 +126,6 @@ public struct HistoryView: View {
         .padding(.vertical, 22)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(c(.surface))
-        .overlay(alignment: .topLeading) { if model.showInfo { infoOverlay } }
         // The list owns the arrows, Return and Delete once the search box does not.
         // The ring is suppressed: a focus ring around an entire screen is not
         // telling anyone anything, and it drew a blue line down the window.
@@ -151,17 +150,14 @@ public struct HistoryView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .lastTextBaseline, spacing: 10) {
-            Text("History")
-                .font(.system(size: TypeScale.title, weight: .semibold))
-                .foregroundStyle(c(.bone))
-            Button { model.showInfo.toggle() } label: {
-                Image(systemName: "info.circle")
-                    .font(.system(size: TypeScale.heading))
-                    .foregroundStyle(c(.faint))
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("History")
+                    .font(.system(size: TypeScale.title, weight: .semibold))
+                    .foregroundStyle(c(.bone))
+                Text("Everything you dictated. It stays on this Mac.")
+                    .font(.system(size: TypeScale.body)).foregroundStyle(c(.muted))
             }
-            .buttonStyle(.plain)
-            .help("About history")
             Spacer()
             Button { model.confirmingPurge = true } label: {
                 Text("Clear all").font(.system(size: TypeScale.body)).foregroundStyle(c(.clay))
@@ -187,35 +183,6 @@ public struct HistoryView: View {
                 Text("The text is gone for good. Nothing else on your Mac is touched.")
             }
         }
-    }
-
-    /// The explanation sits behind the ⓘ because it is scaffolding you stop
-    /// needing — on screen it would be permanent clutter.
-    private var infoOverlay: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("About history").font(.system(size: TypeScale.body, weight: .semibold))
-                    .foregroundStyle(c(.bone))
-                Spacer()
-                Button { model.showInfo = false } label: {
-                    Text("×").font(.system(size: TypeScale.heading)).foregroundStyle(c(.faint))
-                }.buttonStyle(.plain)
-            }
-            Text("Both the cleaned text and what whisper actually heard. Search covers "
-               + "both, which is what you need when you remember what you said rather "
-               + "than what came out. "
-               + "Capped at \(model.limit) entries; password "
-               + "managers and private messages are never recorded.")
-                .font(.system(size: TypeScale.small))
-                .foregroundStyle(c(.muted))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(15)
-        .frame(width: 380, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Radius.surface).fill(c(.raised))
-            .overlay(RoundedRectangle(cornerRadius: Radius.surface).strokeBorder(c(.edge))))
-        .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
-        .offset(x: 0, y: 52)
     }
 
     // MARK: - Search and filters
