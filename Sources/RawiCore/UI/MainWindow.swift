@@ -144,11 +144,18 @@ public final class MainWindow: NSObject, NSWindowDelegate {
         window.minSize = NSSize(width: 760, height: 460)
         window.center()
         selection.closeToken = 0
-        window.contentView = NSHostingView(
+        let hosting = NSHostingView(
             rootView: MainWindowView(home: home, history: model, vocabulary: vocabulary,
                                      destinations: destinations, transforms: transforms,
                                      commands: commands, insights: insights, settings: settings,
                                      selection: selection, setup: setup, undo: undo))
+        // A screen's content must never resize the window: a tall screen used to
+        // push the window past the bottom of the display. Scroll instead.
+        hosting.sizingOptions = []
+        window.contentView = hosting
+        if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
+            window.maxSize = NSSize(width: visible.width, height: visible.height)
+        }
         window.appearance = NSAppearance(
             named: model.appearance == .dark ? .darkAqua : .aqua)
         return window

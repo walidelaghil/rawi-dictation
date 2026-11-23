@@ -2,35 +2,35 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleIdentifier</key>
-    <string>com.rawi.dictation</string>
-    <key>CFBundleName</key>
-    <string>Rawi</string>
-    <key>CFBundleDisplayName</key>
-    <string>Rawi</string>
-    <key>CFBundleExecutable</key>
-    <string>Rawi</string>
-    <key>CFBundleIconFile</key>
-    <string>Rawi</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Rawi records your voice while you hold the dictation hotkey, so it can transcribe it to text.</string>
-    <key>NSRemindersFullAccessUsageDescription</key>
-    <string>Rawi adds a reminder when you say a command that asks for one. It never reads your existing reminders.</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>Rawi pastes transcribed text into the app you are using.</string>
+	<key>CFBundleDisplayName</key>
+	<string>Rawi</string>
+	<key>CFBundleExecutable</key>
+	<string>Rawi</string>
+	<key>CFBundleIconFile</key>
+	<string>Rawi</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.rawi.dictation</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Rawi</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Rawi pastes transcribed text into the app you are using.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Rawi records your voice while you hold the dictation hotkey, so it can transcribe it to text.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Rawi adds a reminder when you say a command that asks for one. It never reads your existing reminders.</string>
 </dict>
 </plist>
