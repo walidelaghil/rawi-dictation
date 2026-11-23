@@ -528,6 +528,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             controller.polisher = try CleanupProviderFactory.makePolisher(
                 config: config, env: env)
+            controller.englishRestorer = try CleanupProviderFactory.makeEnglishRestorer(
+                config: config, env: env)
             if controller.polisher == nil {
                 log.info("Cleanup mode: clean — filler and punctuation only")
             } else if !config.cleanup.polishModel.isEmpty {
