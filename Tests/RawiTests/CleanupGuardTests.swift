@@ -2,6 +2,16 @@ import Testing
 @testable import RawiCore
 
 @Suite("CleanupGuard") struct CleanupGuardTests {
+    @Test("rejects an English translation added after an Arabic dictation") func addedTranslation() {
+        let raw = "متى تحبون تجتمعون؟"
+        #expect(CleanupGuard.check(raw: raw, cleaned: "متى تحبون تجتمعون؟ When do you like to meet?") != .accept)
+    }
+
+    @Test("accepts Arabic cleaned in Arabic, and Arabic mixed with English the speaker said") func arabicKept() {
+        #expect(CleanupGuard.check(raw: "متى تحبون تجتمعون", cleaned: "متى تحبون تجتمعون؟") == .accept)
+        #expect(CleanupGuard.check(raw: "يعني the demo كان حلو", cleaned: "يعني the demo كان حلو.") == .accept)
+    }
+
     // MARK: - Real failures observed against qwen2.5:1.5b
 
     @Test("rejects a model that obeyed the dictation instead of cleaning it") func injection() {

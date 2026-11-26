@@ -47,6 +47,13 @@ public enum CleanupGuard {
             return .reject(reason: "cleanup returned nothing")
         }
 
+        // Arabic only in, Latin letters out: the model translated or appended an
+        // English version. Checked before the short-text exit, because a three-word
+        // question is exactly where it happens and the ratios below have no signal.
+        if hasArabic(raw), !hasLatin(raw), hasLatin(cleanedTrimmed) {
+            return .reject(reason: "the rewrite added English to an Arabic dictation")
+        }
+
         let rawWords = significantWords(raw)
         // Too short a transcript gives the ratios no signal; let it through.
         guard rawWords.count >= 4 else { return .accept }
@@ -68,6 +75,14 @@ public enum CleanupGuard {
         }
 
         return .accept
+    }
+
+    static func hasArabic(_ s: String) -> Bool {
+        s.unicodeScalars.contains { (0x0600...0x06FF).contains($0.value) }
+    }
+
+    static func hasLatin(_ s: String) -> Bool {
+        s.unicodeScalars.contains { ($0.value >= 0x41 && $0.value <= 0x5A) || ($0.value >= 0x61 && $0.value <= 0x7A) }
     }
 
     static func words(_ s: String) -> [String] {
