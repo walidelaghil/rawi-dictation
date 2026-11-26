@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rawi راوي | إملاء بالصوت للماك بالعربي والإنجليزي</title>
+<meta name="description" content="Rawi (راوي): hold a key, speak Arabic, English, or both in one sentence, and clean text lands at your cursor in any Mac app. Pay once.">
+<meta property="og:title" content="Rawi راوي">
+<meta property="og:description" content="Speak. Rawi types. Arabic, English, and both in one sentence, on your Mac.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rawi.waleedelaghil.com/">
+<meta name="theme-color" content="#0e1219">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230e1219'/%3E%3Cpath d='M6 16h3M12 10v12M17 6v20M22 11v10M27 15v2' stroke='%23f0b04a' stroke-width='2.4' stroke-linecap='round' fill='none'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><b>Rawi</b><span>راوي</span></a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#fixes" data-t="nav1"></a><a href="#everywhere" data-t="nav2"></a><a href="#commands" data-t="nav3"></a><a href="#faq" data-t="nav5"></a>
+    </nav>
+    <button class="lang" type="button"></button>
+    <a class="btn pri sm" href="#pricing" data-t="get"></a>
+  </div>
+</header>
+
+<main id="top">
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <div class="hero-brand"><a class="brand" href="#top"><b>Rawi</b><span>راوي</span></a><button class="lang" type="button"></button></div>
+      <h1 data-h="h1"></h1>
+      <p class="sub" data-t="sub"></p>
+      <div class="cta">
+        <a class="btn pri" href="#pricing" data-t="get"></a>
+        <a class="btn" href="#fixes" data-t="see"></a>
+      </div>
+    </div>
+    <div class="demo" id="demo">
+      <div class="demo-top">
+        <span class="lbl" data-t="demoT"></span>
+        <div class="seg" role="group" aria-label="Language"><button type="button" data-sl="ar" aria-pressed="true">العربية</button><button type="button" data-sl="en" aria-pressed="false">English</button></div>
+      </div>
+      <div class="field">
+        <textarea id="typeIn" rows="3" aria-label="What you say"></textarea>
+        <button class="mic" id="talk" type="button"><span id="talkT"></span><small id="talkS"></small></button>
+      </div>
+      <div class="chips" id="samples"></div>
+      <div class="out" aria-live="polite">
+        <div class="wave" id="wave" aria-hidden="true" hidden></div>
+        <div class="out-h"><span class="lbl" data-t="typedL"></span><span class="tag" id="tag">AR</span></div>
+        <div id="typed" class="ph" dir="auto"></div>
+        <div class="heard" id="heard" dir="auto"></div>
+        <div class="chips" id="notes"></div>
+      </div>
+      <p class="fine" data-t="fine"></p>
+    </div>
+  </div>
+</section>
+
+<div class="how">
+  <div class="wrap">
+    <div class="how-i"><div class="keys"><kbd>⌃</kbd><kbd>⌥</kbd><kbd>Space</kbd></div><h3 data-t="h1t"></h3><p data-t="h1p"></p></div>
+    <div class="how-i"><div class="keys"><kbd data-t="spk"></kbd></div><h3 data-t="h2t"></h3><p data-t="h2p"></p></div>
+    <div class="how-i"><div class="keys"><kbd data-t="rel"></kbd></div><h3 data-t="h3t"></h3><p data-t="h3p"></p></div>
+  </div>
+</div>
+
+<section class="s" id="fixes">
+  <div class="wrap">
+    <div class="sh rv"><h2 data-t="fxH"></h2><p data-t="fxP"></p></div>
+    <div class="tabs rv" role="tablist" id="fxTabs"></div>
+    <div class="panel fix rv" id="fxPanel"></div>
+  </div>
+</section>
+
+<section class="s" id="everywhere" style="padding-block-start:0">
+  <div class="wrap">
+    <div class="sh rv"><h2 data-t="bnH"></h2><p data-t="bnP"></p></div>
+    <div class="bento">
+      <div class="panel cell c-dest rv">
+        <h3 data-t="deT"></h3><p data-t="deP"></p>
+        <div class="tabs" role="tablist" id="deTabs"></div>
+        <div class="dest"><div class="mini" id="deSaid"></div><div class="mini fade" id="deOut"></div></div>
+      </div>
+      <div class="panel cell c-dict rv">
+        <h3 data-t="dcT"></h3><p data-t="dcP"></p>
+        <div class="mini" id="dcSent"></div>
+        <div class="row"><button class="btn sm" id="dcBtn" type="button"></button><span class="ok" id="dcOk"></span></div>
+        <div class="chips" id="dcList"></div>
+      </div>
+      <div class="panel cell c-snip rv">
+        <h3 data-t="snT"></h3><p data-t="snP"></p>
+        <div class="chips" id="snTrig"></div>
+        <div class="mini fade" id="snOut"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="s" id="commands" style="padding-block-start:0">
+  <div class="wrap">
+    <div class="sh rv"><h2 data-t="cmH"></h2><p data-t="cmP"></p></div>
+    <div class="cmds">
+      <div class="cmdlist rv" id="cmdList" role="group"></div>
+      <div class="panel pill rv" id="cmdPill"></div>
+    </div>
+  </div>
+</section>
+
+<section class="s" id="transforms" style="padding-block-start:0">
+  <div class="wrap">
+    <div class="sh rv"><h2 data-t="tfH"></h2><p data-h="tfP"></p></div>
+    <div class="tf rv">
+      <div class="panel"><span class="lbl" data-t="tfA"></span><div class="txt" id="tfSrc" lang="en" dir="ltr"></div></div>
+      <div class="say" id="tfSay" role="group"></div>
+      <div class="panel"><span class="lbl" data-t="tfB"></span><div class="res fade" id="tfRes"></div></div>
+    </div>
+    <p class="note" style="margin-block-start:14px" data-t="tfN"></p>
+  </div>
+</section>
+
+<section class="s" id="insights" style="padding-block-start:0">
+  <div class="wrap">
+    <div class="sh rv"><span class="lbl" data-t="inK"></span><h2 data-t="inH" style="margin-block-start:8px"></h2><p data-t="inP"></p></div>
+    <div class="shots">
+      <figure class="panel shot rv"><img id="imgIn" src="assets/insights.png" width="1600" height="1340" alt=""><figcaption data-t="inC"></figcaption></figure>
+      <figure class="panel shot rv"><img id="imgVc" src="assets/voice.png" width="1520" height="1414" alt=""><figcaption data-t="vcC"></figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="s" id="privacy" style="padding-block-start:0">
+  <div class="wrap">
+    <div class="sh rv"><h2 data-t="pvH"></h2></div>
+    <div class="panel priv rv" id="pvGrid"></div>
+  </div>
+</section>
+
+
+<section class="s" id="faq" style="padding-block-start:0">
+  <div class="wrap">
+    <div class="sh rv"><h2 data-t="fqH"></h2></div>
+    <div class="faq rv" id="faqList"></div>
+  </div>
+</section>
+</main>
+
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-label="Rawi"><div class="mbox"><button class="mx" type="button" aria-label="Close">&times;</button><div class="offer" id="offer"></div></div></div>
+<footer><div class="wrap"><span data-t="copy"></span><a class="byline" href="https://www.waleedelaghil.com/" target="_blank" rel="noopener noreferrer" aria-label="Waleed Elaghil"><span data-t="made"></span><img src="assets/waleed.png" width="28" height="28" alt="Waleed Elaghil"></a></div></footer>
+
+
+<script src="engine.js"></script>
+<script src="copy.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
