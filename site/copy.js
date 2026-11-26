@@ -5,9 +5,9 @@ var T={
 ar:{lang:'English',nav1:'المزايا',nav2:'القاموس والعبارات',nav3:'الأوامر',nav4:'السعر',nav5:'أسئلة',get:'بيع مسبق \u2066$29\u2069',see:'شوف وش يسوي',
  h1:'تكلّم. <em>راوي</em> يكتب.',
  sub:'اضغط مفتاحك وتكلّم ثم اتركه. يطلع نص عربي وإنجليزي نظيف عند المؤشر، في أي تطبيق.',
- demoT:'جرّب بنفسك',typedL:'اللي يكتبه راوي',heardL:'اللي سمعه',talk:'اضغط مطولاً',talkS:'وتكلّم',rec:'أسمعك',recS:'اترك ليكتب',
+ demoT:'جرّب بنفسك',typedL:'اللي يكتبه راوي',heardL:'اللي سمعه',
  ph:'اكتب مثل ما تتكلم، مثلاً: اممم نخلص الأحد لا قصدي الاثنين',empty:'اللي يكتبه راوي يطلع هنا.',samples:'عيّنات',
- nomic:'المايك غير متاح هنا. اكتب كلامك أو اختر عيّنة.',
+ 
  did:'وش سوّى:',fill:function(n){return 'حذف '+n+' من الحشو'},corr:'طبّق تصحيحك',list:'حوّلها لقائمة',punct:'ضبط الترقيم',
  fine:'هذا العرض يقلّد تنظيف راوي داخل المتصفح. التطبيق نفسه يحوّل الصوت بـ Whisper وينظّفه بنموذج لغوي.',
  h1t:'اضغط',h1p:'اضغط مفتاح الإملاء وراوي يبدأ يسجّل. Esc يلغي.',spk:'تكلّم',h2t:'تكلّم',h2p:'عربي، إنجليزي، أو الاثنين. بدون ما تختار لغة.',rel:'اترك',h3t:'اترك',h3p:'بعد حوالي ثانية يطلع النص عند المؤشر.',
@@ -46,9 +46,9 @@ ar:{lang:'English',nav1:'المزايا',nav2:'القاموس والعبارات
 en:{lang:'العربية',nav1:'Features',nav2:'Dictionary and snippets',nav3:'Commands',nav4:'Pricing',nav5:'FAQ',get:'Pre-sale $29',see:'See what it does',
  h1:'Speak. <em>Rawi</em> types.',
  sub:'Hold a key, talk, release. Clean Arabic and English text lands at your cursor, in any app.',
- demoT:'Try it yourself',typedL:'What Rawi types',heardL:'Heard',talk:'Hold to talk',talkS:'',rec:'Listening',recS:'release to type',
+ demoT:'Try it yourself',typedL:'What Rawi types',heardL:'Heard',
  ph:'Type like you talk, for example: um let\'s ship sunday no wait monday',empty:'What Rawi types shows up here.',samples:'Samples',
- nomic:'The mic isn\'t available here. Type something or pick a sample.',
+ 
  did:'What it did:',fill:function(n){return 'Removed '+n+' filler'+(n>1?'s':'')},corr:'Applied your correction',list:'Made it a list',punct:'Fixed punctuation',
  fine:'This demo imitates Rawi\'s cleanup in your browser. The app itself transcribes with Whisper and polishes with a language model.',
  h1t:'Hold',h1p:'Hold your dictation key and Rawi starts listening. Esc cancels.',spk:'Speak',h2t:'Speak',h2p:'Arabic, English, or both. No language switch.',rel:'Release',h3t:'Release',h3p:'About a second later, the text is at your cursor.',

@@ -61,13 +61,10 @@ h1 em{font-style:normal;color:var(--amber)}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r1);padding:3px;background:var(--bg)}
 .seg button{border:0;background:none;padding:6px 16px;border-radius:var(--r1);color:var(--soft);font-size:.9rem}
 .seg button[aria-pressed=true]{background:var(--s3);color:var(--text)}
-.field{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:stretch}
+.field{display:grid;grid-template-columns:1fr;gap:10px}
 .field textarea{resize:none;background:var(--bg);border:1px solid var(--line);border-radius:var(--r3);padding:12px 14px;min-height:84px;line-height:1.6;color:var(--text)}
 .field textarea::placeholder{color:#8794ad}
 .field textarea:focus{border-color:var(--amber);outline:none}
-.mic{min-width:104px;border:1px solid var(--amber);background:var(--amber-bg);color:var(--amber);border-radius:var(--r3);padding:10px;font-weight:500;font-size:.92rem;line-height:1.35;touch-action:none;user-select:none;-webkit-user-select:none;transition:background .15s,transform .15s}
-.mic.on{background:var(--amber);color:var(--amber-ink);transform:scale(.97)}
-.mic small{display:block;font-weight:400;opacity:.8;font-size:.78rem}
 .chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .chip{border:1px solid var(--line2);background:var(--s2);color:var(--soft);border-radius:var(--r1);padding:5px 14px;font-size:.88rem}
 button.chip:hover{border-color:var(--amber);color:var(--text)}
@@ -263,14 +260,12 @@ h1 em{color:var(--amber)}
 @keyframes wv{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
 .demo{position:relative}
 .demo::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;pointer-events:none;background:linear-gradient(135deg,rgba(240,176,74,.55),transparent 35%,transparent 65%,rgba(96,128,255,.45));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
-.mic.on{animation:ring 1.2s ease-out infinite}
-@keyframes ring{50%{transform:scale(.94)}}
 .panel{transition:border-color .25s,transform .25s,box-shadow .25s}
 .panel:hover{border-color:var(--line2)}
 .how{background:linear-gradient(90deg,rgba(240,176,74,.07),transparent 40%,rgba(96,128,255,.06)),var(--s1)}
 
 .btn.pri:hover{transform:translateY(-1px)}
-@media (prefers-reduced-motion:reduce){body::before,body::after,.wave i,.mic.on{animation:none}.wave i{transform:scaleY(.6)}}
+@media (prefers-reduced-motion:reduce){body::before,body::after,.wave i{animation:none}.wave i{transform:scaleY(.6)}}
 
 
 /* ---------- one offer, two panes ---------- */
@@ -385,7 +380,6 @@ body.mopen{overflow:hidden}
   .priv>div:nth-child(odd){border-inline-end:0}
   .priv>div:not(:last-child){border-block-end:1px solid var(--line)}
   .field{grid-template-columns:1fr}
-  .mic{min-height:52px}
   .nav .wrap{gap:12px}
   .nav .btn.sm{padding:8px 14px}
   .cta .btn{flex:1}

@@ -9,7 +9,7 @@ Plain static HTML, CSS and JS. No build step.
 | `engine.js` | The demo's cleanup engine (tested) |
 | `copy.js` | All Arabic and English copy, plus demo data |
 | `app.js` | UI: demo, tabs, pre-sale pop-up, language toggle |
-| `_headers` | Cloudflare Pages headers. Grants the microphone to the page, which the hero demo needs |
+| `_headers` | Cloudflare Pages headers. Security headers; the microphone is turned off |
 
 ## Run locally
 
@@ -24,7 +24,7 @@ Open http://localhost:8787/. Run the engine tests with `node --test site/test/`.
 1. Cloudflare dashboard, Workers & Pages, Create, Pages, connect `walidelaghil/rawi-dictation`.
 2. Framework preset: None. Build command: empty. Build output directory: `site`.
 3. After the first deploy, Custom domains, add `rawi.waleedelaghil.com`. Cloudflare creates the CNAME to the `*.pages.dev` host, since `waleedelaghil.com` is already on Cloudflare.
-4. Open the live URL and hold the mic button once to confirm the browser asks for microphone permission.
+4. Open the live URL, pick a sample in the hero demo and confirm the cleaned text appears.
 
 ## Still open
 

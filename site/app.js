@@ -59,26 +59,6 @@ $$('[data-sl]').forEach(function(b){b.addEventListener('click',function(){S.spea
 var typeTimer=null;
 $('#typeIn').addEventListener('input',function(){clearTimeout(typeTimer);var v=this.value;typeTimer=setTimeout(function(){if(v.trim())process(v);else resetOut()},450)});
 
-/* microphone: hold to talk. Not available in every browser or inside the preview. */
-var SR=window.SpeechRecognition||window.webkitSpeechRecognition,rec=null,recOn=false,live='';
-function setRec(on){recOn=on;showWave(on);var b=$('#talk');b.classList.toggle('on',on);$('#talkT').textContent=on?t('rec'):t('talk');$('#talkS').textContent=on?t('recS'):t('talkS')}
-function startMic(){
-  if(recOn)return;live='';
-  if(!SR){$('#typed').className='ph';$('#typed').textContent=t('nomic');return}
-  try{
-    rec=new SR();rec.lang=S.speak==='ar'?'ar-SA':'en-US';rec.interimResults=true;rec.continuous=true;
-    rec.onresult=function(e){var s='';for(var i=0;i<e.results.length;i++)s+=e.results[i][0].transcript+' ';live=s.trim();$('#typeIn').value=live};
-    rec.onerror=function(){};
-    rec.onend=function(){setRec(false);if(live)process(live);else{$('#typed').className='ph';$('#typed').textContent=t('nomic')}};
-    rec.start();setRec(true);
-  }catch(e){setRec(false);$('#typed').className='ph';$('#typed').textContent=t('nomic')}
-}
-function stopMic(){if(recOn&&rec){try{rec.stop()}catch(e){}}}
-var tb=$('#talk');
-tb.addEventListener('pointerdown',function(e){e.preventDefault();startMic()});
-['pointerup','pointercancel','pointerleave'].forEach(function(ev){tb.addEventListener(ev,stopMic)});
-tb.addEventListener('keydown',function(e){if((e.code==='Space'||e.code==='Enter')&&!e.repeat){e.preventDefault();startMic()}});
-tb.addEventListener('keyup',function(e){if(e.code==='Space'||e.code==='Enter')stopMic()});
 
 /* ====================== sections ====================== */
 function renderFx(){
@@ -164,7 +144,7 @@ function applyLang(){
   $$('[data-h]').forEach(function(e){e.innerHTML=t(e.dataset.h)});
   $$('.lang').forEach(function(b){b.textContent=t('lang');b.setAttribute('aria-label',S.ui==='ar'?'Switch to English':'التبديل إلى العربية')});
   $('#typeIn').placeholder=t('ph');
-  setRec(false);buildSamples();renderFx();renderDe();renderDc();renderSn();renderCmd();renderTf();renderStatic();
+  buildSamples();renderFx();renderDe();renderDc();renderSn();renderCmd();renderTf();renderStatic();
   if(S.last)process(S.last);else resetOut();
 }
 $$('.lang').forEach(function(b){b.addEventListener('click',function(){S.ui=S.ui==='ar'?'en':'ar';S.speak=S.ui;syncSeg();applyLang()})});
